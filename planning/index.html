@@ -1,0 +1,143 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Planning | CantBlog</title><meta name=keywords content><meta name=description content="路径规划、轨迹优化与最优控制相关笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/planning/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/planning/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/planning/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/planning/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Planning"><meta property="og:description" content="路径规划、轨迹优化与最优控制相关笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="Planning"><meta name=twitter:description content="路径规划、轨迹优化与最优控制相关笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Planning","item":"https://jler666.github.io/planning/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>Planning</h1><div class=post-description>路径规划、轨迹优化与最优控制相关笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Agent Loop</h2></header><div class=entry-content><p></p></div><footer class=entry-footer><span title=2026-10-31T00:00:00+00:00>创建于 2026-10-31</span>&nbsp;·&nbsp;<span title=2026-10-31T00:00:00+00:00>最后修改于 2026-10-31</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Agent Loop" href=https://jler666.github.io/planning/gz0rr30vg3o2tgyn/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>6.S184 From Generation to Sampling</h2></header><div class=entry-content><p>一些概念
+待生成的object 图像/视频/轨迹… 都可以抽象为高维向量 diffusion/flow matching模型生成object z，是通过从模型输出的数据分布中采样得到的$ z\sim p_{data} $($ p_{data} $是专家轨迹，可以将其视为真实分布的代理),训练的期望是让生成z的似然度变大$ p_{data}(z) \uparrow $ 在生成建模中，我们通常假设能够获取从$ p_{data} $ 独立采样的有限数量样本，这些样本共同构成了真实分布的近似 定义dataset为从数据分布中采样的有限数量的样本组成，$ z_1,...,z_N\sim p_{data} $ 条件生成(conditional generation/guide) ,给定条件变量y下从分布中采样z $ z\sim p_{data}(\cdot|y) $ 常微分方程ODEs(ordinary differential equations),随机微分方程SDEs(stochastic differential equations) Flow Model
+从定义ODEs常微分方程开始
+Trajectory: $ X:[0,1]\rightarrow R^d $ X为d维空间的向量,轨迹是一种将[0,1]时间变换到$ R^d $中某个位置的映射f$ X_t=f(t) $
+每个ODEs由向量场u(vector field)定义： $ u:R^d \times [0,1]\rightarrow R^d $ d维空间(位置)再cross 一个[0,1]的时间维度 d+1维 ，向量场即从每个时间t和d维位置x变换到对应的d维速度向量的映射g$ u_t(x)=g(x,t) $，也可以视为演化的方向–差分向量
+要特别注意一点的是向量场随时间变化！不是固定不变的！可视化效果见
+https://mariogemoll.com/flow-matching
+轨迹$ X $可视为从$ X_0 $开始沿向量场$ u_t(x) $方向运动得到的，用数学的语言描述就是轨迹是下面这个ODE+初始条件组成的常微分方程的解。轨迹对时间的导数由向量场决定，向量场就是ODE中的导数定义
+...</p></div><footer class=entry-footer><span title=2026-08-11T00:00:00+00:00>创建于 2026-08-11</span>&nbsp;·&nbsp;<span title=2026-08-26T00:00:00+00:00>最后修改于 2026-08-26</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 6.S184 From Generation to Sampling" href=https://jler666.github.io/planning/vtnfwd5qyduy9deu/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Transformer 3 从RNN到Transformer</h2></header><div class=entry-content><p>上一讲介绍了使用RNN做语音识别的例子，在语音识别这个应用中，输入的语音与输出文字的顺序是对齐的，所以用CTC算法枚举可能的发音路径来计算序列概率。
+但是在机器翻译的应用中就不存在这种对齐关系，因为是翻译两种语言，语法语义都不同，不存在所谓的两种语言的句子按顺序对齐。同时输出长度不确定，不同语言的偏好各自独立。
+Encoder-Decoder 2014，首个端到端机器翻译。两个独立RNN分工合作，Encoder负责理解源语言逐步读取输入序列并压缩成一个固定的向量$ h_T $,Decoder负责生成目标语言从Encoder的$ h_T $出发逐步生成目标语。
+Encoder$ h_t=f(h_{t-1},x_t) $ 循环迭代输入$ (x_1,x_2,...,x_T) $->Encoder->$ (h_1,h_2,...,h_T) $开环RNN，将输入语言编码，并只将末端环境状态$ h_T $输入decoder进行解码
+Decoder $ \begin{gathered} s_t=g(s_{t-1},w_{t-1},h_T)\\ y_t=P(y_t|y_1,y_2,...,y_{t-1},h_t\approx(x_1,x_2,...,x_T))=softmax(Ws_t+b)\\ w_t\sim y_t \end{gathered} $ 闭环RNN输出wt会被作为下轮的输入，$ h_t\approx(x_1,x_2,...,x_T) $经过多轮迭代压缩后其实损失的挺严重的
+输入输出无序显示枚举，通过$ h_T $隐式完成。在目标输出语言中新增两个特殊符号, begin of sentence, end of sentence,生成器的生成偏好包含这两个符号。Decoder的输入$ w_0=\lt BOS\gt $生成w1再送回Decoder输出w2迭代直到生成为止，此时Decoer自动终止，此机制让模型自己决定生成序列的长度。
+第一个跨模态生成的通用解法，机器翻译文生图，图生文等等。其将输出输出的复杂对齐关系通过中间的压缩状态$ h_T $进行解耦，并将生成开始和结束符加入解码器的语言表中让模型自己决定生成序列的长度。
+依旧使用RNN，RNN的缺陷它都有
+Decoder生成依赖latent $ h_T $,之前说过RNN的环境变量是有损压缩。最大问题是无法动态提取自己感兴趣的信息，无法灵活关注输入中的不同位置
+输入了有损压缩的源语言全文，部分上文信息在多轮的循环迭代中丢失了，但是encoder只用了$ h_T $没用更早的上文信息导致输入Decoder的信息不足。(Encoder-Decoder的长句翻译效果很差，就是因为多轮压缩导致的早期信息遗忘)
+如果源语言全文很长，全文的后部分对于当前输出yt没有任何帮助，存在冗余干扰
+所以之后有了注意力机制来引入当前输出yt所需要关注的源信息
+Decoder无法并行输出，需要迭代串行输出(Transformer也有这个问题)，并行输出的前提是模型提前知道输出序列的长度
+注意力机制Attention Encoder-Decoder 2014性能接近IBM的统计方法SMT没有尝过
+...</p></div><footer class=entry-footer><span title=2026-05-28T00:00:00+00:00>创建于 2026-05-28</span>&nbsp;·&nbsp;<span title=2026-08-11T00:00:00+00:00>最后修改于 2026-08-11</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Transformer 3 从RNN到Transformer" href=https://jler666.github.io/planning/uctamv7clz85bxer/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Transformer 2 起源</h2></header><div class=entry-content><p>transformer最早用于机器翻译，最早期机器翻译用的都是规则系统
+规则系统 机器必须同时理解两种语言的内在逻辑才能做翻译，1954年IBM试验一个基于规则的英俄语翻译系统在小范围内运行成功，同时编译器的发展让人们看到规则系统的功效(计算机语言->机器语言)，翻译也可以参照编译器的做法
+词法分析->句法分析->语义分析->目标语言生成
+句法分析:用规则将句子映射成语法树。定语从句使得语法树需要纵向深嵌套。语句存在歧义需要映入上下文，生成多颗语法树，并且让规则膨胀。维度爆炸，每增加一个从句或连接词，语法树引入新的规则，规则系统膨胀。同时同词不同意，也会生成多颗语法树，需要新增规则
+语义分析:理解句子说了什么，并转换成目标语言。开放问题，词义依赖于现实尝试与推理，基于形式的规则系统只能不断打补丁
+语言并非基于规则演绎得来的，人说话不是语法的执行器，语言是人类在社会实践中使用涌现出来的，有结构有共识有非共识
+统计语言学 最初应用于语音识别，早期语音识别准确率停留在70%左右，词表规模只有几百个。后续使用统计学方法建模，准确率提升到90%并将词表扩展到几万词
+最早的语音识别被视为某种确定性映射，语音A变为词序列W，但因为口音，噪音，停顿使得其并非确定性映射。IBM将语音识别建模为，寻找W使得P(W|A)最大
+$ \hat W=\argmax_WP(W|A) $
+语音识别被抽象为动态评分清生成(P的生成)和搜索最高分(基于P,A生成W)，每个候选序列都有一个概率分不像规则系统那么极端只有符合规则的有分，不符就没分
+从还原论到生成论的转变，规则系统评分符合认为设定规则，分数高意味着更符合规则。统计语言评分标准是真实世界的生成偏好，分数高意味着更有可能在真实世界出现
+还原论认为，人的语言是复杂的逻辑系统有一套规则，句子是规则逻辑推演的结果。生成论认为语言是表达的工具，人是为了表达才说话，表达是本体，语言是服务于表达的工具，语言是人在不同环境下未来表达意思生成出来的，语言中的因果关系是生成偏好的表现，如果P很高意味着对应的词更可能在真实世界中出现。生成论是第一个因果关系完全由数据驱动的范式
+目前的生成模型都是基于生成论的，认为模型是复杂函数拟合器是典型的还原论的思想，有一个确定的函数/规则待拟合通过调整参数fit函数。还原论认为基于公理的推理可以生成世界，世界是基于基本公理诞生的(从古至今的部分科学)。
+生成论认为世界才是本体，世界决定了语音模型的打分，世界决定了模型的参数。生成器只是去近似世界，而不是尝试用规则总结，生成论和还原论的区别是规则的来源是什么，还原论的规则是自己手写的，生成论的规则是基于世界数据学习系统自己涌现的。还原论认为整体等于部分的和，而生成论认为整体大于部分的和。放弃建模规则去建立一个可以训练的生成器，让他的偏好和世界接近，那么他自己就会涌现出和世界相似的动态规则出来
+构造一个非常简单的生成器，假设有两个随机变量L为{0,1,2}上的随机变量，且随机变量取值概率都是1/3，B是一个二值随机变量为0或1且=0和=1概率相同都是1/2。
+构造一个生成器，对L做随机实验结果结果记为l=0/1/2，再对B进行l次的采样生成一个由01构成的序列
+生成器为每个序列赋予概率，天然提供一份评分清单。评分(概率)受生成器参数(L,B的分布)以及生成机制(L,B相互独立，每次从B采样独立)限制无法随意调整。如果生成器的参数可调，通过训练让调整参数生成器偏偏好接近真实世界，生成器就是某个世界现象的近似体。
+IBM的语音识别问题就是构造一个生成器，用真实数据训练使他拟合真实世界的生成偏好 ，基于序列好的模型给序列打分，搜索出最高分的序列作为语音识别输出。
+一个强大的真实世界偏好拟合器(生成器)，需要生成能力强(表达能力强，能全覆盖我们想要拟合的偏好特征)，生成机制灵活参数多，可以高效地训练，可以高效地推理评分
+提升上面生成器机制灵活度，将L,B改成实数连续随机变量，但他的生成机制是L/B每次采样独立同分布的，评分的灵活性还是受到限制,下面举一个其他例子
+$ P(X=0)=\theta,P(X=1)=1-\theta $二值分布
+长度为L有k个0的序列生成概率为$ (1-\theta)^{L-k}\theta^k $，对参数$ \theta $调整影响的不是某条特定的序列而是所有长度为L有k个0点序列，比如想改1110概率那么调整参数后会同时影响1101,1011。 序列每个元素相互独立导致了这个缺陷，无法调整特定序列的概率也就是无法精细地控制生成器的偏好，拟合能力不强
+为了提高拟合能力，将独立分布改为条件分布$ P(X_t|X_1=x1,X_2=x_2,...X_{t-1}=x_{t-1}) $，L=4。增加上文依赖，引入考虑上文的偏好调节能力，这样调节1110的概率只会影响1110本身
+最复杂的生成器是所有元素都相互依赖n^2复杂度，这样的生成器调节能力最强但训练困难，需要的数据数量也更高 。第一个真正落地的生成器是马尔科夫生成器$ P(X_t|X_{t-1}) $当前元素只依赖前一个元素，训练和搜索都相对简洁
+基于还原论的思想的模型是感知机，支持向量机，卷积神经网络。基于生成论的思想的模型是马尔可夫链，循环神经网络，transformer
+从经历上更感性地领会两者区别
+驾驶跟语言类似也是具有一定的结构和规则，但是生成机制相比语言需要更加灵活。这个系统本身一部分就是有明确规则，规则的表达比较宏观，操作/运动的强弱、激进柔和没法通过规则表达清楚是需要学习生成。
+【破解transformer第三讲 从还原论到生成论的重大思想转折】 https://www.bilibili.com/video/BV1LKxFzzENL/?share_source=copy_web&amp;vd_source=f30434e6b17c523a86728e862daf2d10
+马尔科夫生成器 马尔科夫假设,未来状态只与当前时刻状态有关，与更早的历史和更远的未来都无关
+$ P(s_t|s_1,s_2,...,s_{t-1})=P(s_t|s_{t-1}) $
+在马尔科夫假设下，一个序列{s_{1~T}}的概率可以写成
+$ P(s_1,s_2,...,s_T)=P(s_1)P(s_2|s_1)P(s_3|s_2)...P(s_T|s_{T-1}) $
+马尔科夫模型可以进一步扩展，上面的模型又叫马尔科夫一阶模型
+$ P(s_t|s_1,s_2,...,s_{t-1})=P(s_t|s_{t-1},s_{t-2}) $二阶马尔科夫模型，…N阶马尔科夫模型
+随机实验:可以独立反复地进行，并且实验条件相同，比如抛硬币掷骰子，概率分布不会随时间而改变,是静态的概率
+马尔科夫是最简单的动态概率模型，如果考虑掷骰子每次都有磨损，每次结果会影响下一次实验条件，这样的概率是动态的概率，无法独立重复试验。
+动态概率实验结果与环境存在交互，实验结果会影响环境，反过来环境也会影响试验的动态概率。试验结果与环境互相影响。
+马尔科夫假设当前的环境完全由当前的试验结果决定，无需过去的试验结果。知道现在，再额外告诉你过去信息不会对预测未来有帮助。
+举一个离散的状态有限的马尔科夫模型例子
+状态空间$ S=\{s_1,s_2,..,s_N\} $
+第t步的离散result概率分布$ \pi^t=\{\pi_1,\pi_2,..,\pi_N\} $，是一个概率行向量总和概率为1，$ \sum_{i=1}^N\pi_i^t=1,\pi_i^t=P(S=s_i) $表示第t步状态处于si的概率
+...</p></div><footer class=entry-footer><span title=2026-05-17T00:00:00+00:00>创建于 2026-05-17</span>&nbsp;·&nbsp;<span title=2026-05-28T00:00:00+00:00>最后修改于 2026-05-28</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Transformer 2 起源" href=https://jler666.github.io/planning/gb98lngfklxph3kn/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>线代直觉扫盲(TODO)</h2></header><div class=entry-content><p>高维空间随机点采样，随着维度变高基本上所有采样点都在球壳上(附近)
+高维空间随机采样两个向量，随着维度变高ta俩之间的夹角是(几乎)正交的
+高维空间随机采样两个单位向量，随着维度变高2xy->0(正交),n->0方差减小。采样出来的两个单位向量的距离几乎就是sqrt(2)->高维空间的随机采样不能用欧式距离评估相似性
+【现代深度学习基础【第一讲：线性代数的直觉与重要概念】】 https://www.bilibili.com/video/BV15eyaBxEs5/?share_source=copy_web&amp;vd_source=f30434e6b17c523a86728e862daf2d10</p></div><footer class=entry-footer><span title=2026-05-17T00:00:00+00:00>创建于 2026-05-17</span>&nbsp;·&nbsp;<span title=2026-06-01T00:00:00+00:00>最后修改于 2026-06-01</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 线代直觉扫盲(TODO)" href=https://jler666.github.io/planning/gp183hw676m5i617/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Transformer 1 embedding</h2></header><div class=entry-content><p>并非复杂非线性函数拟合器，并非黑箱无法理解.
+单层encoder和decoder如下，接下来拆解各个子模块
+词嵌入embedding transformer最早是用于文本翻译，网络的输入被称为tokens。在文本中token是单次或者单词片段，对于图像或者语音来说token是一小块图像，或者声音片段，token可以简单理解为离散化的信息。
+每个token会被转译为一个向量，这个过程就是embedding，embedding可以简单理解为文本的表征学习，对于含义相近的词其向量在高维空间越接近。
+被用于训练的英文单词大概5w个，gtp3的embeding向量维度为12288.训练好的embedding在高维语义空间中的表达通过下面这个例子有个直观感受，寿司 + 德国 - 日本 与 德国油煎香肠 的embedding向量很近
+同时向量的点积即投影可以用来衡量两个向量的相似程度(越大方向越一致–同义词方向，0为不相关，越小语义差距越大–反义词方向)，下面这个例子就是用 cats - cat来表达一个复数语义向量，可以看到这个复数语义向量和复数单词的点积是大于与单数单词的点积结果。
+同时当复数语义与one,two,three点积时可以看到点积结果是越来越大的
+注意上面所讲的并非真正的embedding而是token的向量化，token换为数值向量，可能稀疏，也可能稠密。更注重数据表示的直接性，指的是数值表示形式本身,每个向量只能编码单个单词的含义没有上下文信息。
+embedding层参数在训练过程中也会被反向传播更新，基于attention等机制使得上下文关联也被更新到embedding层参数中(基于预训练模型微调那embedding层一般冻结)。
+上面直观介绍了早期embedding的基本概念，语言模型中的 Embedding本质是将人类语言映射为计算机可以理解的数字向量。为前transformer时代的静态稠密词向量能达到的效果，下面进一步介绍之后embe静态dding的发展
+第一阶段：离散表示时代（One-Hot, Bag of Words, TF-IDF） 在这个极早期的阶段，人们试图用最直观的数学方式来表示词汇。
+核心方法： One-Hot 编码（独热编码）。如果词典有 10000 个词，每个词就是一个 10000 维的向量，其中只有该词对应的位置为 1，其余全为 0。 改进与解决的问题： 首次实现了将文本转换为计算机可以处理的数字形式。TF-IDF 进一步加入了词频和逆文档频率的统计信息，解决了“常用词权重过高”的问题。 遗留的致命缺陷： 维度灾难与稀疏性： 向量极长且极其稀疏，计算效率极低。
+语义鸿沟（Semantic Gap）： 任意两个不同词的 One-Hot 向量内积都是 0。计算机无法知道“国王”和“皇帝”的语义很接近，而“国王”和“苹果”相差甚远。
+第二阶段：静态稠密词向量（Word2Vec, GloVe, FastText）一词一意 2013年前后，基于“分布式假设”（一个词的含义由它的上下文决定）的静态词向量横空出世，引发了 NLP 领域的革命。
+新增改进： Word2Vec： 使用浅层神经网络（CBOW 或 Skip-gram 模型）通过预测上下文来训练词向量。
+GloVe： 结合了全局词频统计和局部上下文窗口。
+FastText： 引入了子词（Subword）信息（如 n-gram），把词拆开看。
+...</p></div><footer class=entry-footer><span title=2026-05-15T00:00:00+00:00>创建于 2026-05-15</span>&nbsp;·&nbsp;<span title=2026-11-04T00:00:00+00:00>最后修改于 2026-11-04</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Transformer 1 embedding" href=https://jler666.github.io/planning/ykr4krrzcpy82yx2/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>FlowMap: Path Generation for Automated Vehicles in Open Space Using Traffic Flow</h2></header><div class=entry-content><p>基于交通流轨迹数据的开放空间路径生成方法，基于他车轨迹形成road。人类司机习惯去往位置区域时跟随其他的人类司机，通过交通流场表达环境TTF(基于流密度和方向)。
+RoadMap轻量化的语义建图框架，基于离散带语义信息的点云/占据数据融合全局语义地图。
+TrafficFlow基于车载的检测跟踪结果以及与语义点云/占据生成TTF
+在线流程中如果车辆进入感兴趣区域，从云端同步TTF，基于TTF规划路径，在规划时考虑交通流、语义地图、舒适性
+Traffic Flow:$ b_i^t=(p,l,w) $表示第i量车在t时刻的车载检测跟踪结果，$ p=(x,y,\theta) $车辆中心位置+朝向，l和w分别为车辆bounding box的长和宽，$ b_v $表示车辆v的轨迹序列。
+由于基于感知信息，遮挡、感知误差导致出现短寿命轨迹和漂移轨迹，同时也存在一些静止或时长过短的轨迹。预处理按以下指标筛选轨迹(1) 轨迹时长 (2) 轨迹长度 (3) 帧间跳变漂移 (4) 是否与环境碰撞 (5) 轨迹是否跨过完整路口。
+基于上述过滤后为每条$ b_v $附加额外信息$ m_v=(l_{entry},l_{exist},p_{start}) $其中$ l_{entry},l_{exist} $分别表示相交的进出路口的多边形边(如下图中的蓝线)，$ p_{start} $为$ b_v $与$ l_{entry} $相交的位置点。
+基于$ l_{entry},l_{exist} $边索引$ g_{in},g_{out} $为$ b_v $分组，对每组内$ b_v $的$ p_{start} $进行聚类得到进入点$ p_{e} $(可能存在多个进入点如下图)，进一步根据$ b_v $的$ p_{start} $与$ p_{e} $间距离进行分组得到$ F\lt g_{in},g_{out},p_e\gt $可以理解为基于入口分组的lane级交通流，内含多种模态的轨迹信息。(感觉分组不完全，应该按进出口分组，并且进出点需要extend可能处于进lane和出lane不同的位置上)
+论文里说ROI的多边形边缘不精确，在聚类后会将$ l_{entry} $边优化为与多个$ p_{e} $处交通流平均方向的垂向
+为每一个$ F\lt g_{in},g_{out},p_e\gt $构建2维栅格地图，每个栅格中包含$ f_{i,j}=(d,\delta_i,\delta_j) $其中d表示压过此栅格的$ b_v $条数(密度，统计栅格密度时，是将车视为boundingbox,只要box压过的栅格密度都+1),$ \delta_i,\delta_j $表示压过此栅格的$ b_v $在此栅格上朝向单位向量，在xy方向上投影的平均值。
+...</p></div><footer class=entry-footer><span title=2025-03-09T00:00:00+00:00>创建于 2025-03-09</span>&nbsp;·&nbsp;<span title=2025-03-15T00:00:00+00:00>最后修改于 2025-03-15</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to FlowMap: Path Generation for Automated Vehicles in Open Space Using Traffic Flow" href=https://jler666.github.io/planning/qykzb7x5hqoo6wz2/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>FMM</h2></header><div class=entry-content><p></p></div><footer class=entry-footer><span title=2025-02-23T00:00:00+00:00>创建于 2025-02-23</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to FMM" href=https://jler666.github.io/planning/gg7fa2rgttih0748/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>图匹配</h2></header><div class=entry-content><p>先介绍一些图相关的基础概念
+图可以抽象为点集合V与边集合E，点集合表示事物或兑现的全体，边集合表示事物或对象之前的某种联系或相互作用。图定义为G=(V,E),V有限非空称为顶点集合|V|表示顶点数量，E是V中点组成的无序对构成的集合，同一点可能在E中出现多次，|E|表示边数。
+有限图，顶点和边集都是有限的(无限图也是大量存在的如正整数集合上的整除关系图就是一个无限图)
+平凡图，只有一个顶点的图
+空图，只有点没有边的图
+n阶图，顶点数为n的图
+(n,m)图，n个顶点，m条边的图
+边的重数，连接两个相同顶点的边数(有向图就存在同节点多连接)称为边的重数，重数大于1的边称为重边
+环，边的端点为统一顶点的边
+简单图，无环无重边的图，其他图称为复合图
+顶点u与v相邻接，顶点u与v间存在边。注意 定义一个顶点与其自身是邻接的
+顶点u与边e相关联，顶点u是边e的端点
+边e1与边e2相邻接，边e1与e2有公共端点
+图的同构
+顶点数和边数相同，其结构式也相同，那么这两个图被称为同构。五角星和五边形是同构的(调整五边形顶点的位置即可，抽象的图概念中对点的位置与边的长度都不关心)。定义:G1=(V1,E1),G2=(V2,E2)，若V1和V2间存在一映射(存在n!种映射可能)使得其中任一节点，u1&lt;->u2 v1&lt;->v2 ,u1v1 in E1当且仅当 u2v2 in E2,且E1和E2的重数相同，则G1和G2同构。
+同构计算是NP完全问题，目前并没有很好的算法能快速计算同构
+完全图，简单图、任意顶点都和其他节点存在边(全连接)，n阶完全图一般用$ K_n $表示，边数为$ m(K_n)=n(n-1)/2 $
+偶(双图、二部图)，两种事物间的连接关系，图中节点被分为两类，同类别的顶点间不存在边(边只存在于不同类别的顶点)。具有二分类(X,Y)偶图是指，图的顶点集合可被分解为两个非空子集X和Y,使得每条边的一个端点在X中另一端点在Y中。允许有重边
+完全偶图，二分类(X,Y)的简单偶图(无重边)，X的每个顶点与Y的每个顶点相连若$ |X|=n_1,|Y|=n_2 $则这样的偶图记为$ K_{n_1,n_2} $,边数为n1 x n2
+简单图的补图，对于n阶简单图G，基于完全图Kn，定义G=(V,E)的补图，E1={uv|u!=v,对任意u,v in V}(这是完全图的边集)称图H=(V,E1-E)为G的补图记为
+(1)只有简单图才有补图
+(2)补图和原图的顶点集合是相同的
+(3)n阶简单图任意一对顶点邻接的充分必要条件是这对顶点在补图中不邻接
+(4)n阶简单图的边数与其补图的边数和为n阶完全图 的边数
+自补图，若G与其补图同构，则G为自补图。必要条件，n阶图是自补图则有n%4==0或1，其边数为n(n-1)/4
+四阶自补图 五阶自补图
+8阶自补图(10个)
+顶点的度，G的顶点v的度数d(v)是指G中与v关联的边的数目，如果顶点存在环(边的端点都是这个顶点)则算2次
+1$ \delta(G) $和$ \triangle (G) $用表示图G的最小度/最大度数，$ \delta(G)\geq\left \lfloor p/2 \right \rfloor $是图连通的充分条件
+2 奇数度的顶点称为奇点偶数度的顶点称为偶点
+...</p></div><footer class=entry-footer><span title=2025-01-10T00:00:00+00:00>创建于 2025-01-10</span>&nbsp;·&nbsp;<span title=2025-05-16T00:00:00+00:00>最后修改于 2025-05-16</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 图匹配" href=https://jler666.github.io/planning/gns952yc8i7mh5lo/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>yunlong song RL文章综述</h2></header><div class=entry-content><p>Flightmare: A Flexible Quadrotor Simulator
+https://github.com/uzh-rpg/flightmare
+四轴无人机仿真Unity做渲染，内置一个动力学仿真引擎(超快)，渲染与物理引擎解耦。支持RL需要的多环境并行仿真，支持VR.解耦后非常适合用来做RL的数据采集，目前所有的机器人仿真平台，物理引擎和光线渲染都是在同一平台内无法做到替换其中一种，在某些任务中我们不需要精细的光线渲染，过渡的渲染浪费了我们的GPU资源。
+EPSILON: An Efficient Planning System for Automated Vehicles in Highly Interactive Environments
+CARLA和HKUST写的EPSILON,fast lab所用的无人车仿真工具
+物理引擎和渲染通过ZeroMQ通信，sensors信息也由渲染提供(注意碰撞检测也由渲染提供)，物理引擎快只能说sample够快，但是最重要的碰撞检测还是被渲染约束。
+Policy Search for Model Predictive Control with Application to Agile Drone Flight
+https://uzh-rpg.github.io/high_mpc
+https://github.com/uzh-rpg/high_mpc
+policy serach决策MPC变量，MPC视为一个参数化的控制器，用policy表达其中难以优化的高层级决策变量。在引言里说了几个learning based方向:
+MPC-guided Policy Search
+1 data-efficient policy search methods using model priors. For instance, guided policy search (GPS) algorithms [25]–[27] opt for transforming RL into a supervised learning problem.GPS方法使用轨迹优化算法收集训练数据，但是是监督学习
+Learning deep control policies for autonomous aerial vehicles with mpc-guided policy search
+...</p></div><footer class=entry-footer><span title=2024-11-19T00:00:00+00:00>创建于 2024-11-19</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to yunlong song RL文章综述" href=https://jler666.github.io/planning/xgawwoq2p0m3l49v/></a></article><footer class=page-footer><nav class=pagination><a class=next href=https://jler666.github.io/planning/page/2/>Next&nbsp;&nbsp;»</a></nav></footer></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

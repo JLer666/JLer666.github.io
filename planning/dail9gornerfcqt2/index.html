@@ -1,0 +1,83 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>LC 规控1 介绍 | CantBlog</title><meta name=keywords content><meta name=description content="路径速度解耦代表框架 EM planner
+EM总体框架
+
+并行基于多条lane/refline (split)生成结果，再对多条traj进行决策
+EM迭代
+
+1障碍物SL投影 2 M个step的DP+QP生成路径 3 对路径做profile生成粗轨迹 4 障碍物ST投影 5 DP+QP生成s(t) 5二者结合形成轨迹
+路径DP decision是决策左绕 or 右绕 or 忽略(由纵向考虑) 开QP所用的凸空间
+
+路径优化可在frenet下or笛卡尔下
+
+ST投影
+
+ST DP决策 跟车、超车
+
+ST优化平滑
+
+如何进行时空联合改造(SLT投影)，如何在Path层面考虑动态障碍物，需要现有自车的速度曲线，只有先有这个才能根据动态障碍物的预测轨迹做SLT投影，但是速度规划在Path的下游。
+时空联合框架
+行为决策+时空联合规划
+
+path采样 + 权重可学习的cost评估，基于此cost进行轨迹优化。生成的最优轨迹与人类示教数据进行训练更新权重参数w.
+数据驱动 UniAD 端到端，感知信息的无损传递，子模块任务预学习+以planning为导向的统一学习更新
+数据驱动 结合learning based和heuristic based方法
+
+learning输出轨迹   基于专家示教数据训练网络，学习优化求解的部分超参数，作为优化器初值加速优化
+在不确定场景下进行规划
+对于他车多种意图下进行的规划，再根据意图概率加权后的轨迹有可能会与任一意图下面的他车发生高风险交互。contigency planning只在分叉点后针对各个意图进行规划，在分叉点前使用同一shared segment，即延迟决策在分叉点之前他车意图不明确无法做出大概率判断，因此保持shared segment(无论他车做出何种决策此段都是安全的)
+
+预测决策规划联合
+
+只规划自车，精准知道其他agent行为，就是一个MPC问题
+
+都规划，多智能体博弈
+"><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/planning/dail9gornerfcqt2/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/planning/dail9gornerfcqt2/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/planning/dail9gornerfcqt2/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="LC 规控1 介绍"><meta property="og:description" content="路径速度解耦代表框架 EM planner
+EM总体框架
+并行基于多条lane/refline (split)生成结果，再对多条traj进行决策
+EM迭代
+1障碍物SL投影 2 M个step的DP+QP生成路径 3 对路径做profile生成粗轨迹 4 障碍物ST投影 5 DP+QP生成s(t) 5二者结合形成轨迹
+路径DP decision是决策左绕 or 右绕 or 忽略(由纵向考虑) 开QP所用的凸空间
+路径优化可在frenet下or笛卡尔下
+ST投影
+ST DP决策 跟车、超车
+ST优化平滑
+如何进行时空联合改造(SLT投影)，如何在Path层面考虑动态障碍物，需要现有自车的速度曲线，只有先有这个才能根据动态障碍物的预测轨迹做SLT投影，但是速度规划在Path的下游。
+时空联合框架
+行为决策+时空联合规划
+path采样 + 权重可学习的cost评估，基于此cost进行轨迹优化。生成的最优轨迹与人类示教数据进行训练更新权重参数w.
+数据驱动 UniAD 端到端，感知信息的无损传递，子模块任务预学习+以planning为导向的统一学习更新
+数据驱动 结合learning based和heuristic based方法
+learning输出轨迹 基于专家示教数据训练网络，学习优化求解的部分超参数，作为优化器初值加速优化
+在不确定场景下进行规划
+对于他车多种意图下进行的规划，再根据意图概率加权后的轨迹有可能会与任一意图下面的他车发生高风险交互。contigency planning只在分叉点后针对各个意图进行规划，在分叉点前使用同一shared segment，即延迟决策在分叉点之前他车意图不明确无法做出大概率判断，因此保持shared segment(无论他车做出何种决策此段都是安全的)
+预测决策规划联合
+只规划自车，精准知道其他agent行为，就是一个MPC问题
+都规划，多智能体博弈"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="planning"><meta property="article:published_time" content="2024-09-09T00:00:00+00:00"><meta property="article:modified_time" content="2025-03-03T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="LC 规控1 介绍"><meta name=twitter:description content="路径速度解耦代表框架 EM planner
+EM总体框架
+并行基于多条lane/refline (split)生成结果，再对多条traj进行决策
+EM迭代
+1障碍物SL投影 2 M个step的DP+QP生成路径 3 对路径做profile生成粗轨迹 4 障碍物ST投影 5 DP+QP生成s(t) 5二者结合形成轨迹
+路径DP decision是决策左绕 or 右绕 or 忽略(由纵向考虑) 开QP所用的凸空间
+路径优化可在frenet下or笛卡尔下
+ST投影
+ST DP决策 跟车、超车
+ST优化平滑
+如何进行时空联合改造(SLT投影)，如何在Path层面考虑动态障碍物，需要现有自车的速度曲线，只有先有这个才能根据动态障碍物的预测轨迹做SLT投影，但是速度规划在Path的下游。
+时空联合框架
+行为决策+时空联合规划
+path采样 + 权重可学习的cost评估，基于此cost进行轨迹优化。生成的最优轨迹与人类示教数据进行训练更新权重参数w.
+数据驱动 UniAD 端到端，感知信息的无损传递，子模块任务预学习+以planning为导向的统一学习更新
+数据驱动 结合learning based和heuristic based方法
+learning输出轨迹 基于专家示教数据训练网络，学习优化求解的部分超参数，作为优化器初值加速优化
+在不确定场景下进行规划
+对于他车多种意图下进行的规划，再根据意图概率加权后的轨迹有可能会与任一意图下面的他车发生高风险交互。contigency planning只在分叉点后针对各个意图进行规划，在分叉点前使用同一shared segment，即延迟决策在分叉点之前他车意图不明确无法做出大概率判断，因此保持shared segment(无论他车做出何种决策此段都是安全的)
+预测决策规划联合
+只规划自车，精准知道其他agent行为，就是一个MPC问题
+都规划，多智能体博弈"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Planning","item":"https://jler666.github.io/planning/"},{"@type":"ListItem","position":2,"name":"LC 规控1 介绍","item":"https://jler666.github.io/planning/dail9gornerfcqt2/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"LC 规控1 介绍","name":"LC 规控1 介绍","description":"路径速度解耦代表框架 EM planner\nEM总体框架\n并行基于多条lane/refline (split)生成结果，再对多条traj进行决策\nEM迭代\n1障碍物SL投影 2 M个step的DP+QP生成路径 3 对路径做profile生成粗轨迹 4 障碍物ST投影 5 DP+QP生成s(t) 5二者结合形成轨迹\n路径DP decision是决策左绕 or 右绕 or 忽略(由纵向考虑) 开QP所用的凸空间\n路径优化可在frenet下or笛卡尔下\nST投影\nST DP决策 跟车、超车\nST优化平滑\n如何进行时空联合改造(SLT投影)，如何在Path层面考虑动态障碍物，需要现有自车的速度曲线，只有先有这个才能根据动态障碍物的预测轨迹做SLT投影，但是速度规划在Path的下游。\n时空联合框架\n行为决策+时空联合规划\npath采样 + 权重可学习的cost评估，基于此cost进行轨迹优化。生成的最优轨迹与人类示教数据进行训练更新权重参数w.\n数据驱动 UniAD 端到端，感知信息的无损传递，子模块任务预学习+以planning为导向的统一学习更新\n数据驱动 结合learning based和heuristic based方法\nlearning输出轨迹 基于专家示教数据训练网络，学习优化求解的部分超参数，作为优化器初值加速优化\n在不确定场景下进行规划\n对于他车多种意图下进行的规划，再根据意图概率加权后的轨迹有可能会与任一意图下面的他车发生高风险交互。contigency planning只在分叉点后针对各个意图进行规划，在分叉点前使用同一shared segment，即延迟决策在分叉点之前他车意图不明确无法做出大概率判断，因此保持shared segment(无论他车做出何种决策此段都是安全的)\n预测决策规划联合\n只规划自车，精准知道其他agent行为，就是一个MPC问题\n都规划，多智能体博弈\n","keywords":[],"articleBody":"路径速度解耦代表框架 EM planner\nEM总体框架\n并行基于多条lane/refline (split)生成结果，再对多条traj进行决策\nEM迭代\n1障碍物SL投影 2 M个step的DP+QP生成路径 3 对路径做profile生成粗轨迹 4 障碍物ST投影 5 DP+QP生成s(t) 5二者结合形成轨迹\n路径DP decision是决策左绕 or 右绕 or 忽略(由纵向考虑) 开QP所用的凸空间\n路径优化可在frenet下or笛卡尔下\nST投影\nST DP决策 跟车、超车\nST优化平滑\n如何进行时空联合改造(SLT投影)，如何在Path层面考虑动态障碍物，需要现有自车的速度曲线，只有先有这个才能根据动态障碍物的预测轨迹做SLT投影，但是速度规划在Path的下游。\n时空联合框架\n行为决策+时空联合规划\npath采样 + 权重可学习的cost评估，基于此cost进行轨迹优化。生成的最优轨迹与人类示教数据进行训练更新权重参数w.\n数据驱动 UniAD 端到端，感知信息的无损传递，子模块任务预学习+以planning为导向的统一学习更新\n数据驱动 结合learning based和heuristic based方法\nlearning输出轨迹 基于专家示教数据训练网络，学习优化求解的部分超参数，作为优化器初值加速优化\n在不确定场景下进行规划\n对于他车多种意图下进行的规划，再根据意图概率加权后的轨迹有可能会与任一意图下面的他车发生高风险交互。contigency planning只在分叉点后针对各个意图进行规划，在分叉点前使用同一shared segment，即延迟决策在分叉点之前他车意图不明确无法做出大概率判断，因此保持shared segment(无论他车做出何种决策此段都是安全的)\n预测决策规划联合\n只规划自车，精准知道其他agent行为，就是一个MPC问题\n都规划，多智能体博弈\n","wordCount":"53","inLanguage":"en","datePublished":"2024-09-09T00:00:00Z","dateModified":"2025-03-03T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/planning/dail9gornerfcqt2/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">LC 规控1 介绍</h1><div class=post-meta><span title=2024-09-09T00:00:00+00:00>创建于 2024-09-09</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p>路径速度解耦代表框架 EM planner</p><p>EM总体框架</p><p><img alt=1725971887441-7be351bc-7d42-4203-91e7-ebbf8595c06b.png loading=lazy src=/images/24qsouYMtqfitYzU/1725971887441-7be351bc-7d42-4203-91e7-ebbf8595c06b-249001.png></p><p>并行基于多条lane/refline (split)生成结果，再对多条traj进行决策</p><p>EM迭代</p><p><img alt=1725971894275-92f525bb-028a-4a4a-bada-b75a32704ca8.png loading=lazy src=/images/24qsouYMtqfitYzU/1725971894275-92f525bb-028a-4a4a-bada-b75a32704ca8-577478.png></p><p>1障碍物SL投影 2 M个step的DP+QP生成路径 3 对路径做profile生成粗轨迹 4 障碍物ST投影 5 DP+QP生成s(t) 5二者结合形成轨迹</p><p>路径DP decision是决策左绕 or 右绕 or 忽略(由纵向考虑) 开QP所用的凸空间</p><p><img alt=1725971899208-6c477e97-8bfb-4817-a9c6-6343606c4fa2.png loading=lazy src=/images/24qsouYMtqfitYzU/1725971899208-6c477e97-8bfb-4817-a9c6-6343606c4fa2-662035.png></p><p>路径优化可在frenet下or笛卡尔下</p><p><img alt=1725971906120-4c23c9e1-c99e-4278-b646-318fcd148613.png loading=lazy src=/images/24qsouYMtqfitYzU/1725971906120-4c23c9e1-c99e-4278-b646-318fcd148613-716391.png></p><p>ST投影</p><p><img alt=1725971914190-8758ca1e-8dc7-4cc0-83bb-4634349b39c0.png loading=lazy src=/images/24qsouYMtqfitYzU/1725971914190-8758ca1e-8dc7-4cc0-83bb-4634349b39c0-566551.png></p><p>ST DP决策 跟车、超车</p><p><img alt=1725971919524-be06f18d-6b73-40e5-bd71-c16ce6452a4d.png loading=lazy src=/images/24qsouYMtqfitYzU/1725971919524-be06f18d-6b73-40e5-bd71-c16ce6452a4d-970964.png></p><p>ST优化平滑</p><p><img alt=1725971923480-bed2b5b2-0ed6-409b-b291-72126f96519c.png loading=lazy src=/images/24qsouYMtqfitYzU/1725971923480-bed2b5b2-0ed6-409b-b291-72126f96519c-798219.png></p><p>如何进行时空联合改造(SLT投影)，如何在Path层面考虑动态障碍物，需要现有自车的速度曲线，只有先有这个才能根据动态障碍物的预测轨迹做SLT投影，但是速度规划在Path的下游。</p><p>时空联合框架</p><p>行为决策+时空联合规划</p><p><img alt=1725971928594-cfd0fcd4-f431-4121-835a-d0483a78a573.png loading=lazy src=/images/24qsouYMtqfitYzU/1725971928594-cfd0fcd4-f431-4121-835a-d0483a78a573-658625.png></p><p>path采样 + 权重可学习的cost评估，基于此cost进行轨迹优化。生成的最优轨迹与人类示教数据进行训练更新权重参数w.</p><p>数据驱动 UniAD 端到端，感知信息的无损传递，子模块任务预学习+以planning为导向的统一学习更新</p><p>数据驱动 结合learning based和heuristic based方法</p><p><img alt=1725971936112-b897f41d-e668-4e03-a045-d4693fdb3d8f.png loading=lazy src=/images/24qsouYMtqfitYzU/1725971936112-b897f41d-e668-4e03-a045-d4693fdb3d8f-813679.png></p><p>learning输出轨迹 基于专家示教数据训练网络，学习优化求解的部分超参数，作为优化器初值加速优化</p><p>在不确定场景下进行规划</p><p>对于他车多种意图下进行的规划，再根据意图概率加权后的轨迹有可能会与任一意图下面的他车发生高风险交互。contigency planning只在分叉点后针对各个意图进行规划，在分叉点前使用同一shared segment，即延迟决策在分叉点之前他车意图不明确无法做出大概率判断，因此保持shared segment(无论他车做出何种决策此段都是安全的)</p><p><img alt=1725971943397-ba4616cd-cb8c-40bb-ba96-4d8d3e05e20c.png loading=lazy src=/images/24qsouYMtqfitYzU/1725971943397-ba4616cd-cb8c-40bb-ba96-4d8d3e05e20c-685314.png></p><p>预测决策规划联合</p><p><img alt=1725971961427-dc4902b1-2035-4929-92eb-d6f3ba85780e.png loading=lazy src=/images/24qsouYMtqfitYzU/1725971961427-dc4902b1-2035-4929-92eb-d6f3ba85780e-195055.png></p><p>只规划自车，精准知道其他agent行为，就是一个MPC问题</p><p><img alt=1725971992845-719c109e-422c-4431-883a-2adc93a34da2.png loading=lazy src=/images/24qsouYMtqfitYzU/1725971992845-719c109e-422c-4431-883a-2adc93a34da2-636805.png></p><p>都规划，多智能体博弈</p><p><img alt=1725972005299-da130356-da05-4012-849a-aebee28cb1a7.png loading=lazy src=/images/24qsouYMtqfitYzU/1725972005299-da130356-da05-4012-849a-aebee28cb1a7-137675.png></p></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

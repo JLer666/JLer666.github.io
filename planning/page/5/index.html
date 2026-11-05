@@ -1,0 +1,229 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Planning | CantBlog</title><meta name=keywords content><meta name=description content="路径规划、轨迹优化与最优控制相关笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/planning/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/planning/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/planning/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/planning/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Planning"><meta property="og:description" content="路径规划、轨迹优化与最优控制相关笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="Planning"><meta name=twitter:description content="路径规划、轨迹优化与最优控制相关笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Planning","item":"https://jler666.github.io/planning/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>Planning</h1><div class=post-description>路径规划、轨迹优化与最优控制相关笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>4 考虑动力学约束的路径规划4 Hybrid A star</h2></header><div class=entry-content><p>Hybrid A–混合A**
+在lattice graph采样(control lattice 定输入 定时间 缺点规划出的边分化程度不高 都聚在一起) 我们一般会将输入u分化的非常细(20,30等分) 这导致图非常稠密，我们需要对图进行剪枝
+通过栅格地图进行剪枝
+在对lattice graph进行图搜索时(是在离散控制空间搜索)，保证每个栅格中只有一个可行的state节点，在图搜索中会发现有的lattice边会落在同一个栅格中，此时若此栅格之前有记录可行的state节点，则比较之前记录的state节点的cost和新的这个节点cost，保留cost最小的这个节点在这个栅格中。
+下面是hybrid A*伪代码
+1使用优先队列priority queue(最小堆–完全二叉树)作为容器来存储节点
+创建两个容器open,close。
+2 3维栅格地图x,y,yaw(-pi,pi),输入的起点终点状态为在连续空间下的状态，先将初态终态离散化到对应网格中(除分辨率计算 取地板除法计算对应栅格索引)
+3先以终点栅格作为起点计算，终点栅格到其他所有栅格的路径长(作为hybridA*的H值中的不考虑动力学约束考虑障碍地图的路径代价)。–计算时用djistra，将终点栅格坐标加入容器，不断扩展(因为没有规定终点 所以就一致扩展计算，直到所有栅格都被扩展过了在close里 结束算法 此时终点到所有其他栅格的代价都已经计算完毕)
+将初态所在的那个栅格索引(i_x,j_y,k_yaw)加入容器open中，标记栅格索引已在open中
+循环
+4检查容器open是否为空，为空则break循环,并且函数返回false
+5 从容器open中弹出(从容器中删除这个节点)当前容器中f值=g+h最小的节点n
+5.5 查看n的标记是否为close,是的话就不看n这个节点，继续下次循环
+将n节点标记为已被扩展过(在close容器中)，并放入另外一个容器close中
+6 判断是否对当前节点状态做oneshot，判断直接用一条ReedShepp轨迹直接得到到终点的无碰撞轨迹，如果可以直接返回true成功找到轨迹了。 ReedShepp轨迹计算还是挺耗时的，所以oneshot操作不能一直做而是以一定概率来选择是否对当前节点做oneshot,这个概率随着当前状态与终点状态越来越接近，这个概率也越来越大。 对于是否得到轨迹判断，不同程序做法有些不同，apollo中需要oneshot一定要成功击中终点状态得到一条到终态的无碰撞轨迹才算规划成功，其他程序中有的判断采样到的状态和终态的接近程度如果很接近也算规划成功，但是肯定有误差的，用rs曲线击中的终点是无误差的肯定准确的。
+7 以当前栅格节点中保存的状态，向前和向后在控制空间采样，将转角[-最大转角，最大转角]离散为若干分，以每一份离散转角 向前/后 进固定长度的离散弧长(离散弧是以多条 规定的最小步长直线组成) 得到以当前状态采样得到的多个子状态，以及若干条到各个子状态的轨迹。这个固定的离散弧长要足够长保证无论以什么起始姿态，子状态都能保证在另外一个栅格中
+8 计算子状态所在的栅格索引(三维)，查看对应的栅格节点是否在close中，在close中则不看这条轨迹。检查当当前状态到子状态的轨迹是否会发生碰撞，发生碰撞的子状态不看。
+记合法子状态为n_s(注意计算子状态 所处栅格 与轨迹中的其他状态无关)所处的栅格节点索引(取地板除法) 记n为这个索引对应的节点。 记父状态(当前状态)为p_s,父状态所处栅格为p
+9 if 如果合法栅格节点n索引不在open中：//之前从未被访问过这个栅格
+计算节点n_s的g值和h值 (g,h值计算写在下面 和A*完全不同)
+记录n栅格节点中的状态为n_s
+记录n节点的父节点为p节点
+将节点n加入open中
+10 else if n已经在open容器中了 // open用哈希表 用字符串存栅格索引实现O(1)查询，也可以直接在栅格节点中设置一个状态变量表示在open or close or从未访问状态
+...</p></div><footer class=entry-footer><span title=2022-03-08T00:00:00+00:00>创建于 2022-03-08</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 4 考虑动力学约束的路径规划4 Hybrid A star" href=https://jler666.github.io/planning/ezsc9b/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>4 考虑动力学约束的路径规划3 论文举例,planning in frenet</h2></header><div class=entry-content><p>车和上面无人机的例子不同 无法水平移动 (无人机可以三轴独立 分开计算)，但是车的速度和转角是互相影响的无法独立
+需要将控制量 w,v 参数化为与t相关的多项式
+如下 将角速度参数化为时间相关的多项式
+将v根据加减速度，最快速度，初始状态速度，终止状态速度 规划为下图过程
+再去解一个带约束的满足系统方程 的轨迹生成问题
+不是线性，需要线性化求一阶雅克比和二阶海森矩阵。通常是离线求解lattice graph每两状态间的轨迹，在使用时在线搜索lattice graph
+参数化线性速度
+P|v| = [v0初始速度 a0初始加速度 v_traverse通行速度 af末加速度 vf末速度 dt穿越时间 ]T 可由上面的梯形图表示
+参数化角速度
+根据泰勒余项定理，多项式可以代表所有可行的运动，在给定足够的项下达到任意的精确度。它也是可微的，可以提供任何期望的连续性程度。
+w(t) = a+bt+c^t2+… – > Pwz=[a,b,c,d..,dt=tf-t0]T
+也可以通过控制点+插值的方法参数化角速度
+Pwz=[w0,w1,w2,w3..,dt=tf-t0]T 不同w间的时间间隔是相等的==dt/n
+将控制输入线性化后 系统的系统方程也和参数P有关 s’=f(s,u(P))
+我们上面这个例子的速度模型是梯形模型其实 线性速度配置还有很多的模型可以选择
+对于转向自由度，也可以不选择控制角速度 可以选择控制曲率 一样参数化为时间的多项式
+P = [k1 k2 sf]T
+下面我们还是用文章中的角速度，梯形线性速度模型来讲
+接下来构造哈密顿函数 和无人的构造不一样(其实和哈密顿函数定义的构造方法都不一样)
+设约束的终止状态为sf,我们实际规划出的终止状态为s(T) = s0 + 积分(0,T) s’(s,u(P))dt
+得到终态约束 C(s,P) = s(T) - sf = s0 + 积分(0,T) s’(s,u(P))dt - sf
+...</p></div><footer class=entry-footer><span title=2022-03-07T00:00:00+00:00>创建于 2022-03-07</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 4 考虑动力学约束的路径规划3 论文举例,planning in frenet" href=https://jler666.github.io/planning/yoyuay/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>4 考虑动力学约束的路径规划2 BVP,OBVP</h2></header><div class=entry-content><p>Boundary Value Problem (BVP)
+BVP没有泛解 需要具体例子具体分析，是状态空间采样规划的基础
+实现状态空间的离散化， 给定两个状态 解出两个状态之间的轨迹
+举一个最简单的一维空间的例子
+求 x(0)=a x(T)=b之间的轨迹
+假设5次多项式的轨迹可以满足要求
+设 x(t) = c5t^5 + c4t^4 + c3t^3 + c2t^2 + c1t + c0
+边界条件 x(0) = a x(T) = b
+可以得到
+左边[a b 0 0 0 0]T = [x(0) x(T) x’(0) x’(T) x’’(0) x’’(T)]T
+5次多项式 2个点 是求解不出一条轨迹的,我们需要在无穷多的解中 根据我们的优化目标找出最好的那个
+Optimal Boundary Value Problem (OBVP)
+我们的优化目标 希望在T时间段内jerk平方的积分最小
+三维空间所以jk有三个
+设状态为9维状态 s = [x,y,z,vx,vy,vz,ax,ay,az]T = [p,v,a]T
+设控制量就为jerk u = [jx,jy,jz]T=[j1,j2,j3]T
+...</p></div><footer class=entry-footer><span title=2022-03-07T00:00:00+00:00>创建于 2022-03-07</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 4 考虑动力学约束的路径规划2 BVP,OBVP" href=https://jler666.github.io/planning/ufthwh/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>3 基于采样的路径规划4 informed_rrt_star补充及代码</h2></header><div class=entry-content><p>Informed RRT 补充*
+https://zhuanlan.zhihu.com/p/162948527
+informed RRT*就是的主要思想就是上面这种思想，在获取可行路径之后，将采样空间限制在一个椭圆形区域中，并且随着路径长度的不断缩短，逐渐缩小该椭圆形区域。这个思想其实在以前就有，但是提出informed RRT的论文中提出了对这个椭圆形区域直接采样的方法。
+伪代码如下 标红的地方是informed rrt和rrt之间的区别
+可以看到改动不大，最大的改动其实是在第7步采样这一步，sample的伪代码如下
+标准椭圆方程是 x^2/a^2 + y^2/b^2 = 1，c^2 = a^2+b^2。焦点坐标(+-c,0)长轴长度为a短轴长度为b，满足椭圆上任意一点到两焦点的距离之和为2a
+当前已经搜索到的最短路径为cbest,起点和终点之间的直线距离为cmin。以起点和终点作为两个焦点，cmin作为焦点间距离cmin=c,cbest作为长轴cbest=2a。当起点到终点的路径还没找得到时cbest一直==inf,此时informed RRT就是RRT.构建的椭圆如下图
+上图中的cbest就是伪代码中的cmax
+此椭圆 a = cbest/2 c = cmin/2,b = sqrt(cbest^2-cmin^2)/2
+椭圆圆心坐标为(起点+终点)/2 == xcenter
+第4句求的是从椭圆圆心坐标系 到世界坐标系的旋转矩阵，如下图。
+将world坐标系下采样的点(x,y)转到椭圆坐标系下(x’,y’) theta为起点和终点连线与世界坐标系x轴正方向的夹角
+将椭圆坐标系下(x’,y’)转到world坐标系下采样的点(x,y)
+这个R就是伪代码4行中的C
+R = cos theta -sin theta
+sin theta cos theta
+平移向量 T = [-xcneter -ycenter]T
+高维向量的旋转矩阵求法有一个kabsch算法 – 就是代码中看到的svd分解的部分
+https://blog.csdn.net/zizi7/article/details/88716429
+https://biomolecularstructures.readthedocs.io/en/latest/kabsch/
+https://cloud.tencent.com/developer/article/1668887
+上讲的算法流程和上面的不一样，课程中用的是这种
+a1 = np.array([[(self.goal.x - self.start.x) / cMin],[(self.goal.y - self.start.y) / cMin], [0]]) e_theta = math.atan2(a1[1], a1[0]) # first column of identity matrix transposed id1_t = np.array([1.0, 0.0, 0.0]).reshape(1, 3) M = a1 @ id1_t U, S, Vh = np.linalg.svd(M, True, True) C = np.dot(np.dot(U, np.diag( [1.0, 1.0, np.linalg.det(U) * np.linalg.det(np.transpose(Vh))])), Vh) 下面讲下论文中的写法，论文中使用的方法流程
+...</p></div><footer class=entry-footer><span title=2022-03-06T00:00:00+00:00>创建于 2022-03-06</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 3 基于采样的路径规划4 informed_rrt_star补充及代码" href=https://jler666.github.io/planning/awv2nm/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>4 考虑动力学约束的路径规划1 介绍,控制空间 状态空间离散</h2></header><div class=entry-content><p>介绍
+kinodynamic:kinematic 运动学+ dynamic动力学 运动学约束比如避障 动力学约束比如速度,加速度，力的限制
+differentially constrained微分约束 (不再是质点模型只考虑位置 还考虑位置的微分速度 速度的微分加速度…)
+up to force (考虑到力和加速度)
+前端A*,RRT生成无碰撞质点位置路径，后端优化路径为机器人可执行的指令。既然有了后端的轨迹优化，那为什么还要在path finding时考虑动力学约束？
+coarse-to-fine 前端进行粗糙地考虑动力学约束 就是为了减轻后端的压力，在前端中就考虑一部分动力学约束在后端优化时更轻松一些
+trajectory only optimizes locally 后端轨迹生成往往作为local plan只优化即将执行的一部分路径
+实现是前段pathfing找到的路径 虚线是后端优化后生成的轨迹
+紫色是类似JPS A*这样的前端 绿色是考虑动力学约束的前端
+可以看到绿色考虑了无人机的初始状态(不仅仅只考虑最短路径) 所以pathding的是靠右的路径 优化后的轨迹顺滑省力不需要像紫色(只考虑最短路径)先减速将机器人的初态置0后在沿左边飞行
+Infeasible path means nothing to nonholonomic system 需要考虑机器人拓扑结构，比如车辆是无法横向平移的,如果用只考虑最短路径的前端找到的路径车辆是无法执行的，就算交给后端也很难生成一条实际可行的轨迹
+综上需要 考虑动力学约束的前段
+例子
+自行车模型
+运动学模型
+自行车模型动力学约束
+|v|&lt;=vmax |w|&lt;=wmax
+差速模型
+运动学模型
+差速模型运动学约束
+差速模型动力学约束
+|wl|&lt;=wlmax |wr|&lt;=wrmax
+简化阿克曼模型
+运动学模型 dtheta写错了 是 v/L*tan
+...</p></div><footer class=entry-footer><span title=2022-03-06T00:00:00+00:00>创建于 2022-03-06</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 4 考虑动力学约束的路径规划1 介绍,控制空间 状态空间离散" href=https://jler666.github.io/planning/ho9oqk/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>3 基于采样的路径规划3 RRT_star,informed_rrt_star介绍</h2></header><div class=entry-content><p>Bidirectional RRT/ RRT connect (双向RRT)
+从起点和终点同时开始生长树，同时构建两颗树， 每撒一个随机点同时构造两颗树的x new！！！,直到两颗树的x new为同一节点，两树连通 找到路径。
+此方法对于解决终点在狭窄通道非常有效，从狭小通道中伸出枝干等待外部连接
+optimal-sampling-based path planning methods
+此方法对于解决终点在狭窄通道非常有效，从狭小通道中伸出枝干等待外部连接
+RRT缺点 – RRT仅仅是找可行解，而非最优解
+找到的路径不一定是最优的
+RRT针对这个问题提出解决方案，下图右边的标题错了，实际是RRT的伪代码
+前3步,sample near steer都和RRT的做法一致
+RRT中接下来的做法就是直接将x new和x near相连，并检测这条边是否会发生碰撞，不会碰撞就保留。 图其实有点问题，x near是树上离x new最近的节点，但明显图上离x new最近的节点不是xnear(先不管)
+RRT*的做法是 在x new不在障碍内的前提下
+1在x new节点的tao半径范围内 寻找附近节点
+找到 x1,x2,x near 将这三个节点保存到 X near容器中
+2 计算 起点->X near容器中节点->x new 这条路径中 哪条路径的长度最短，将最短路径(或者是一些人为规定的cost function来衡量这条路径的代价)经过的X near节点记为x min。下图中x min 为x near
+3 连接x min和x new的这条边(添加到树中)
+4 rewire–剪枝 修改连接使树变得更优化 和 A* dji同理，查看是否可通过x new得到更优的路径， 查看半径范围内除x new,x min的其他节点xn , 起点->xn(当前的从起点到xn的路径代价)>? 起点->x new->xn(通过x new的路径总代价) 即如果周围节点xn可以通过x new得到更小的代价，则更新连接为 xn的上一节点->xnew->xn。
+...</p></div><footer class=entry-footer><span title=2022-03-05T00:00:00+00:00>创建于 2022-03-05</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 3 基于采样的路径规划3 RRT_star,informed_rrt_star介绍" href=https://jler666.github.io/planning/wy6gxc/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>3 基于采样的路径规划1 介绍 PRM概率路图 RRT KDtree介绍</h2></header><div class=entry-content><p>3 path finding基于采样
+介绍
+不需要像基于搜索的方法遍历所有节点，基于采样通过随机撒点通过带权线段将节点连接从而构成我们熟悉的图 来表达空间，边上出现障碍物则此边不要不计入图中 – 复杂空间和三维空间下相对于基于搜索的方法更加高效。
+completeness in planning
+complete planner : 如果存在两点间的正确路径，完备规划一定能找到两点间的这条正确路径，比如之前讲的基于搜索的方法
+prbabilistic complete planner :概率完备规划器，如果解存在，planner最终能通过随机采样(在解空间中随机撒点)得到这个解
+resoultion complete planner :解完备规划器，与概率完备规划器相同但是基于确定性采样(比如在一些确定的固定的栅格中采样)
+RRT其实也就是一个path finding 可以不考虑动力学约束！！ 后面轨迹优化再说
+probabilistic road map–PRM概率路图
+分为两个阶段学习阶段(learning phase)和查询阶段(query phase)
+学习阶段(learning phase)
+1在环境中随机撒点，从而构建一张简单的图。 最简单的撒点方式就是均匀撒点
+撒的点落在障碍物区域内就都不要了 注意 起点和终点一定在节点图中
+2 连接节点 learning phase
+一些连线经过障碍物，这样的边就不要 不连接 比如图中绿色的线。一些连线距离过长也不要连 比如图中的红线。
+查询阶段(query phase)
+经过学习阶段，图已经构建好，接下来就是在图中搜索从起点都终点的路径。
+搜索就可以直接使用A*或djistra来在图中搜索。因为事先对栅格地图进行简化为简单的图搜索会非常快。
+PRM是概率完备的，简化图的搜索更快。
+改进提高其效率
+在learning阶段，需要花费大量的时间检查撒的点是否在障碍物中，检查连起来的边是否穿过障碍物。 提出lazy collision-checking
+1不考虑点是否在障碍物内，不考虑连接的边是否穿过障碍物，撒点后就直接将图连接(只考虑节点距离约束)。
+2先直接进行图搜索，搜索起点到终点的最短路径，如下图的红色路径
+3 检查路径是否合法，这条路径穿过障碍 明显是不可行的路径。
+将穿过障碍路径的边以及在障碍中的节点删除。
+4 在删除了非法节点和边的新图上，重新进行路径的规划。
+...</p></div><footer class=entry-footer><span title=2022-03-04T00:00:00+00:00>创建于 2022-03-04</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 3 基于采样的路径规划1 介绍 PRM概率路图 RRT KDtree介绍" href=https://jler666.github.io/planning/gh067h/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>2 基于搜索的路径规划3 JPS补充</h2></header><div class=entry-content><p>系统性地解决tie breaker问题的方法：跳点A jump point search–JPS*
+上面的解决方法都是工程上的解决方法，JPS可以彻底解决对称搜索问题
+JPS的核心就是找到图中的对称性然后打破
+look ahead rule
+JPS扩展节点时会综合，当前节点的父节点方向(即是从哪个方向扩展到当前节点的)，以及周围(8连通)障碍物的位置来判断哪些邻居是需要扩展的 哪些是不需要扩展的。
+下面举几个例子 来详细说明JPS的扩展规则 下图是无障碍物的例子
+1 父 ->当前->邻居m的路径总代价&lt;=父->邻居m的最短路径代价才会选择扩展邻居m
+左图选择了往5走，选择了4(父)->x->5的路径
+JPS会检查，从当前节点到邻居的代价是否小于等于从父节点到邻居的代价，只有是的话才会选择通过当前节点去到那个邻居 (很好理解 从父节点到了邻居代价更小 为什么不直接从父节点去邻居 反而要多此一举父-x-邻居 代价还更大了，完全没必要)
+上图不被考虑的灰色节点叫 劣性节点(inferior neighbors)，被考虑可走的节点 叫自然节点(natural neighbros)
+1，2，4，6，7都是绝对的劣性节点，4->x->这些节点的代价一定>4->这些节点的代价
+对于3,8节点 4->x->这些节点的代价为sqrt(2)+1 == 4->这些节点的最小代价sqrt(2)+1，这里JPS为了打破对称性 也是为了简化搜索 此情况下这样的节点都不会考虑。
+对于5节点 4->x->5 == 4->5 == 2，
+上右图同理
+1，4，6，7，8作为邻居m 6->x->m > 6->m 所以都不扩展 都是劣性节点
+2，3，5作为邻居m 6->x->m &lt;= 6->m 所以可扩展 是自然节点
+上面两张图就能代表JPS在所有父节点方向下，考虑扩展的所有情况。记住上面两张图
+在有障碍物的情况下
+在当前节点的周围存在障碍
+左图 在无障碍情况下，3是不需要考虑的。 在此情况下3必须考虑，3是一个forced neighbors,在无障碍情况下 到3可以通过4->x->3 == 4->2->3 == sqrt(2)+1,因为有障碍4->2->3这条路堵上了，根据JPS扩展的原则父 ->当前->邻居m的路径总代价&lt;=父->邻居m的最短路径代价才会选择扩展邻居m，4->x->3是从4->3代价最小的路径所以3号在扩展时要考虑
+...</p></div><footer class=entry-footer><span title=2022-03-04T00:00:00+00:00>创建于 2022-03-04</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 2 基于搜索的路径规划3 JPS补充" href=https://jler666.github.io/planning/dwqbhe/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>2 基于搜索的路径规划1 介绍 地图种类 BFS与DFS</h2></header><div class=entry-content><p>1 介绍
+path finding前端(A*) 低维粗略解(一般无时间戳信息)
+基于搜索 Dijkstra A* jump point search跳点算法A*的改良
+每个搜索都是基于图的搜索，广度优先搜索
+基于采样 概率路线图PRM RRT 优化采样方法RRT* informed RRT*启发式随机采样
+PRM 地图上撒随机采样点，再将随机撒的点连接构成边
+RRT 采样随机扩展树
+informed RRT*在上次RRT找到的路径基础上画个椭圆，下次只在这个椭圆范围内采样
+满足动力学约束前端 state lattice search hybrid A* kinodynamic RRT*
+state lattice search 建立机器人动力学模型，离散方向盘 并踩固定油门 在固定时间内 得到一系列轨迹
+Trajectory generation/optimization 后端(轨迹 生成/优化)
+光滑 高阶连续 满足动力学约束
+minimum snap
+软硬约束
+MDP马尔可夫决策&amp;MPC模型预测控制
+实时软件编写
+地图表示形式(与感知层的对接)
+地图存储数据结构，构图融合算法
+最常见occupancy grid map 占用栅格地图 ANYbotics/grid_map
+2.5D地图，平面地图但是每个平面坐标都有一个高度值z
+最稠密的地图形式，结构化排列紧密，可以直接索引得到地图值
+Octo map
+八叉树地图
+将空间中的一个立方体可以分为8个小的立方体，如果立方体中没有障碍信息则这个节点没有子节点，有障碍信息则这个节点有8个子节点(即将这个1/8空间继续分割成8份)，一直递归地切分下去直到将分割到最小障碍立方体这一层。
+稀疏，八叉树结构，非直接的索引查询
+voxel hashing
+...</p></div><footer class=entry-footer><span title=2022-03-03T00:00:00+00:00>创建于 2022-03-03</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 2 基于搜索的路径规划1 介绍 地图种类 BFS与DFS" href=https://jler666.github.io/planning/sg87g2/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>2 基于搜索的路径规划2 dijkstra,A star</h2></header><div class=entry-content><p>Dijkstra and A*
+dijskstra算法和BFS的最大区别是，从容器中弹出节点的规则不同(之前说过好多次了)，BFS是按照遍历节点顺序的先入先出规则(当前容器中节点在树状图中层级最浅的那个节点)来弹出节点。(BFS解决 无向 无权 图 最短路径问题,dijskstra可解决有向带权图问题 但是图中的权值必须全部为正)
+dijskstra 通过g(n)计算节点n的代价，每次从容器中弹出g(n)代价最小的那个节点。dijskstra 设计的g(n)为 从起点s出发到当前节点n的累计代价值(累计路径上节点与节点间边的权重)。
+同时dijskstra在扩展时除了检查邻接的节点是否曾经被扩展过(BFS也有做，如果扩展过这个节点 就不会放入容器open中)，还会看邻接节点m的g(m)是否可以通过经过n节点后再到m节点这个方式来下降 即 g(n) + n->m边权重 &lt;? g(m) 如果小于则用g(n) + n->m边权重更新g(m)。
+dijskstra算法能够保证已经被访问过的节点的g值一定是全局最小的。
+dijskstra伪代码算法流程
+使用优先队列priority queue(最小堆–完全二叉树)作为容器来存储节点
+创建两个容器open,close。
+设定节点的结构为 x,y,g。初始化起点s的g(s) = 0,初始化所有其他剩余节点的g(n) = +无穷。—初始化时所有的图上节点都已经被初始化好并已经存在了
+将节点s加入容器open中
+循环
+检查容器open是否为空，为空则break循环,并且函数返回false
+从容器open中弹出当前容器中g值最小的节点n
+检查节点是否已经被标记为close，是则continue
+将n节点标记为已被扩展过，并放入另外一个容器close中
+检查n是否为我们要的终点节点，如果是则break循环,并且函数返回true
+不是终点则扩展遍历n的所有邻居m:
+索引未越界，不是障碍，并且不在close容器中的才能作为当前节点的邻居 if m 从未被查看过(不在open容器中 不在close容器中)--节点id属性标记为0 ：//之前从未被访问过
+m.g = n.g + n->m边权重
+设置m的父节点为n
+将m加入容器open中
+标记m节点id属性为在open容器中
+// 不在close 但已经在open中了
+else if m 被查看过(在open容器中 不在close容器中)--节点id属性标记为1 ：//已经在open容器中
+if m.g > n.g + n->m边权重 // s->n->m的代价 小于s->m之前的父节点->m 通过n到m可以得到代价更小的路径 所以选择n作为m新的父节点
+...</p></div><footer class=entry-footer><span title=2022-03-03T00:00:00+00:00>创建于 2022-03-03</span>&nbsp;·&nbsp;<span title=2025-03-18T00:00:00+00:00>最后修改于 2025-03-18</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 2 基于搜索的路径规划2 dijkstra,A star" href=https://jler666.github.io/planning/llxtgx/></a></article><footer class=page-footer><nav class=pagination><a class=prev href=https://jler666.github.io/planning/page/4/>«&nbsp;Prev&nbsp;</a></nav></footer></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

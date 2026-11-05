@@ -1,0 +1,267 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux多进程开发8 共享内存 | CantBlog</title><meta name=keywords content><meta name=description content='共享内存
+效率最高的进程间通信的方式，内存映射虽然也可以在内存中通信但是依旧需要文件作为载体 在映射的内存中(映射后的内存是在用户区的)操作后依旧要将改动同步到文件中 所以效率不是最高的。
+共享内存允许两个或者多个进程(需要考虑互斥和同步的问题)共享物理内存的同一块区域(通常被称为段)。由于一个共享内存段会成为一个进程用户空间的一部分，因此这种IPC(进程通信)机制无需内核介入。所有需要做的就是让一个进程将数据复制进共享内存中，并且这部分数据会对其他所有共享同一个段的进程可用。
+与管道 等要求 发送进程数据 从用户空间的缓冲区复制进内核内存(将进程中用户区的数据拷贝到内核区的管道)        和接收进程将数据从内核复制进用户空间的缓冲区(从内核区的管道拷贝到用户区的变量里)  相比共享内存的速度更快
+使用步骤
+调用shmget()创建一个新共享内存段或者取得一个既有共享内存段的标识符(由其他进程创建的共享内存段)。这个调用将返回后续调用中需要用到的共享内存标识符。(得到一块内存和id 但这款内存还未与当前进程产生关系)  这块内存的存在位置 为共享库和内存映射的那块空间(用户区)
+使用shmat()来附上共享内存段，即 使该段成为调用进程的虚拟内存的一部分。(将创建出来的共享内存 附加到当前进程中 即使共享内存成为当前进程的虚拟内存的一部分)
+此刻在程序中可以像对待其他可用内存那样对待这个共享内存段，为引用这块共享内存，程序需要使用由shmat()调用返回的addr值，它是一个指向进程的虚拟地址空间中该共享内存段起点的指针。
+调用shamt()来分离共享内存段，在这个调用后进程就无法再引用这块共享内存了，这一步可选，进程终止时会自动完成这一步。
+调用shmctl()来删除共享内存段，只有当前所有附加内存段的进程都与之分离之后内存段才会销毁，所以只需要最后一个与内存段相连的进程来执行这一步就行。
+共享内存写进程
+/*
+    #include <sys/ipc.h>
+    #include <sys/shm.h>
+
+    int shmget(key_t key, size_t size, int shmflg);
+    创建一个新的共享内存段，或获取一个已有的共享内存段的标识
+    新创建的内存段中的数据被初始化为全0，这款内存在用户区的共享空间中(share库，内存映射的那块区域)
+    key_t整型 通过key找到或创建一个共享内存 16进制非0
+    size 共享内存的大小 不是指定多大就为多大 实际为页大小的整数倍
+    shmflg 共享内存的属性 访问权限|创建共享内存|判断共享内存是否存在
+    IPC_CREAT  创建共享内存标识
+    IPC_EXCL   与 IPC_CREAT 一起使用(IPC_CREAT|IPC_EXCL)
+    确保共享内存段(segment)创建成功 如果内存段已存在函数调用失败
+    shmflg 也可直接在后面填加 这块共享内存权限的八进制数 比如IPC_CREAT|0664
+    SHM_HUGETLB
+    SHM_HUGE_2MB, SHM_HUGE_1GB (since Linux 3.8)
+    SHM_NORESERVE
+    返回值 成功返回共享内存的标识ID 失败返回-1
+    int shmctl(int shmid, int cmd, struct shmid_ds *buf);
+    对共享内存做操作，共享内存要手动删除，创建共享内存的进程被销毁了对共享内存是没有任何影响的
+    shmid 共享内存的id
+    cmd 要做的操作
+    IPC_STAT 获取共享内存的信息
+    IPC_SET 设置共享内存 设置的信息通过buf传入
+    IPC_RMID 标记共享内存需要被删除 并不是一标记就能删除 只有在没有任何线程与这块内存有关联后 才能通过这里的标记删除来达到删除成功
+    buf 被设置或读取的属性信息  共享内存对应所有者的权限(组、用户 读写可执行).... shm_nattach当前与此块共享内存关联的进程数...
+    太多了自己去man2看
+    IPC_STAT buf传出信息 IPC_SET buf中需要初始化为你想要设置的信息 IPC_RMID buf无用可传null
+
+    #include <sys/types.h>
+    #include <sys/shm.h>
+    void *shmat(int shmid, const void *shmaddr, int shmflg);
+    将共享内存块与当前进程进行关联
+    shmid 共享内存块的ID 由shmget返回得到
+    shmaddr 指定的共享内存的起始地址，一般不特别指定传NULL 由内核指定
+    shmflg 对共享内存的操作权限
+    SHM_EXEC 当前线程可执行共享内存
+    SHM_RDONLY 当前线程只能读共享内存 进程对共享段的读权限是必须的，如果没有指定这个只读则默认是读写权限(传0就是读写权限)
+    SHM_REMAP (Linux-specific)
+    返回值 成功返回共享内存的起始地址(虚拟地址空间) 失败返回(void*)-1
+    int shmdt(const void *shmaddr);
+    解除当前进程和共享内存的关联
+    shmaddr 共享内存的首地址
+    返回值 成功返回0 失败返回-1
+    #include <sys/types.h>
+    #include <sys/ipc.h>
+    key_t ftok(const char *pathname, int proj_id);
+\*/
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <string.h>
+int main()
+{
+    //创建一个共享内存
+    int shmid = shmget(0x1234, 4096, IPC_CREAT | 0664); //id号16进制0x1234 大小4096个字节 创建一块共享内存
+    //和当前进程进行关联
+    void *addr = shmat(shmid, NULL, 0);
+    //写数据
+    char *str = "hello world";
+    memcpy(addr, str, strlen(str) + 1);
+    printf("按任意键 写进程解除关联");
+    getchar();
+    //解除关联
+    shmdt(addr);
+    //删除共享内存块
+    shmctl(shmid, IPC_RMID, NULL);
+    return 0;
+}
+共享内存读进程'><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/xr337b/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/xr337b/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/xr337b/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux多进程开发8 共享内存"><meta property="og:description" content='共享内存
+效率最高的进程间通信的方式，内存映射虽然也可以在内存中通信但是依旧需要文件作为载体 在映射的内存中(映射后的内存是在用户区的)操作后依旧要将改动同步到文件中 所以效率不是最高的。
+共享内存允许两个或者多个进程(需要考虑互斥和同步的问题)共享物理内存的同一块区域(通常被称为段)。由于一个共享内存段会成为一个进程用户空间的一部分，因此这种IPC(进程通信)机制无需内核介入。所有需要做的就是让一个进程将数据复制进共享内存中，并且这部分数据会对其他所有共享同一个段的进程可用。
+与管道 等要求 发送进程数据 从用户空间的缓冲区复制进内核内存(将进程中用户区的数据拷贝到内核区的管道) 和接收进程将数据从内核复制进用户空间的缓冲区(从内核区的管道拷贝到用户区的变量里) 相比共享内存的速度更快
+使用步骤
+调用shmget()创建一个新共享内存段或者取得一个既有共享内存段的标识符(由其他进程创建的共享内存段)。这个调用将返回后续调用中需要用到的共享内存标识符。(得到一块内存和id 但这款内存还未与当前进程产生关系) 这块内存的存在位置 为共享库和内存映射的那块空间(用户区)
+使用shmat()来附上共享内存段，即 使该段成为调用进程的虚拟内存的一部分。(将创建出来的共享内存 附加到当前进程中 即使共享内存成为当前进程的虚拟内存的一部分)
+此刻在程序中可以像对待其他可用内存那样对待这个共享内存段，为引用这块共享内存，程序需要使用由shmat()调用返回的addr值，它是一个指向进程的虚拟地址空间中该共享内存段起点的指针。
+调用shamt()来分离共享内存段，在这个调用后进程就无法再引用这块共享内存了，这一步可选，进程终止时会自动完成这一步。
+调用shmctl()来删除共享内存段，只有当前所有附加内存段的进程都与之分离之后内存段才会销毁，所以只需要最后一个与内存段相连的进程来执行这一步就行。
+共享内存写进程
+/* #include <sys/ipc.h> #include <sys/shm.h> int shmget(key_t key, size_t size, int shmflg); 创建一个新的共享内存段，或获取一个已有的共享内存段的标识 新创建的内存段中的数据被初始化为全0，这款内存在用户区的共享空间中(share库，内存映射的那块区域) key_t整型 通过key找到或创建一个共享内存 16进制非0 size 共享内存的大小 不是指定多大就为多大 实际为页大小的整数倍 shmflg 共享内存的属性 访问权限|创建共享内存|判断共享内存是否存在 IPC_CREAT 创建共享内存标识 IPC_EXCL 与 IPC_CREAT 一起使用(IPC_CREAT|IPC_EXCL) 确保共享内存段(segment)创建成功 如果内存段已存在函数调用失败 shmflg 也可直接在后面填加 这块共享内存权限的八进制数 比如IPC_CREAT|0664 SHM_HUGETLB SHM_HUGE_2MB, SHM_HUGE_1GB (since Linux 3.8) SHM_NORESERVE 返回值 成功返回共享内存的标识ID 失败返回-1 int shmctl(int shmid, int cmd, struct shmid_ds *buf); 对共享内存做操作，共享内存要手动删除，创建共享内存的进程被销毁了对共享内存是没有任何影响的 shmid 共享内存的id cmd 要做的操作 IPC_STAT 获取共享内存的信息 IPC_SET 设置共享内存 设置的信息通过buf传入 IPC_RMID 标记共享内存需要被删除 并不是一标记就能删除 只有在没有任何线程与这块内存有关联后 才能通过这里的标记删除来达到删除成功 buf 被设置或读取的属性信息 共享内存对应所有者的权限(组、用户 读写可执行).... shm_nattach当前与此块共享内存关联的进程数... 太多了自己去man2看 IPC_STAT buf传出信息 IPC_SET buf中需要初始化为你想要设置的信息 IPC_RMID buf无用可传null #include <sys/types.h> #include <sys/shm.h> void *shmat(int shmid, const void *shmaddr, int shmflg); 将共享内存块与当前进程进行关联 shmid 共享内存块的ID 由shmget返回得到 shmaddr 指定的共享内存的起始地址，一般不特别指定传NULL 由内核指定 shmflg 对共享内存的操作权限 SHM_EXEC 当前线程可执行共享内存 SHM_RDONLY 当前线程只能读共享内存 进程对共享段的读权限是必须的，如果没有指定这个只读则默认是读写权限(传0就是读写权限) SHM_REMAP (Linux-specific) 返回值 成功返回共享内存的起始地址(虚拟地址空间) 失败返回(void*)-1 int shmdt(const void *shmaddr); 解除当前进程和共享内存的关联 shmaddr 共享内存的首地址 返回值 成功返回0 失败返回-1 #include <sys/types.h> #include <sys/ipc.h> key_t ftok(const char *pathname, int proj_id); \*/ #include <stdio.h> #include <sys/types.h> #include <sys/ipc.h> #include <sys/shm.h> #include <string.h> int main() { //创建一个共享内存 int shmid = shmget(0x1234, 4096, IPC_CREAT | 0664); //id号16进制0x1234 大小4096个字节 创建一块共享内存 //和当前进程进行关联 void *addr = shmat(shmid, NULL, 0); //写数据 char *str = "hello world"; memcpy(addr, str, strlen(str) + 1); printf("按任意键 写进程解除关联"); getchar(); //解除关联 shmdt(addr); //删除共享内存块 shmctl(shmid, IPC_RMID, NULL); return 0; } 共享内存读进程'><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-17T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux多进程开发8 共享内存"><meta name=twitter:description content='共享内存
+效率最高的进程间通信的方式，内存映射虽然也可以在内存中通信但是依旧需要文件作为载体 在映射的内存中(映射后的内存是在用户区的)操作后依旧要将改动同步到文件中 所以效率不是最高的。
+共享内存允许两个或者多个进程(需要考虑互斥和同步的问题)共享物理内存的同一块区域(通常被称为段)。由于一个共享内存段会成为一个进程用户空间的一部分，因此这种IPC(进程通信)机制无需内核介入。所有需要做的就是让一个进程将数据复制进共享内存中，并且这部分数据会对其他所有共享同一个段的进程可用。
+与管道 等要求 发送进程数据 从用户空间的缓冲区复制进内核内存(将进程中用户区的数据拷贝到内核区的管道) 和接收进程将数据从内核复制进用户空间的缓冲区(从内核区的管道拷贝到用户区的变量里) 相比共享内存的速度更快
+使用步骤
+调用shmget()创建一个新共享内存段或者取得一个既有共享内存段的标识符(由其他进程创建的共享内存段)。这个调用将返回后续调用中需要用到的共享内存标识符。(得到一块内存和id 但这款内存还未与当前进程产生关系) 这块内存的存在位置 为共享库和内存映射的那块空间(用户区)
+使用shmat()来附上共享内存段，即 使该段成为调用进程的虚拟内存的一部分。(将创建出来的共享内存 附加到当前进程中 即使共享内存成为当前进程的虚拟内存的一部分)
+此刻在程序中可以像对待其他可用内存那样对待这个共享内存段，为引用这块共享内存，程序需要使用由shmat()调用返回的addr值，它是一个指向进程的虚拟地址空间中该共享内存段起点的指针。
+调用shamt()来分离共享内存段，在这个调用后进程就无法再引用这块共享内存了，这一步可选，进程终止时会自动完成这一步。
+调用shmctl()来删除共享内存段，只有当前所有附加内存段的进程都与之分离之后内存段才会销毁，所以只需要最后一个与内存段相连的进程来执行这一步就行。
+共享内存写进程
+/* #include <sys/ipc.h> #include <sys/shm.h> int shmget(key_t key, size_t size, int shmflg); 创建一个新的共享内存段，或获取一个已有的共享内存段的标识 新创建的内存段中的数据被初始化为全0，这款内存在用户区的共享空间中(share库，内存映射的那块区域) key_t整型 通过key找到或创建一个共享内存 16进制非0 size 共享内存的大小 不是指定多大就为多大 实际为页大小的整数倍 shmflg 共享内存的属性 访问权限|创建共享内存|判断共享内存是否存在 IPC_CREAT 创建共享内存标识 IPC_EXCL 与 IPC_CREAT 一起使用(IPC_CREAT|IPC_EXCL) 确保共享内存段(segment)创建成功 如果内存段已存在函数调用失败 shmflg 也可直接在后面填加 这块共享内存权限的八进制数 比如IPC_CREAT|0664 SHM_HUGETLB SHM_HUGE_2MB, SHM_HUGE_1GB (since Linux 3.8) SHM_NORESERVE 返回值 成功返回共享内存的标识ID 失败返回-1 int shmctl(int shmid, int cmd, struct shmid_ds *buf); 对共享内存做操作，共享内存要手动删除，创建共享内存的进程被销毁了对共享内存是没有任何影响的 shmid 共享内存的id cmd 要做的操作 IPC_STAT 获取共享内存的信息 IPC_SET 设置共享内存 设置的信息通过buf传入 IPC_RMID 标记共享内存需要被删除 并不是一标记就能删除 只有在没有任何线程与这块内存有关联后 才能通过这里的标记删除来达到删除成功 buf 被设置或读取的属性信息 共享内存对应所有者的权限(组、用户 读写可执行).... shm_nattach当前与此块共享内存关联的进程数... 太多了自己去man2看 IPC_STAT buf传出信息 IPC_SET buf中需要初始化为你想要设置的信息 IPC_RMID buf无用可传null #include <sys/types.h> #include <sys/shm.h> void *shmat(int shmid, const void *shmaddr, int shmflg); 将共享内存块与当前进程进行关联 shmid 共享内存块的ID 由shmget返回得到 shmaddr 指定的共享内存的起始地址，一般不特别指定传NULL 由内核指定 shmflg 对共享内存的操作权限 SHM_EXEC 当前线程可执行共享内存 SHM_RDONLY 当前线程只能读共享内存 进程对共享段的读权限是必须的，如果没有指定这个只读则默认是读写权限(传0就是读写权限) SHM_REMAP (Linux-specific) 返回值 成功返回共享内存的起始地址(虚拟地址空间) 失败返回(void*)-1 int shmdt(const void *shmaddr); 解除当前进程和共享内存的关联 shmaddr 共享内存的首地址 返回值 成功返回0 失败返回-1 #include <sys/types.h> #include <sys/ipc.h> key_t ftok(const char *pathname, int proj_id); \*/ #include <stdio.h> #include <sys/types.h> #include <sys/ipc.h> #include <sys/shm.h> #include <string.h> int main() { //创建一个共享内存 int shmid = shmget(0x1234, 4096, IPC_CREAT | 0664); //id号16进制0x1234 大小4096个字节 创建一块共享内存 //和当前进程进行关联 void *addr = shmat(shmid, NULL, 0); //写数据 char *str = "hello world"; memcpy(addr, str, strlen(str) + 1); printf("按任意键 写进程解除关联"); getchar(); //解除关联 shmdt(addr); //删除共享内存块 shmctl(shmid, IPC_RMID, NULL); return 0; } 共享内存读进程'><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux多进程开发8 共享内存","item":"https://jler666.github.io/cpp/xr337b/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux多进程开发8 共享内存","name":"Linux多进程开发8 共享内存","description":"共享内存\n效率最高的进程间通信的方式，内存映射虽然也可以在内存中通信但是依旧需要文件作为载体 在映射的内存中(映射后的内存是在用户区的)操作后依旧要将改动同步到文件中 所以效率不是最高的。\n共享内存允许两个或者多个进程(需要考虑互斥和同步的问题)共享物理内存的同一块区域(通常被称为段)。由于一个共享内存段会成为一个进程用户空间的一部分，因此这种IPC(进程通信)机制无需内核介入。所有需要做的就是让一个进程将数据复制进共享内存中，并且这部分数据会对其他所有共享同一个段的进程可用。\n与管道 等要求 发送进程数据 从用户空间的缓冲区复制进内核内存(将进程中用户区的数据拷贝到内核区的管道) 和接收进程将数据从内核复制进用户空间的缓冲区(从内核区的管道拷贝到用户区的变量里) 相比共享内存的速度更快\n使用步骤\n调用shmget()创建一个新共享内存段或者取得一个既有共享内存段的标识符(由其他进程创建的共享内存段)。这个调用将返回后续调用中需要用到的共享内存标识符。(得到一块内存和id 但这款内存还未与当前进程产生关系) 这块内存的存在位置 为共享库和内存映射的那块空间(用户区)\n使用shmat()来附上共享内存段，即 使该段成为调用进程的虚拟内存的一部分。(将创建出来的共享内存 附加到当前进程中 即使共享内存成为当前进程的虚拟内存的一部分)\n此刻在程序中可以像对待其他可用内存那样对待这个共享内存段，为引用这块共享内存，程序需要使用由shmat()调用返回的addr值，它是一个指向进程的虚拟地址空间中该共享内存段起点的指针。\n调用shamt()来分离共享内存段，在这个调用后进程就无法再引用这块共享内存了，这一步可选，进程终止时会自动完成这一步。\n调用shmctl()来删除共享内存段，只有当前所有附加内存段的进程都与之分离之后内存段才会销毁，所以只需要最后一个与内存段相连的进程来执行这一步就行。\n共享内存写进程\n/* #include \u0026lt;sys/ipc.h\u0026gt; #include \u0026lt;sys/shm.h\u0026gt; int shmget(key_t key, size_t size, int shmflg); 创建一个新的共享内存段，或获取一个已有的共享内存段的标识 新创建的内存段中的数据被初始化为全0，这款内存在用户区的共享空间中(share库，内存映射的那块区域) key_t整型 通过key找到或创建一个共享内存 16进制非0 size 共享内存的大小 不是指定多大就为多大 实际为页大小的整数倍 shmflg 共享内存的属性 访问权限|创建共享内存|判断共享内存是否存在 IPC_CREAT 创建共享内存标识 IPC_EXCL 与 IPC_CREAT 一起使用(IPC_CREAT|IPC_EXCL) 确保共享内存段(segment)创建成功 如果内存段已存在函数调用失败 shmflg 也可直接在后面填加 这块共享内存权限的八进制数 比如IPC_CREAT|0664 SHM_HUGETLB SHM_HUGE_2MB, SHM_HUGE_1GB (since Linux 3.8) SHM_NORESERVE 返回值 成功返回共享内存的标识ID 失败返回-1 int shmctl(int shmid, int cmd, struct shmid_ds *buf); 对共享内存做操作，共享内存要手动删除，创建共享内存的进程被销毁了对共享内存是没有任何影响的 shmid 共享内存的id cmd 要做的操作 IPC_STAT 获取共享内存的信息 IPC_SET 设置共享内存 设置的信息通过buf传入 IPC_RMID 标记共享内存需要被删除 并不是一标记就能删除 只有在没有任何线程与这块内存有关联后 才能通过这里的标记删除来达到删除成功 buf 被设置或读取的属性信息 共享内存对应所有者的权限(组、用户 读写可执行).... shm_nattach当前与此块共享内存关联的进程数... 太多了自己去man2看 IPC_STAT buf传出信息 IPC_SET buf中需要初始化为你想要设置的信息 IPC_RMID buf无用可传null #include \u0026lt;sys/types.h\u0026gt; #include \u0026lt;sys/shm.h\u0026gt; void *shmat(int shmid, const void *shmaddr, int shmflg); 将共享内存块与当前进程进行关联 shmid 共享内存块的ID 由shmget返回得到 shmaddr 指定的共享内存的起始地址，一般不特别指定传NULL 由内核指定 shmflg 对共享内存的操作权限 SHM_EXEC 当前线程可执行共享内存 SHM_RDONLY 当前线程只能读共享内存 进程对共享段的读权限是必须的，如果没有指定这个只读则默认是读写权限(传0就是读写权限) SHM_REMAP (Linux-specific) 返回值 成功返回共享内存的起始地址(虚拟地址空间) 失败返回(void*)-1 int shmdt(const void *shmaddr); 解除当前进程和共享内存的关联 shmaddr 共享内存的首地址 返回值 成功返回0 失败返回-1 #include \u0026lt;sys/types.h\u0026gt; #include \u0026lt;sys/ipc.h\u0026gt; key_t ftok(const char *pathname, int proj_id); \\*/ #include \u0026lt;stdio.h\u0026gt; #include \u0026lt;sys/types.h\u0026gt; #include \u0026lt;sys/ipc.h\u0026gt; #include \u0026lt;sys/shm.h\u0026gt; #include \u0026lt;string.h\u0026gt; int main() { //创建一个共享内存 int shmid = shmget(0x1234, 4096, IPC_CREAT | 0664); //id号16进制0x1234 大小4096个字节 创建一块共享内存 //和当前进程进行关联 void *addr = shmat(shmid, NULL, 0); //写数据 char *str = \u0026#34;hello world\u0026#34;; memcpy(addr, str, strlen(str) + 1); printf(\u0026#34;按任意键 写进程解除关联\u0026#34;); getchar(); //解除关联 shmdt(addr); //删除共享内存块 shmctl(shmid, IPC_RMID, NULL); return 0; } 共享内存读进程\n","keywords":[],"articleBody":"共享内存\n效率最高的进程间通信的方式，内存映射虽然也可以在内存中通信但是依旧需要文件作为载体 在映射的内存中(映射后的内存是在用户区的)操作后依旧要将改动同步到文件中 所以效率不是最高的。\n共享内存允许两个或者多个进程(需要考虑互斥和同步的问题)共享物理内存的同一块区域(通常被称为段)。由于一个共享内存段会成为一个进程用户空间的一部分，因此这种IPC(进程通信)机制无需内核介入。所有需要做的就是让一个进程将数据复制进共享内存中，并且这部分数据会对其他所有共享同一个段的进程可用。\n与管道 等要求 发送进程数据 从用户空间的缓冲区复制进内核内存(将进程中用户区的数据拷贝到内核区的管道) 和接收进程将数据从内核复制进用户空间的缓冲区(从内核区的管道拷贝到用户区的变量里) 相比共享内存的速度更快\n使用步骤\n调用shmget()创建一个新共享内存段或者取得一个既有共享内存段的标识符(由其他进程创建的共享内存段)。这个调用将返回后续调用中需要用到的共享内存标识符。(得到一块内存和id 但这款内存还未与当前进程产生关系) 这块内存的存在位置 为共享库和内存映射的那块空间(用户区)\n使用shmat()来附上共享内存段，即 使该段成为调用进程的虚拟内存的一部分。(将创建出来的共享内存 附加到当前进程中 即使共享内存成为当前进程的虚拟内存的一部分)\n此刻在程序中可以像对待其他可用内存那样对待这个共享内存段，为引用这块共享内存，程序需要使用由shmat()调用返回的addr值，它是一个指向进程的虚拟地址空间中该共享内存段起点的指针。\n调用shamt()来分离共享内存段，在这个调用后进程就无法再引用这块共享内存了，这一步可选，进程终止时会自动完成这一步。\n调用shmctl()来删除共享内存段，只有当前所有附加内存段的进程都与之分离之后内存段才会销毁，所以只需要最后一个与内存段相连的进程来执行这一步就行。\n共享内存写进程\n/* #include #include int shmget(key_t key, size_t size, int shmflg); 创建一个新的共享内存段，或获取一个已有的共享内存段的标识 新创建的内存段中的数据被初始化为全0，这款内存在用户区的共享空间中(share库，内存映射的那块区域) key_t整型 通过key找到或创建一个共享内存 16进制非0 size 共享内存的大小 不是指定多大就为多大 实际为页大小的整数倍 shmflg 共享内存的属性 访问权限|创建共享内存|判断共享内存是否存在 IPC_CREAT 创建共享内存标识 IPC_EXCL 与 IPC_CREAT 一起使用(IPC_CREAT|IPC_EXCL) 确保共享内存段(segment)创建成功 如果内存段已存在函数调用失败 shmflg 也可直接在后面填加 这块共享内存权限的八进制数 比如IPC_CREAT|0664 SHM_HUGETLB SHM_HUGE_2MB, SHM_HUGE_1GB (since Linux 3.8) SHM_NORESERVE 返回值 成功返回共享内存的标识ID 失败返回-1 int shmctl(int shmid, int cmd, struct shmid_ds *buf); 对共享内存做操作，共享内存要手动删除，创建共享内存的进程被销毁了对共享内存是没有任何影响的 shmid 共享内存的id cmd 要做的操作 IPC_STAT 获取共享内存的信息 IPC_SET 设置共享内存 设置的信息通过buf传入 IPC_RMID 标记共享内存需要被删除 并不是一标记就能删除 只有在没有任何线程与这块内存有关联后 才能通过这里的标记删除来达到删除成功 buf 被设置或读取的属性信息 共享内存对应所有者的权限(组、用户 读写可执行).... shm_nattach当前与此块共享内存关联的进程数... 太多了自己去man2看 IPC_STAT buf传出信息 IPC_SET buf中需要初始化为你想要设置的信息 IPC_RMID buf无用可传null #include #include void *shmat(int shmid, const void *shmaddr, int shmflg); 将共享内存块与当前进程进行关联 shmid 共享内存块的ID 由shmget返回得到 shmaddr 指定的共享内存的起始地址，一般不特别指定传NULL 由内核指定 shmflg 对共享内存的操作权限 SHM_EXEC 当前线程可执行共享内存 SHM_RDONLY 当前线程只能读共享内存 进程对共享段的读权限是必须的，如果没有指定这个只读则默认是读写权限(传0就是读写权限) SHM_REMAP (Linux-specific) 返回值 成功返回共享内存的起始地址(虚拟地址空间) 失败返回(void*)-1 int shmdt(const void *shmaddr); 解除当前进程和共享内存的关联 shmaddr 共享内存的首地址 返回值 成功返回0 失败返回-1 #include #include key_t ftok(const char *pathname, int proj_id); \\*/ #include #include #include #include #include int main() { //创建一个共享内存 int shmid = shmget(0x1234, 4096, IPC_CREAT | 0664); //id号16进制0x1234 大小4096个字节 创建一块共享内存 //和当前进程进行关联 void *addr = shmat(shmid, NULL, 0); //写数据 char *str = \"hello world\"; memcpy(addr, str, strlen(str) + 1); printf(\"按任意键 写进程解除关联\"); getchar(); //解除关联 shmdt(addr); //删除共享内存块 shmctl(shmid, IPC_RMID, NULL); return 0; } 共享内存读进程\n/* #include #include int shmget(key_t key, size_t size, int shmflg); 创建一个新的共享内存段，或获取一个已有的共享内存段的标识 新创建的内存段中的数据被初始化为全0，这款内存在用户区的共享空间中(share库，内存映射的那块区域) key_t整型 通过key找到或创建一个共享内存 16进制非0 size 共享内存的大小 不是指定多大就为多大 实际为页大小的整数倍 shmflg 共享内存的属性 访问权限|创建共享内存|判断共享内存是否存在 IPC_CREAT 创建共享内存标识 IPC_EXCL 与 IPC_CREAT 一起使用(IPC_CREAT|IPC_EXCL) 确保共享内存段(segment)创建成功 如果内存段已存在函数调用失败 SHM_HUGETLB SHM_HUGE_2MB, SHM_HUGE_1GB (since Linux 3.8) SHM_NORESERVE 返回值 成功返回共享内存的标识ID 失败返回-1 int shmctl(int shmid, int cmd, struct shmid_ds *buf); 对共享内存做操作，共享内存要手动删除，创建共享内存的进程被销毁了对共享内存是没有任何影响的 shmid 共享内存的id cmd 要做的操作 IPC_STAT 获取共享内存的信息 IPC_SET 设置共享内存 设置的信息通过buf传入 IPC_RMID 标记共享内存需要被删除 并不是一标记就能删除 只有在没有任何线程与这块内存有关联后 才能通过这里的标记删除来达到删除成功 buf 被设置或读取的属性信息 共享内存对应所有者的权限(组、用户 读写可执行).... shm_nattach当前与此块共享内存关联的进程数... 太多了自己去man2看 IPC_STAT buf传出信息 IPC_SET buf中需要初始化为你想要设置的信息 IPC_RMID buf无用可传null #include #include void *shmat(int shmid, const void *shmaddr, int shmflg); 将共享内存块与当前进程进行关联 shmid 共享内存块的ID 由shmget返回得到 shmaddr 指定的共享内存的起始地址，一般不特别指定传NULL 由内核指定 shmflg 对共享内存的操作权限 SHM_EXEC 当前线程可执行共享内存 SHM_RDONLY 当前线程只能读共享内存 进程对共享段的读权限是必须的，如果没有指定这个只读则默认是读写权限(传0就是读写权限) SHM_REMAP (Linux-specific) 返回值 成功返回共享内存的起始地址(虚拟地址空间) 失败返回(void*)-1 int shmdt(const void *shmaddr); 解除当前进程和共享内存的关联 shmaddr 共享内存的首地址 返回值 成功返回0 失败返回-1 #include #include key_t ftok(const char *pathname, int proj_id); 根据指定的路径名 要已存在 且可访问(读) 和一个int表示工程的id编号 生成共享内存的标号key shmget proj_id 非0 虽然是int 但是系统在使用时只会使用其中的1个字节(8位 0-255) 只要pathname和proj_id给的一致则每次返回的key也都一致 key_t在Linux中是一个32位的值，它通过取proj_id参数的最低8个有效位、 包含pathname指定文件所属的 文件系统的设备的次要设备号的最低8个有效位 以及pathname所指定文件的i-node号的最低16个有效位组成。 实际应 用中，很容易产生的一个理解是，在proj_id相同的情况下，只要文件（或目录） 名称不变，就可以确保ftok返回始终一致的键值。然而，这个理解并非 完全正确， 有可能给应用开发埋下很隐晦的陷阱。因为ftok的实现存在这样的风险， 即在访问同一共享内存的多个进程先后调用ftok函数的时间段中，如果 pathname指定的文件 （或目录）被删除且重新创建，则文件系统会赋予这个同名文件（或目录）新的i节点信息， 于是这些进程所调用的ftok虽然都能 正常返回，但得到的键值却并不能保证相同。 由此可能造成的后果是，原本这些进程意图访问一个相同的共享内存对象， 然而由于它们各自得到的键值不同，实际上 进程指向的共享内存不再一致； 如果这些共享内存都得到创建，则在整个应用运行的过程中表面上不会报出任何错误， 然而通过一个共享内存对象进行数据传输的目 的将无法实现。 \\*/ #include #include #include #include #include int main() { //获取读进程创建的那块共享内存 int shmid = shmget(0x1234, 0, IPC_CREAT); //id号16进制0x1234 大小0字节表示获取(写4096也没事但是不能大于创建的4096) 创建(获取)一块共享内存 //和当前进程进行关联 void *addr = shmat(shmid, NULL, 0); //读数据 printf(\"%s\\n\", (char *)addr); printf(\"按任意键 读进程解除关联\"); getchar(); //解除关联 shmdt(addr); //删除共享内存块 shmctl(shmid, IPC_RMID, NULL); return 0; } 操作系统如何知道一块共享内存被多少个进程关联?\nman 2 shmctl 在可获取的共享内存的属性中 有shm_nattach表示当前与此块共享内存关联的进程数\n常用共享内存操作命令 ipcs用法\n| |\n| — |\n共享内存的key如果为0(用ipcs -m查看 键)则表示这块共享内存被标记删除(被标记但是还没删 因为还有进程与它有关联) ipcrm -m也是标记删除而不是直接删除\n能否对共享内存进行过次删除 shmctl\n可以，shmctl做的只是标记删除而不是直接删除 只有在与共享内存关联的进程数为0并且被标记删除则自动删除。取消关联后无法再次关联。一旦通过shmctl对共享内存进行了删除操作，则该共享内存将不能再接受任何新的连接，即使它依然存在于系统中！所以，可以确知， 在对共享内存删除之后不可能再有新的连接，则执行删除操作是安全的；否则，在删除操作之后如仍有新的连接发生，则这些连接都将可能失败！\n现在的问题是， 如果两个进程以一个相同的key共享一块内存区，但不同的进程调用shmget的size不一样，是否能成功？\n已经创建的共享内存的大小是可以调整的，但是已经创建的共享内存的大小只能调小，不能调大。也就是说，如果进程A先调用shmget创建一块size大小为10M的内存，进程B再次调用shmget时的size参数只能比10M小，如果大于10M，程序会报shmget error: Invalid argument错误。\n这种关系可能导致的问题：\n当多个进程都能创建共享内存的时候，如果key出现相同的情况，并且一个进程需要创建的共享内存的大小要比另外一个进程要创建的共享内存小，共享内存大的进程先创建共享内存，共享内存小的进程后创建共享内存，小共享内存的进程就会获取到大的共享内存进程的共享内存，并修改其共享内存的大小和内容，从而可能导致大的共享内存进程崩溃。\n解决方法：\n在oflag参数中使用排他性创建，即使用IPC_EXCL标记；\nkey值使用IPC_PRIVATE，然后将最终返回的共享内存标识符用其他IPC方法通知给相关进程；\n下面这段话很重要：\n根据pathname指定的文件（或目录）名称，以及id参数指定的数字，ftok函数为IPC对象生成一个唯一性的键值。 在实际应用中，很容易产生的一个理解是，在id相同的情况下，只要文件（或目录）名称不变，就可以确保ftok返回始终一致的键值。然而，这个理解并非完全正确，有可能给应用开发埋下很隐晦的陷阱。 因为ftok的实现存在这样的风险，即在访问同一共享内存的多个进程先后调用ftok函数的时间段中，如果pathname指定的文件（或目录）被删除且重新创建，则文件系统会赋予这个同名文件（或目录）新的i节点信息，于是这些进程所调用的ftok虽然都能正常返回，但得到的键值却并不能保证相同。由此可能造成的后果是，原本这些进程意图访问一个相同的共享内存对象，然而由于它们各自得到的键值不同，实际上进程指向的共享内存不再一致；如果这些共享内存都得到创建，则在整个应用运行的过程中表面上不会报出任何错误，然而通过一个共享内存对象进行数据传输的目的将无法实现。\n解决方法：\n如果要确保key_t值不变，要么确保ftok的文件不被删除，要么不用ftok，指定一个固定的key_t值。\n另外， 建议： 创建进程在通知其他进程挂接的时候，建议不使用ftok方式来获取Key，而使用文件或者进程间通信的方式告知。\n共享内存和内存映射的区别\n共享内存可以直接创建，内存映射需要磁盘文件(匿名映射 亲属间 可不需要)\n内存映射需要将内存中的改动与磁盘文件同步 效率更低\n共享内存：所有的进程操作的是同一块共享内存\n内存映射： 每个进程在自己的虚拟地址空间(进程用户区)中有一个独立的内存\n进程退出 内存映射区销毁但是文件中的数据还在 共享内存还在 需要标记删除并且所有与之关联的进程与它断开联系才会销毁(进程退出会自动与共享内存取消关联)\n","wordCount":"477","inLanguage":"en","datePublished":"2022-03-17T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/xr337b/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux多进程开发8 共享内存</h1><div class=post-meta><span title=2022-03-17T00:00:00+00:00>创建于 2022-03-17</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>共享内存</strong></p><p>效率最高的进程间通信的方式，内存映射虽然也可以在内存中通信但是依旧需要文件作为载体 在映射的内存中(映射后的内存是在用户区的)操作后依旧要将改动同步到文件中 所以效率不是最高的。</p><p><strong>共享内存允许两个或者多个进程(需要考虑互斥和同步的问题)共享物理内存的同一块区域(通常被称为段)。由于一个共享内存段会成为一个进程用户空间的一部分，因此这种IPC(进程通信)机制无需内核介入</strong>。所有需要做的就是让一个进程将数据复制进共享内存中，并且这部分数据会对其他所有共享同一个段的进程可用。</p><p>与管道 等要求 发送进程数据 从用户空间的缓冲区复制进内核内存(将进程中用户区的数据拷贝到内核区的管道) 和接收进程将数据从内核复制进用户空间的缓冲区(从内核区的管道拷贝到用户区的变量里) 相比共享内存的速度更快</p><p>使用步骤</p><p>调用shmget()创建一个新共享内存段或者取得一个既有共享内存段的标识符(由其他进程创建的共享内存段)。这个调用将返回后续调用中需要用到的共享内存标识符。(得到一块内存和id 但这款内存还未与当前进程产生关系) <strong>这块内存的存在位置 为共享库和内存映射的那块空间(用户区)</strong></p><p>使用shmat()来附上共享内存段，即 使该段成为调用进程的虚拟内存的一部分。(将创建出来的共享内存 附加到当前进程中 即使共享内存成为当前进程的虚拟内存的一部分)</p><p>此刻在程序中可以像对待其他可用内存那样对待这个共享内存段，为引用这块共享内存，程序需要使用由shmat()调用返回的addr值，它是一个指向进程的虚拟地址空间中该共享内存段起点的指针。</p><p>调用shamt()来分离共享内存段，在这个调用后进程就无法再引用这块共享内存了，这一步可选，进程终止时会自动完成这一步。</p><p>调用shmctl()来删除共享内存段，只有当前所有附加内存段的进程都与之分离之后内存段才会销毁，所以只需要最后一个与内存段相连的进程来执行这一步就行。</p><p>共享内存写进程</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    #include &lt;sys/ipc.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    #include &lt;sys/shm.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int shmget(key_t key, size_t size, int shmflg);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    创建一个新的共享内存段，或获取一个已有的共享内存段的标识
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    新创建的内存段中的数据被初始化为全0，这款内存在用户区的共享空间中(share库，内存映射的那块区域)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    key_t整型 通过key找到或创建一个共享内存 16进制非0
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    size 共享内存的大小 不是指定多大就为多大 实际为页大小的整数倍
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    shmflg 共享内存的属性 访问权限|创建共享内存|判断共享内存是否存在
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    IPC_CREAT  创建共享内存标识
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    IPC_EXCL   与 IPC_CREAT 一起使用(IPC_CREAT|IPC_EXCL)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    确保共享内存段(segment)创建成功 如果内存段已存在函数调用失败
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    shmflg 也可直接在后面填加 这块共享内存权限的八进制数 比如IPC_CREAT|0664
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    SHM_HUGETLB
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    SHM_HUGE_2MB, SHM_HUGE_1GB (since Linux 3.8)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    SHM_NORESERVE
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    返回值 成功返回共享内存的标识ID 失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int shmctl(int shmid, int cmd, struct shmid_ds *buf);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    对共享内存做操作，共享内存要手动删除，创建共享内存的进程被销毁了对共享内存是没有任何影响的
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    shmid 共享内存的id
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    cmd 要做的操作
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    IPC_STAT 获取共享内存的信息
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    IPC_SET 设置共享内存 设置的信息通过buf传入
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    IPC_RMID 标记共享内存需要被删除 并不是一标记就能删除 只有在没有任何线程与这块内存有关联后 才能通过这里的标记删除来达到删除成功
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    buf 被设置或读取的属性信息  共享内存对应所有者的权限(组、用户 读写可执行).... shm_nattach当前与此块共享内存关联的进程数...
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    太多了自己去man2看
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    IPC_STAT buf传出信息 IPC_SET buf中需要初始化为你想要设置的信息 IPC_RMID buf无用可传null
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    #include &lt;sys/types.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    #include &lt;sys/shm.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    void *shmat(int shmid, const void *shmaddr, int shmflg);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    将共享内存块与当前进程进行关联
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    shmid 共享内存块的ID 由shmget返回得到
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    shmaddr 指定的共享内存的起始地址，一般不特别指定传NULL 由内核指定
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    shmflg 对共享内存的操作权限
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    SHM_EXEC 当前线程可执行共享内存
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    SHM_RDONLY 当前线程只能读共享内存 进程对共享段的读权限是必须的，如果没有指定这个只读则默认是读写权限(传0就是读写权限)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    SHM_REMAP (Linux-specific)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    返回值 成功返回共享内存的起始地址(虚拟地址空间) 失败返回(void*)-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int shmdt(const void *shmaddr);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    解除当前进程和共享内存的关联
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    shmaddr 共享内存的首地址
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    返回值 成功返回0 失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    #include &lt;sys/types.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    #include &lt;sys/ipc.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    key_t ftok(const char *pathname, int proj_id);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/ipc.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/shm.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建一个共享内存
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> shmid <span style=color:#f92672>=</span> shmget(<span style=color:#ae81ff>0x1234</span>, <span style=color:#ae81ff>4096</span>, IPC_CREAT <span style=color:#f92672>|</span> <span style=color:#ae81ff>0664</span>); <span style=color:#75715e>//id号16进制0x1234 大小4096个字节 创建一块共享内存
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//和当前进程进行关联
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>addr <span style=color:#f92672>=</span> shmat(shmid, NULL, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//写数据
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>str <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;hello world&#34;</span>;
+</span></span><span style=display:flex><span>    memcpy(addr, str, strlen(str) <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;按任意键 写进程解除关联&#34;</span>);
+</span></span><span style=display:flex><span>    getchar();
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//解除关联
+</span></span></span><span style=display:flex><span>    shmdt(addr);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//删除共享内存块
+</span></span></span><span style=display:flex><span>    shmctl(shmid, IPC_RMID, NULL);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>共享内存读进程</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    #include &lt;sys/ipc.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    #include &lt;sys/shm.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int shmget(key_t key, size_t size, int shmflg);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    创建一个新的共享内存段，或获取一个已有的共享内存段的标识
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    新创建的内存段中的数据被初始化为全0，这款内存在用户区的共享空间中(share库，内存映射的那块区域)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    key_t整型 通过key找到或创建一个共享内存 16进制非0
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    size 共享内存的大小 不是指定多大就为多大 实际为页大小的整数倍
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    shmflg 共享内存的属性 访问权限|创建共享内存|判断共享内存是否存在
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    IPC_CREAT  创建共享内存标识
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    IPC_EXCL   与 IPC_CREAT 一起使用(IPC_CREAT|IPC_EXCL)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    确保共享内存段(segment)创建成功 如果内存段已存在函数调用失败
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    SHM_HUGETLB
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    SHM_HUGE_2MB, SHM_HUGE_1GB (since Linux 3.8)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    SHM_NORESERVE
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    返回值 成功返回共享内存的标识ID 失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int shmctl(int shmid, int cmd, struct shmid_ds *buf);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    对共享内存做操作，共享内存要手动删除，创建共享内存的进程被销毁了对共享内存是没有任何影响的
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    shmid 共享内存的id
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    cmd 要做的操作
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    IPC_STAT 获取共享内存的信息
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    IPC_SET 设置共享内存 设置的信息通过buf传入
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    IPC_RMID 标记共享内存需要被删除 并不是一标记就能删除 只有在没有任何线程与这块内存有关联后 才能通过这里的标记删除来达到删除成功
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    buf 被设置或读取的属性信息  共享内存对应所有者的权限(组、用户 读写可执行).... shm_nattach当前与此块共享内存关联的进程数...
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    太多了自己去man2看
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    IPC_STAT buf传出信息 IPC_SET buf中需要初始化为你想要设置的信息 IPC_RMID buf无用可传null
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    #include &lt;sys/types.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    #include &lt;sys/shm.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    void *shmat(int shmid, const void *shmaddr, int shmflg);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    将共享内存块与当前进程进行关联
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    shmid 共享内存块的ID 由shmget返回得到
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    shmaddr 指定的共享内存的起始地址，一般不特别指定传NULL 由内核指定
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    shmflg 对共享内存的操作权限
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    SHM_EXEC 当前线程可执行共享内存
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    SHM_RDONLY 当前线程只能读共享内存 进程对共享段的读权限是必须的，如果没有指定这个只读则默认是读写权限(传0就是读写权限)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    SHM_REMAP (Linux-specific)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    返回值 成功返回共享内存的起始地址(虚拟地址空间) 失败返回(void*)-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int shmdt(const void *shmaddr);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    解除当前进程和共享内存的关联
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    shmaddr 共享内存的首地址
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    返回值 成功返回0 失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    #include &lt;sys/types.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    #include &lt;sys/ipc.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    key_t ftok(const char *pathname, int proj_id);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    根据指定的路径名 要已存在 且可访问(读) 和一个int表示工程的id编号 生成共享内存的标号key  shmget
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    proj_id 非0 虽然是int 但是系统在使用时只会使用其中的1个字节(8位 0-255)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    只要pathname和proj_id给的一致则每次返回的key也都一致
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    key_t在Linux中是一个32位的值，它通过取proj_id参数的最低8个有效位、
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    包含pathname指定文件所属的
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    文件系统的设备的次要设备号的最低8个有效位
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    以及pathname所指定文件的i-node号的最低16个有效位组成。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    实际应 用中，很容易产生的一个理解是，在proj_id相同的情况下，只要文件（或目录）
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    名称不变，就可以确保ftok返回始终一致的键值。然而，这个理解并非 完全正确，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    有可能给应用开发埋下很隐晦的陷阱。因为ftok的实现存在这样的风险，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    即在访问同一共享内存的多个进程先后调用ftok函数的时间段中，如果 pathname指定的文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    （或目录）被删除且重新创建，则文件系统会赋予这个同名文件（或目录）新的i节点信息，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    于是这些进程所调用的ftok虽然都能 正常返回，但得到的键值却并不能保证相同。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    由此可能造成的后果是，原本这些进程意图访问一个相同的共享内存对象，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    然而由于它们各自得到的键值不同，实际上 进程指向的共享内存不再一致；
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    如果这些共享内存都得到创建，则在整个应用运行的过程中表面上不会报出任何错误，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    然而通过一个共享内存对象进行数据传输的目 的将无法实现。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/ipc.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/shm.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//获取读进程创建的那块共享内存
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> shmid <span style=color:#f92672>=</span> shmget(<span style=color:#ae81ff>0x1234</span>, <span style=color:#ae81ff>0</span>, IPC_CREAT);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//id号16进制0x1234 大小0字节表示获取(写4096也没事但是不能大于创建的4096) 创建(获取)一块共享内存
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//和当前进程进行关联
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>addr <span style=color:#f92672>=</span> shmat(shmid, NULL, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//读数据
+</span></span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, (<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>)addr);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;按任意键 读进程解除关联&#34;</span>);
+</span></span><span style=display:flex><span>    getchar();
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//解除关联
+</span></span></span><span style=display:flex><span>    shmdt(addr);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//删除共享内存块
+</span></span></span><span style=display:flex><span>    shmctl(shmid, IPC_RMID, NULL);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>操作系统如何知道一块共享内存被多少个进程关联?</p><p>man 2 shmctl 在可获取的共享内存的属性中 有shm_nattach表示当前与此块共享内存关联的进程数</p><p>常用共享内存操作命令 ipcs用法</p><p>| <img alt=1647486005956-de2dc601-92be-47a9-b629-a67b0aaf5a13.png loading=lazy src=/images/11I2dfXP-S38K5Oo/1647486005956-de2dc601-92be-47a9-b629-a67b0aaf5a13-564126.png> |</p><p>| &mdash; |</p><p>共享内存的key如果为0(用ipcs -m查看 键)则表示这块共享内存被标记删除(被标记但是还没删 因为还有进程与它有关联) ipcrm -m也是标记删除而不是直接删除</p><p>能否对共享内存进行过次删除 shmctl</p><p>可以，shmctl做的只是标记删除而不是直接删除 只有在与共享内存关联的进程数为0并且被标记删除则自动删除。取消关联后无法再次关联。<strong>一旦通过shmctl对共享内存进行了删除操作，则该共享内存将不能再接受任何新的连接，即使它依然存在于系统中</strong>！所以，可以确知， 在对共享内存删除之后不可能再有新的连接，则执行删除操作是安全的；否则，在删除操作之后如仍有新的连接发生，则这些连接都将可能失败！</p><p>现在的问题是， 如果两个进程以一个相同的key共享一块内存区，但不同的进程调用shmget的size不一样，是否能成功？</p><p>已经创建的共享内存的大小是可以调整的，但是已经创建的共享内存的大小只能调小，不能调大。也就是说，如果进程A先调用shmget创建一块size大小为10M的内存，进程B再次调用shmget时的size参数只能比10M小，如果大于10M，程序会报shmget error: Invalid argument错误。</p><p>这种关系可能导致的问题：</p><p>当多个进程都能创建共享内存的时候，如果key出现相同的情况，并且一个进程需要创建的共享内存的大小要比另外一个进程要创建的共享内存小，共享内存大的进程先创建共享内存，共享内存小的进程后创建共享内存，小共享内存的进程就会获取到大的共享内存进程的共享内存，并修改其共享内存的大小和内容，从而可能导致大的共享内存进程崩溃。</p><p>解决方法：</p><p>在oflag参数中使用排他性创建，即使用IPC_EXCL标记；</p><p>key值使用IPC_PRIVATE，然后将最终返回的共享内存标识符用其他IPC方法通知给相关进程；</p><p>下面这段话很重要：</p><p>根据pathname指定的文件（或目录）名称，以及id参数指定的数字，ftok函数为IPC对象生成一个唯一性的键值。 在实际应用中，很容易产生的一个理解是，在id相同的情况下，只要文件（或目录）名称不变，就可以确保ftok返回始终一致的键值。然而，这个理解并非完全正确，有可能给应用开发埋下很隐晦的陷阱。 因为ftok的实现存在这样的风险，即在访问同一共享内存的多个进程先后调用ftok函数的时间段中，如果pathname指定的文件（或目录）被删除且重新创建，则文件系统会赋予这个同名文件（或目录）新的i节点信息，于是这些进程所调用的ftok虽然都能正常返回，但得到的键值却并不能保证相同。由此可能造成的后果是，原本这些进程意图访问一个相同的共享内存对象，然而由于它们各自得到的键值不同，实际上进程指向的共享内存不再一致；如果这些共享内存都得到创建，则在整个应用运行的过程中表面上不会报出任何错误，然而通过一个共享内存对象进行数据传输的目的将无法实现。</p><p>解决方法：</p><p>如果要确保key_t值不变，要么确保ftok的文件不被删除，要么不用ftok，指定一个固定的key_t值。</p><p>另外， 建议： 创建进程在通知其他进程挂接的时候，建议不使用ftok方式来获取Key，而使用文件或者进程间通信的方式告知。</p><p>共享内存和内存映射的区别</p><p>共享内存可以直接创建，内存映射需要磁盘文件(匿名映射 亲属间 可不需要)</p><p>内存映射需要将内存中的改动与磁盘文件同步 效率更低</p><p>共享内存：所有的进程操作的是同一块共享内存</p><p>内存映射： 每个进程在自己的虚拟地址空间(进程用户区)中有一个独立的内存</p><p>进程退出 内存映射区销毁但是文件中的数据还在 共享内存还在 需要标记删除并且所有与之关联的进程与它断开联系才会销毁(进程退出会自动与共享内存取消关联)</p></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

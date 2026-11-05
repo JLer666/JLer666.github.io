@@ -1,0 +1,402 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux多线程开发2 线程同步,互斥量,死锁,读写锁 | CantBlog</title><meta name=keywords content><meta name=description content='线程同步
+线程的主要优势在于，能够通过全局变量来共享信息。不过这种便捷的共享是有代价的：
+必须确保多个线程不会修改统一变量，或者某一线程不会读取正在被其他线程修改的变量。
+(某个线程在修改某个全局变量时  不允许其他线程修改或访问这个全局变量 确保修改或访问操作的原子性)
+临界区是指访问某一共享资源的代码片段，并且这段代码的操作执行应为原子操作，也就是同时访问同一共享资源的情况(临界区代码段必须一口气执行完&ndash;原子性 其他线程不能中断这一执行 在执行完之前不允许其他线程运行相同的代码段)，其他线程不允许中断该代码片段的执行(则这段代码就是临界区)  临界资源就是票  临界区就是对票访问和修改的代码段
+线程同步：即当有一个线程在对共享资源的内存进行操作时，其他线程都不允许对这个内存地址进行操作(读和写都不允许) 都处于等待状态，直到该线程完成操作，其他线程才能对该内存地址进行操作。 A执行临界区代码时B,C线程都不能执行这段代码，当A执行这段代码时，B或C正好运行到这段代码，B或C只能等着，等A运行完后B或C才能运行这段代码，    多线程对于临界区代码的执行不再是并发的而是串行(一个执行完另个再执行)的。
+多线程卖票，票的仓库是同一个但是有三个窗口买票，不能出现多个窗口卖的为同一张票。
+互斥量(互斥锁)
+为避免线程更新共享变量时出现问题，可以使用互斥量(mutex &mdash; mutual exclusion)来确保同一时刻仅有一个线程可以访问某项共享资源。可已使用互斥量来保证对任意共享资源的原子访问。
+互斥量有两种状态：已锁定(locked)和未锁定(unlocked)。**任何时刻至多只有一个线程可以锁定该互斥量。**试图对已经锁定的某一互斥量再次加锁将可能阻塞线程或报错失败这取决于加锁时使用的方法。
+**一旦线程锁定互斥量，随即成为该互斥量的所有者，只有所有者才能给互斥量解锁。**一般情况下，对每一共享资源(可能由多个相关变量组成) 会使用不同的互斥量，每一线程在访问同一资源时将采用如下协议：
+针对共享资源锁定互斥量
+访问共享资源
+对互斥量解锁
+多个线程试图执行临界区代码，只有一个线程能够持有该互斥量(其他线程将遭到阻塞)，即同一时刻只有一个线程能执行临界区代码
+
+互斥量类型 pthread_mutex_t
+/*
+多线程卖票，票的仓库是同一个总共有100张票 但是有三个窗口(子线程)买票，不能出现多个窗口卖的为同一张票，
+int pthread_mutex_init(pthread_mutex_t *restrict mutex
+                        ,const pthread_mutexattr_t *restrict attr)
+初始化互斥量
+mutex 需要初始化的互斥量变量 attr 要设置的互斥量属性
+restrict 为C语言关键字 是个修饰符
+被修饰的指针 不允许别的的指针变量得到此指针地址后 对那块内存(数据)进行操作
+比如 int *restrict a = xxx; int *b=a; b++ or *b = 1 or b--都不行都会报错
+保证了只有的被restrict修饰的指针能对其指向的数据进行操作！！！！
+
+int pthread_mutex_destroy(pthread_mutex_t *mutex)
+释放互斥量资源
+int pthread_mutex_lock(pthread_mutex_t *mutex)
+加锁 哪个线程调用了这个函数 那么这个线程就是传入的mutex这个互斥量的所有者
+如果这个锁已经被别的线程获得了 那么会导致阻塞，直到锁被另外的进程释放 获得这个锁后才能继续执行
+int pthread_mutex_trylock(pthread_mutex_t *mutex)
+尝试加锁 锁已经被别的线程获得了 也没关系是非阻塞的直接返回
+int pthread_mutex_unlock(pthread_mutex_t *mutex)
+解锁
+man手册中找不到pthread_mutex_init, pthread_mutex_destroy等API
+sudo apt-get install glibc-doc
+sudo apt-get install manpages-posix-dev
+\*/
+#include <stdio.h>
+#include <pthread.h>
+#include <string.h>
+#include <unistd.h>
+int tickets = 1000;    //仓库里的票是三个线程共有的资源 三个线程都要修改和访问 所以肯定要设置为全局变量
+pthread_mutex_t mutex; //全局互斥量
+void *sell_tick(void *arg);
+int main()
+{
+    //初始化互斥量
+    pthread_mutex_init(&amp;mutex, NULL);
+    //  创建3个子线程 主线程只用于管理系统资源
+    pthread_t tid1,
+        tid2, tid3;
+    int ret = pthread_create(&amp;tid1, NULL, sell_tick, NULL);
+    if (ret != 0)
+    {
+        printf("%s\n", strerror(ret));
+    }
+    ret = pthread_create(&amp;tid2, NULL, sell_tick, NULL);
+    if (ret != 0)
+    {
+        printf("%s\n", strerror(ret));
+    }
+    ret = pthread_create(&amp;tid3, NULL, sell_tick, NULL);
+    if (ret != 0)
+    {
+        printf("%s\n", strerror(ret));
+    }
+    //主线程等待子线程结束 回收子线程资源
+    int *t_return;
+    //返回值是二级指针 是因为callback的返回值类型被规定为一级指针void*
+    pthread_join(tid1, (void **)&amp;t_return); //阻塞回收子线程资源
+    pthread_join(tid2, (void **)&amp;t_return); //阻塞回收子线程资源
+    pthread_join(tid3, (void **)&amp;t_return); //阻塞回收子线程资源
+    //也可以直接讲子线程状态设置为分离 当子线程结束系统回收子线程资源 不需要主线程来回收 join后无法分离
+    // pthread_detach(tid1);
+    // pthread_detach(tid2);
+    // pthread_detach(tid3);
+    //子线程的返回值保存在 t_return中
+    printf("son thread return %d\n", *t_return);
+    pthread_mutex_destroy(&amp;mutex); //释放互斥量资源
+    pthread_exit(NULL);            //让主线程退出 当主线程退出时 不会影响其他正常运行的线程
+    //主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit
+    printf("main thread exsit\n"); //不会执行
+    //当主线程return 相当于进程exit所有子线程全部结束！！！
+    return 0; //不会执行
+}
+void *sell_tick(void *arg)
+{
+    //卖票
+    //多线程对于共享的资源(tickets)的访问和修改 一定要做线程同步
+    //当某个线程在对共享资源进行访问或修改时  都不允许其他线程对共享资源做访问或修改  保证操作的原子性
+    //临界区 三个线程同时在此代码段对tickets修改或访问
+    while (1) //标准C中没有布尔 也就没有true
+    {
+        pthread_mutex_lock(&amp;mutex); //加锁
+        if (tickets > 0)
+        {
+            printf("%ld 号线程 卖出了第%d张票\n", pthread_self(), tickets);
+            tickets--;
+        }
+        else
+        {
+            pthread_mutex_unlock(&amp;mutex);
+            break;
+        }
+        pthread_mutex_unlock(&amp;mutex); //解锁
+        //加锁 买完一张票后 解锁 三个线程再重新争夺锁
+    }
+    //临界区
+    return NULL;
+}
+死锁'><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/vgm685/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/vgm685/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/vgm685/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux多线程开发2 线程同步,互斥量,死锁,读写锁"><meta property="og:description" content='线程同步
+线程的主要优势在于，能够通过全局变量来共享信息。不过这种便捷的共享是有代价的：
+必须确保多个线程不会修改统一变量，或者某一线程不会读取正在被其他线程修改的变量。
+(某个线程在修改某个全局变量时 不允许其他线程修改或访问这个全局变量 确保修改或访问操作的原子性)
+临界区是指访问某一共享资源的代码片段，并且这段代码的操作执行应为原子操作，也就是同时访问同一共享资源的情况(临界区代码段必须一口气执行完–原子性 其他线程不能中断这一执行 在执行完之前不允许其他线程运行相同的代码段)，其他线程不允许中断该代码片段的执行(则这段代码就是临界区) 临界资源就是票 临界区就是对票访问和修改的代码段
+线程同步：即当有一个线程在对共享资源的内存进行操作时，其他线程都不允许对这个内存地址进行操作(读和写都不允许) 都处于等待状态，直到该线程完成操作，其他线程才能对该内存地址进行操作。 A执行临界区代码时B,C线程都不能执行这段代码，当A执行这段代码时，B或C正好运行到这段代码，B或C只能等着，等A运行完后B或C才能运行这段代码， 多线程对于临界区代码的执行不再是并发的而是串行(一个执行完另个再执行)的。
+多线程卖票，票的仓库是同一个但是有三个窗口买票，不能出现多个窗口卖的为同一张票。
+互斥量(互斥锁)
+为避免线程更新共享变量时出现问题，可以使用互斥量(mutex — mutual exclusion)来确保同一时刻仅有一个线程可以访问某项共享资源。可已使用互斥量来保证对任意共享资源的原子访问。
+互斥量有两种状态：已锁定(locked)和未锁定(unlocked)。**任何时刻至多只有一个线程可以锁定该互斥量。**试图对已经锁定的某一互斥量再次加锁将可能阻塞线程或报错失败这取决于加锁时使用的方法。
+**一旦线程锁定互斥量，随即成为该互斥量的所有者，只有所有者才能给互斥量解锁。**一般情况下，对每一共享资源(可能由多个相关变量组成) 会使用不同的互斥量，每一线程在访问同一资源时将采用如下协议：
+针对共享资源锁定互斥量
+访问共享资源
+对互斥量解锁
+多个线程试图执行临界区代码，只有一个线程能够持有该互斥量(其他线程将遭到阻塞)，即同一时刻只有一个线程能执行临界区代码
+互斥量类型 pthread_mutex_t
+/* 多线程卖票，票的仓库是同一个总共有100张票 但是有三个窗口(子线程)买票，不能出现多个窗口卖的为同一张票， int pthread_mutex_init(pthread_mutex_t *restrict mutex ,const pthread_mutexattr_t *restrict attr) 初始化互斥量 mutex 需要初始化的互斥量变量 attr 要设置的互斥量属性 restrict 为C语言关键字 是个修饰符 被修饰的指针 不允许别的的指针变量得到此指针地址后 对那块内存(数据)进行操作 比如 int *restrict a = xxx; int *b=a; b++ or *b = 1 or b--都不行都会报错 保证了只有的被restrict修饰的指针能对其指向的数据进行操作！！！！ int pthread_mutex_destroy(pthread_mutex_t *mutex) 释放互斥量资源 int pthread_mutex_lock(pthread_mutex_t *mutex) 加锁 哪个线程调用了这个函数 那么这个线程就是传入的mutex这个互斥量的所有者 如果这个锁已经被别的线程获得了 那么会导致阻塞，直到锁被另外的进程释放 获得这个锁后才能继续执行 int pthread_mutex_trylock(pthread_mutex_t *mutex) 尝试加锁 锁已经被别的线程获得了 也没关系是非阻塞的直接返回 int pthread_mutex_unlock(pthread_mutex_t *mutex) 解锁 man手册中找不到pthread_mutex_init, pthread_mutex_destroy等API sudo apt-get install glibc-doc sudo apt-get install manpages-posix-dev \*/ #include <stdio.h> #include <pthread.h> #include <string.h> #include <unistd.h> int tickets = 1000; //仓库里的票是三个线程共有的资源 三个线程都要修改和访问 所以肯定要设置为全局变量 pthread_mutex_t mutex; //全局互斥量 void *sell_tick(void *arg); int main() { //初始化互斥量 pthread_mutex_init(&amp;mutex, NULL); // 创建3个子线程 主线程只用于管理系统资源 pthread_t tid1, tid2, tid3; int ret = pthread_create(&amp;tid1, NULL, sell_tick, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } ret = pthread_create(&amp;tid2, NULL, sell_tick, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } ret = pthread_create(&amp;tid3, NULL, sell_tick, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } //主线程等待子线程结束 回收子线程资源 int *t_return; //返回值是二级指针 是因为callback的返回值类型被规定为一级指针void* pthread_join(tid1, (void **)&amp;t_return); //阻塞回收子线程资源 pthread_join(tid2, (void **)&amp;t_return); //阻塞回收子线程资源 pthread_join(tid3, (void **)&amp;t_return); //阻塞回收子线程资源 //也可以直接讲子线程状态设置为分离 当子线程结束系统回收子线程资源 不需要主线程来回收 join后无法分离 // pthread_detach(tid1); // pthread_detach(tid2); // pthread_detach(tid3); //子线程的返回值保存在 t_return中 printf("son thread return %d\n", *t_return); pthread_mutex_destroy(&amp;mutex); //释放互斥量资源 pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程 //主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit printf("main thread exsit\n"); //不会执行 //当主线程return 相当于进程exit所有子线程全部结束！！！ return 0; //不会执行 } void *sell_tick(void *arg) { //卖票 //多线程对于共享的资源(tickets)的访问和修改 一定要做线程同步 //当某个线程在对共享资源进行访问或修改时 都不允许其他线程对共享资源做访问或修改 保证操作的原子性 //临界区 三个线程同时在此代码段对tickets修改或访问 while (1) //标准C中没有布尔 也就没有true { pthread_mutex_lock(&amp;mutex); //加锁 if (tickets > 0) { printf("%ld 号线程 卖出了第%d张票\n", pthread_self(), tickets); tickets--; } else { pthread_mutex_unlock(&amp;mutex); break; } pthread_mutex_unlock(&amp;mutex); //解锁 //加锁 买完一张票后 解锁 三个线程再重新争夺锁 } //临界区 return NULL; } 死锁'><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-18T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux多线程开发2 线程同步,互斥量,死锁,读写锁"><meta name=twitter:description content='线程同步
+线程的主要优势在于，能够通过全局变量来共享信息。不过这种便捷的共享是有代价的：
+必须确保多个线程不会修改统一变量，或者某一线程不会读取正在被其他线程修改的变量。
+(某个线程在修改某个全局变量时 不允许其他线程修改或访问这个全局变量 确保修改或访问操作的原子性)
+临界区是指访问某一共享资源的代码片段，并且这段代码的操作执行应为原子操作，也就是同时访问同一共享资源的情况(临界区代码段必须一口气执行完–原子性 其他线程不能中断这一执行 在执行完之前不允许其他线程运行相同的代码段)，其他线程不允许中断该代码片段的执行(则这段代码就是临界区) 临界资源就是票 临界区就是对票访问和修改的代码段
+线程同步：即当有一个线程在对共享资源的内存进行操作时，其他线程都不允许对这个内存地址进行操作(读和写都不允许) 都处于等待状态，直到该线程完成操作，其他线程才能对该内存地址进行操作。 A执行临界区代码时B,C线程都不能执行这段代码，当A执行这段代码时，B或C正好运行到这段代码，B或C只能等着，等A运行完后B或C才能运行这段代码， 多线程对于临界区代码的执行不再是并发的而是串行(一个执行完另个再执行)的。
+多线程卖票，票的仓库是同一个但是有三个窗口买票，不能出现多个窗口卖的为同一张票。
+互斥量(互斥锁)
+为避免线程更新共享变量时出现问题，可以使用互斥量(mutex — mutual exclusion)来确保同一时刻仅有一个线程可以访问某项共享资源。可已使用互斥量来保证对任意共享资源的原子访问。
+互斥量有两种状态：已锁定(locked)和未锁定(unlocked)。**任何时刻至多只有一个线程可以锁定该互斥量。**试图对已经锁定的某一互斥量再次加锁将可能阻塞线程或报错失败这取决于加锁时使用的方法。
+**一旦线程锁定互斥量，随即成为该互斥量的所有者，只有所有者才能给互斥量解锁。**一般情况下，对每一共享资源(可能由多个相关变量组成) 会使用不同的互斥量，每一线程在访问同一资源时将采用如下协议：
+针对共享资源锁定互斥量
+访问共享资源
+对互斥量解锁
+多个线程试图执行临界区代码，只有一个线程能够持有该互斥量(其他线程将遭到阻塞)，即同一时刻只有一个线程能执行临界区代码
+互斥量类型 pthread_mutex_t
+/* 多线程卖票，票的仓库是同一个总共有100张票 但是有三个窗口(子线程)买票，不能出现多个窗口卖的为同一张票， int pthread_mutex_init(pthread_mutex_t *restrict mutex ,const pthread_mutexattr_t *restrict attr) 初始化互斥量 mutex 需要初始化的互斥量变量 attr 要设置的互斥量属性 restrict 为C语言关键字 是个修饰符 被修饰的指针 不允许别的的指针变量得到此指针地址后 对那块内存(数据)进行操作 比如 int *restrict a = xxx; int *b=a; b++ or *b = 1 or b--都不行都会报错 保证了只有的被restrict修饰的指针能对其指向的数据进行操作！！！！ int pthread_mutex_destroy(pthread_mutex_t *mutex) 释放互斥量资源 int pthread_mutex_lock(pthread_mutex_t *mutex) 加锁 哪个线程调用了这个函数 那么这个线程就是传入的mutex这个互斥量的所有者 如果这个锁已经被别的线程获得了 那么会导致阻塞，直到锁被另外的进程释放 获得这个锁后才能继续执行 int pthread_mutex_trylock(pthread_mutex_t *mutex) 尝试加锁 锁已经被别的线程获得了 也没关系是非阻塞的直接返回 int pthread_mutex_unlock(pthread_mutex_t *mutex) 解锁 man手册中找不到pthread_mutex_init, pthread_mutex_destroy等API sudo apt-get install glibc-doc sudo apt-get install manpages-posix-dev \*/ #include <stdio.h> #include <pthread.h> #include <string.h> #include <unistd.h> int tickets = 1000; //仓库里的票是三个线程共有的资源 三个线程都要修改和访问 所以肯定要设置为全局变量 pthread_mutex_t mutex; //全局互斥量 void *sell_tick(void *arg); int main() { //初始化互斥量 pthread_mutex_init(&amp;mutex, NULL); // 创建3个子线程 主线程只用于管理系统资源 pthread_t tid1, tid2, tid3; int ret = pthread_create(&amp;tid1, NULL, sell_tick, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } ret = pthread_create(&amp;tid2, NULL, sell_tick, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } ret = pthread_create(&amp;tid3, NULL, sell_tick, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } //主线程等待子线程结束 回收子线程资源 int *t_return; //返回值是二级指针 是因为callback的返回值类型被规定为一级指针void* pthread_join(tid1, (void **)&amp;t_return); //阻塞回收子线程资源 pthread_join(tid2, (void **)&amp;t_return); //阻塞回收子线程资源 pthread_join(tid3, (void **)&amp;t_return); //阻塞回收子线程资源 //也可以直接讲子线程状态设置为分离 当子线程结束系统回收子线程资源 不需要主线程来回收 join后无法分离 // pthread_detach(tid1); // pthread_detach(tid2); // pthread_detach(tid3); //子线程的返回值保存在 t_return中 printf("son thread return %d\n", *t_return); pthread_mutex_destroy(&amp;mutex); //释放互斥量资源 pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程 //主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit printf("main thread exsit\n"); //不会执行 //当主线程return 相当于进程exit所有子线程全部结束！！！ return 0; //不会执行 } void *sell_tick(void *arg) { //卖票 //多线程对于共享的资源(tickets)的访问和修改 一定要做线程同步 //当某个线程在对共享资源进行访问或修改时 都不允许其他线程对共享资源做访问或修改 保证操作的原子性 //临界区 三个线程同时在此代码段对tickets修改或访问 while (1) //标准C中没有布尔 也就没有true { pthread_mutex_lock(&amp;mutex); //加锁 if (tickets > 0) { printf("%ld 号线程 卖出了第%d张票\n", pthread_self(), tickets); tickets--; } else { pthread_mutex_unlock(&amp;mutex); break; } pthread_mutex_unlock(&amp;mutex); //解锁 //加锁 买完一张票后 解锁 三个线程再重新争夺锁 } //临界区 return NULL; } 死锁'><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux多线程开发2 线程同步,互斥量,死锁,读写锁","item":"https://jler666.github.io/cpp/vgm685/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux多线程开发2 线程同步,互斥量,死锁,读写锁","name":"Linux多线程开发2 线程同步,互斥量,死锁,读写锁","description":"线程同步\n线程的主要优势在于，能够通过全局变量来共享信息。不过这种便捷的共享是有代价的：\n必须确保多个线程不会修改统一变量，或者某一线程不会读取正在被其他线程修改的变量。\n(某个线程在修改某个全局变量时 不允许其他线程修改或访问这个全局变量 确保修改或访问操作的原子性)\n临界区是指访问某一共享资源的代码片段，并且这段代码的操作执行应为原子操作，也就是同时访问同一共享资源的情况(临界区代码段必须一口气执行完\u0026ndash;原子性 其他线程不能中断这一执行 在执行完之前不允许其他线程运行相同的代码段)，其他线程不允许中断该代码片段的执行(则这段代码就是临界区) 临界资源就是票 临界区就是对票访问和修改的代码段\n线程同步：即当有一个线程在对共享资源的内存进行操作时，其他线程都不允许对这个内存地址进行操作(读和写都不允许) 都处于等待状态，直到该线程完成操作，其他线程才能对该内存地址进行操作。 A执行临界区代码时B,C线程都不能执行这段代码，当A执行这段代码时，B或C正好运行到这段代码，B或C只能等着，等A运行完后B或C才能运行这段代码， 多线程对于临界区代码的执行不再是并发的而是串行(一个执行完另个再执行)的。\n多线程卖票，票的仓库是同一个但是有三个窗口买票，不能出现多个窗口卖的为同一张票。\n互斥量(互斥锁)\n为避免线程更新共享变量时出现问题，可以使用互斥量(mutex \u0026mdash; mutual exclusion)来确保同一时刻仅有一个线程可以访问某项共享资源。可已使用互斥量来保证对任意共享资源的原子访问。\n互斥量有两种状态：已锁定(locked)和未锁定(unlocked)。**任何时刻至多只有一个线程可以锁定该互斥量。**试图对已经锁定的某一互斥量再次加锁将可能阻塞线程或报错失败这取决于加锁时使用的方法。\n**一旦线程锁定互斥量，随即成为该互斥量的所有者，只有所有者才能给互斥量解锁。**一般情况下，对每一共享资源(可能由多个相关变量组成) 会使用不同的互斥量，每一线程在访问同一资源时将采用如下协议：\n针对共享资源锁定互斥量\n访问共享资源\n对互斥量解锁\n多个线程试图执行临界区代码，只有一个线程能够持有该互斥量(其他线程将遭到阻塞)，即同一时刻只有一个线程能执行临界区代码\n互斥量类型 pthread_mutex_t\n/* 多线程卖票，票的仓库是同一个总共有100张票 但是有三个窗口(子线程)买票，不能出现多个窗口卖的为同一张票， int pthread_mutex_init(pthread_mutex_t *restrict mutex ,const pthread_mutexattr_t *restrict attr) 初始化互斥量 mutex 需要初始化的互斥量变量 attr 要设置的互斥量属性 restrict 为C语言关键字 是个修饰符 被修饰的指针 不允许别的的指针变量得到此指针地址后 对那块内存(数据)进行操作 比如 int *restrict a = xxx; int *b=a; b++ or *b = 1 or b--都不行都会报错 保证了只有的被restrict修饰的指针能对其指向的数据进行操作！！！！ int pthread_mutex_destroy(pthread_mutex_t *mutex) 释放互斥量资源 int pthread_mutex_lock(pthread_mutex_t *mutex) 加锁 哪个线程调用了这个函数 那么这个线程就是传入的mutex这个互斥量的所有者 如果这个锁已经被别的线程获得了 那么会导致阻塞，直到锁被另外的进程释放 获得这个锁后才能继续执行 int pthread_mutex_trylock(pthread_mutex_t *mutex) 尝试加锁 锁已经被别的线程获得了 也没关系是非阻塞的直接返回 int pthread_mutex_unlock(pthread_mutex_t *mutex) 解锁 man手册中找不到pthread_mutex_init, pthread_mutex_destroy等API sudo apt-get install glibc-doc sudo apt-get install manpages-posix-dev \\*/ #include \u0026lt;stdio.h\u0026gt; #include \u0026lt;pthread.h\u0026gt; #include \u0026lt;string.h\u0026gt; #include \u0026lt;unistd.h\u0026gt; int tickets = 1000; //仓库里的票是三个线程共有的资源 三个线程都要修改和访问 所以肯定要设置为全局变量 pthread_mutex_t mutex; //全局互斥量 void *sell_tick(void *arg); int main() { //初始化互斥量 pthread_mutex_init(\u0026amp;mutex, NULL); // 创建3个子线程 主线程只用于管理系统资源 pthread_t tid1, tid2, tid3; int ret = pthread_create(\u0026amp;tid1, NULL, sell_tick, NULL); if (ret != 0) { printf(\u0026#34;%s\\n\u0026#34;, strerror(ret)); } ret = pthread_create(\u0026amp;tid2, NULL, sell_tick, NULL); if (ret != 0) { printf(\u0026#34;%s\\n\u0026#34;, strerror(ret)); } ret = pthread_create(\u0026amp;tid3, NULL, sell_tick, NULL); if (ret != 0) { printf(\u0026#34;%s\\n\u0026#34;, strerror(ret)); } //主线程等待子线程结束 回收子线程资源 int *t_return; //返回值是二级指针 是因为callback的返回值类型被规定为一级指针void* pthread_join(tid1, (void **)\u0026amp;t_return); //阻塞回收子线程资源 pthread_join(tid2, (void **)\u0026amp;t_return); //阻塞回收子线程资源 pthread_join(tid3, (void **)\u0026amp;t_return); //阻塞回收子线程资源 //也可以直接讲子线程状态设置为分离 当子线程结束系统回收子线程资源 不需要主线程来回收 join后无法分离 // pthread_detach(tid1); // pthread_detach(tid2); // pthread_detach(tid3); //子线程的返回值保存在 t_return中 printf(\u0026#34;son thread return %d\\n\u0026#34;, *t_return); pthread_mutex_destroy(\u0026amp;mutex); //释放互斥量资源 pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程 //主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit printf(\u0026#34;main thread exsit\\n\u0026#34;); //不会执行 //当主线程return 相当于进程exit所有子线程全部结束！！！ return 0; //不会执行 } void *sell_tick(void *arg) { //卖票 //多线程对于共享的资源(tickets)的访问和修改 一定要做线程同步 //当某个线程在对共享资源进行访问或修改时 都不允许其他线程对共享资源做访问或修改 保证操作的原子性 //临界区 三个线程同时在此代码段对tickets修改或访问 while (1) //标准C中没有布尔 也就没有true { pthread_mutex_lock(\u0026amp;mutex); //加锁 if (tickets \u0026gt; 0) { printf(\u0026#34;%ld 号线程 卖出了第%d张票\\n\u0026#34;, pthread_self(), tickets); tickets--; } else { pthread_mutex_unlock(\u0026amp;mutex); break; } pthread_mutex_unlock(\u0026amp;mutex); //解锁 //加锁 买完一张票后 解锁 三个线程再重新争夺锁 } //临界区 return NULL; } 死锁\n","keywords":[],"articleBody":"线程同步\n线程的主要优势在于，能够通过全局变量来共享信息。不过这种便捷的共享是有代价的：\n必须确保多个线程不会修改统一变量，或者某一线程不会读取正在被其他线程修改的变量。\n(某个线程在修改某个全局变量时 不允许其他线程修改或访问这个全局变量 确保修改或访问操作的原子性)\n临界区是指访问某一共享资源的代码片段，并且这段代码的操作执行应为原子操作，也就是同时访问同一共享资源的情况(临界区代码段必须一口气执行完–原子性 其他线程不能中断这一执行 在执行完之前不允许其他线程运行相同的代码段)，其他线程不允许中断该代码片段的执行(则这段代码就是临界区) 临界资源就是票 临界区就是对票访问和修改的代码段\n线程同步：即当有一个线程在对共享资源的内存进行操作时，其他线程都不允许对这个内存地址进行操作(读和写都不允许) 都处于等待状态，直到该线程完成操作，其他线程才能对该内存地址进行操作。 A执行临界区代码时B,C线程都不能执行这段代码，当A执行这段代码时，B或C正好运行到这段代码，B或C只能等着，等A运行完后B或C才能运行这段代码， 多线程对于临界区代码的执行不再是并发的而是串行(一个执行完另个再执行)的。\n多线程卖票，票的仓库是同一个但是有三个窗口买票，不能出现多个窗口卖的为同一张票。\n互斥量(互斥锁)\n为避免线程更新共享变量时出现问题，可以使用互斥量(mutex — mutual exclusion)来确保同一时刻仅有一个线程可以访问某项共享资源。可已使用互斥量来保证对任意共享资源的原子访问。\n互斥量有两种状态：已锁定(locked)和未锁定(unlocked)。**任何时刻至多只有一个线程可以锁定该互斥量。**试图对已经锁定的某一互斥量再次加锁将可能阻塞线程或报错失败这取决于加锁时使用的方法。\n**一旦线程锁定互斥量，随即成为该互斥量的所有者，只有所有者才能给互斥量解锁。**一般情况下，对每一共享资源(可能由多个相关变量组成) 会使用不同的互斥量，每一线程在访问同一资源时将采用如下协议：\n针对共享资源锁定互斥量\n访问共享资源\n对互斥量解锁\n多个线程试图执行临界区代码，只有一个线程能够持有该互斥量(其他线程将遭到阻塞)，即同一时刻只有一个线程能执行临界区代码\n互斥量类型 pthread_mutex_t\n/* 多线程卖票，票的仓库是同一个总共有100张票 但是有三个窗口(子线程)买票，不能出现多个窗口卖的为同一张票， int pthread_mutex_init(pthread_mutex_t *restrict mutex ,const pthread_mutexattr_t *restrict attr) 初始化互斥量 mutex 需要初始化的互斥量变量 attr 要设置的互斥量属性 restrict 为C语言关键字 是个修饰符 被修饰的指针 不允许别的的指针变量得到此指针地址后 对那块内存(数据)进行操作 比如 int *restrict a = xxx; int *b=a; b++ or *b = 1 or b--都不行都会报错 保证了只有的被restrict修饰的指针能对其指向的数据进行操作！！！！ int pthread_mutex_destroy(pthread_mutex_t *mutex) 释放互斥量资源 int pthread_mutex_lock(pthread_mutex_t *mutex) 加锁 哪个线程调用了这个函数 那么这个线程就是传入的mutex这个互斥量的所有者 如果这个锁已经被别的线程获得了 那么会导致阻塞，直到锁被另外的进程释放 获得这个锁后才能继续执行 int pthread_mutex_trylock(pthread_mutex_t *mutex) 尝试加锁 锁已经被别的线程获得了 也没关系是非阻塞的直接返回 int pthread_mutex_unlock(pthread_mutex_t *mutex) 解锁 man手册中找不到pthread_mutex_init, pthread_mutex_destroy等API sudo apt-get install glibc-doc sudo apt-get install manpages-posix-dev \\*/ #include #include #include #include int tickets = 1000; //仓库里的票是三个线程共有的资源 三个线程都要修改和访问 所以肯定要设置为全局变量 pthread_mutex_t mutex; //全局互斥量 void *sell_tick(void *arg); int main() { //初始化互斥量 pthread_mutex_init(\u0026mutex, NULL); // 创建3个子线程 主线程只用于管理系统资源 pthread_t tid1, tid2, tid3; int ret = pthread_create(\u0026tid1, NULL, sell_tick, NULL); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } ret = pthread_create(\u0026tid2, NULL, sell_tick, NULL); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } ret = pthread_create(\u0026tid3, NULL, sell_tick, NULL); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } //主线程等待子线程结束 回收子线程资源 int *t_return; //返回值是二级指针 是因为callback的返回值类型被规定为一级指针void* pthread_join(tid1, (void **)\u0026t_return); //阻塞回收子线程资源 pthread_join(tid2, (void **)\u0026t_return); //阻塞回收子线程资源 pthread_join(tid3, (void **)\u0026t_return); //阻塞回收子线程资源 //也可以直接讲子线程状态设置为分离 当子线程结束系统回收子线程资源 不需要主线程来回收 join后无法分离 // pthread_detach(tid1); // pthread_detach(tid2); // pthread_detach(tid3); //子线程的返回值保存在 t_return中 printf(\"son thread return %d\\n\", *t_return); pthread_mutex_destroy(\u0026mutex); //释放互斥量资源 pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程 //主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit printf(\"main thread exsit\\n\"); //不会执行 //当主线程return 相当于进程exit所有子线程全部结束！！！ return 0; //不会执行 } void *sell_tick(void *arg) { //卖票 //多线程对于共享的资源(tickets)的访问和修改 一定要做线程同步 //当某个线程在对共享资源进行访问或修改时 都不允许其他线程对共享资源做访问或修改 保证操作的原子性 //临界区 三个线程同时在此代码段对tickets修改或访问 while (1) //标准C中没有布尔 也就没有true { pthread_mutex_lock(\u0026mutex); //加锁 if (tickets \u003e 0) { printf(\"%ld 号线程 卖出了第%d张票\\n\", pthread_self(), tickets); tickets--; } else { pthread_mutex_unlock(\u0026mutex); break; } pthread_mutex_unlock(\u0026mutex); //解锁 //加锁 买完一张票后 解锁 三个线程再重新争夺锁 } //临界区 return NULL; } 死锁\n有时一个线程需要同时访问两个或更多不同的临界资源，而每个资源又都由不同的互斥量管理，当超过一个线程加锁同一组互斥量时就可能发生死锁。\n两个或两个以上的线程在执行过程中，因争夺共享资源而造成的一种互相等待的现象，若无外力作用它们都无法推进下去，此时称系统处于死锁状态或系统产生了死锁。\n死锁的几种场景：\nABC三个线程\n忘记释放锁\nA拿到锁后，执行完临界区代码忘记释放锁，那么BC线程都无法执行临界区代码都阻塞在临界区入口拿锁的那行代码上(A执行结束后 再次运行到拿锁这句话 A也拿不到这个已经拥有的锁 也会阻塞)。\n重复加同一个锁\npthread_mutex_lock(\u0026mutex); //加锁(拿锁)\n…\npthread_mutex_lock(\u0026mutex); //加锁(拿锁)\n….临界区代码\n线程执行完第一条加锁后已经拿到mutex这个锁了，执行第二条加锁又是拿mutex这个锁，但是这个锁当前线程一直拿着还没释放，所以当前线程是拿不到这同一个锁的被阻塞在这第二次调用。 这两次拿锁执行可能在两个函数中，这种错误经常出现。\n多线程多锁，抢占锁资源\n虚线是获取锁失败\n线程A访问资源1 先为其上了A锁\n线程B访问资源1但是由于A拥有A锁 B无法获取A锁\n线程B访问资源2为其上了B锁 (B在访问资源1后没拿到锁 也没被阻塞 说明用的是trylock)\n在A释放A锁的语句前，A需要拿B锁但B拿着所以A无法拿到B锁。\n在B释放B锁的语句前，B需要拿A锁但A拿着所以B无法拿到A锁。\n两个线程谁都不让步导致死锁\n#include #include #include #include //两个全局互斥量资源 pthread_mutex_t mutex1; pthread_mutex_t mutex2; void *work1(void *arg); void *work2(void *arg); int main() { //初始化互斥量 pthread_mutex_init(\u0026mutex1, NULL); pthread_mutex_init(\u0026mutex2, NULL); // 创建3个子线程 主线程只用于管理系统资源 pthread_t tid1, tid2; int ret = pthread_create(\u0026tid1, NULL, work1, NULL); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } ret = pthread_create(\u0026tid2, NULL, work2, NULL); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } //主线程等待子线程结束 回收子线程资源 int *t_return; //返回值是二级指针 是因为callback的返回值类型被规定为一级指针void* pthread_join(tid1, (void **)\u0026t_return); //阻塞回收子线程资源 pthread_join(tid2, (void **)\u0026t_return); //阻塞回收子线程资源 //子线程的返回值保存在 t_return中 printf(\"son thread return %d\\n\", *t_return); pthread_mutex_destroy(\u0026mutex1); //释放互斥量资源 不是解锁unlock pthread_mutex_destroy(\u0026mutex2); //释放互斥量资源 不是解锁unlock pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程 return 0; //不会执行 } void *work1(void *arg) { pthread_mutex_lock(\u0026mutex1); sleep(1); pthread_mutex_lock(\u0026mutex2); printf(\"1...\\n\"); pthread_mutex_unlock(\u0026mutex2); pthread_mutex_unlock(\u0026mutex1); return NULL; } void *work2(void *arg) { pthread_mutex_lock(\u0026mutex2); sleep(1); pthread_mutex_lock(\u0026mutex1); printf(\"2...\\n\"); pthread_mutex_unlock(\u0026mutex1); pthread_mutex_unlock(\u0026mutex2); return NULL; } //1,2拿到1，2锁后都睡眠了1秒 这个1秒保证了在两个线程执行到第二条加锁语句时线程1，2已经都拿到了锁 //1拿到1锁，2拿到2锁 接下来第二条加锁语句1，2线程分别想拿对方的锁但因为锁都没有释放 //导致两个线程分别都阻塞在各自的第二条加锁语句上 出现了死锁现象 读写锁\n当有一个线程已经持有互斥锁时，互斥锁将所有试图进入临界区的线程都阻塞住，但是考虑一种情形，当前持有互斥锁的线程只是要读临界资源(共享资源)，而同时有其他几个线程也想读取这个临界资源，但是由于互斥锁定排它性，所有其他线程都无法获取锁，也就无法读临界资源，但是实际上多个线程同时访问读共享资源并不会导致问题。\n在对数据的读写操作中，更多的是读操作，写操作较少例如数据库数据的读写应用。为了满足当前能够允许多个线程读出，但只允许一个线程写入的需求，线程提供了读写锁来实现。\n读写锁的特点：\n如果有线程拿到锁在读数据，则允许其他线程执行读操作(读可以并发读)，但不允许写操作。\n如果有线程拿到锁在写数据，则其它线程不允许读和写。\n写是独占的当多个线程在竞争锁时(锁被一个线程拿了 其他线程运行到拿锁函数阻塞了 到锁被释放 则线程开始竞争锁 在这种情况时) 写锁的优先级更高，优先将锁给要写的线程\n读写锁还是一把锁，但是可以控制其行为\n/* 读写锁类型pthread_rwlock_t int pthread_rwlock_init(pthread_rwlock_t *restrict rwlock, const pthread_rwlockattr_t *restrict attr); 初始化读写锁 rwlock 需要初始化的读写锁变量 attr 要设置的读写锁变量属性 restrict 为C语言关键字 是个修饰符 被修饰的指针 不允许别的的指针变量得到此指针地址后 对那块内存(数据)进行操作 比如 int *restrict a = xxx; int *b=a; b++ or *b = 1 or b--都不行都会报错 保证了只有的被restrict修饰的指针能对其指向的数据进行操作！！！！ int pthread_rwlock_destroy(pthread_rwlock_t *rwlock) 释放互斥量资源 int pthread_rwlock_rdlock(pthread_rwlock_t *rwlock) 上读锁 如果此时有线程拿到写锁了 将会阻塞 int pthread_rwlock_tryrdlock(pthread_rwlock_t *rwlock) 尝试上读锁 非阻塞 int pthread_rwlock_wrlock(pthread_rwlock_t *rwlock) 上写锁 会阻塞 int pthread_rwlock_trywrlock(pthread_rwlock_t *rwlock) 尝试上写锁 非阻塞 int pthread_rwlock_unlock(pthread_rwlock_t *rwlock) 读锁和写锁的解锁 就是这一个函数 案例：8个线程操作同一全局变量 3个线程不定时写全局变量 5个线程不定时地读这个全局变量 \\*/ #include #include #include #include int tickets = 0; //全局共享数据 pthread_rwlock_t rwlock; //全局读写锁量 void *writeNum(void *arg); void *readNum(void *arg); int main() { //初始化互斥量 pthread_rwlock_init(\u0026rwlock, NULL); // 创建3个子线程 主线程只用于管理系统资源 pthread_t wtids[3], rtids[5]; //线程数组 3个写 5个读 for (int i = 0; i \u003c 3; i++) { int ret = pthread_create(\u0026wtids[i], NULL, writeNum, NULL); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } //不join了 直接将8个线程都分离 由系统回收 pthread_detach(wtids[i]); } // for (int i = 0; i \u003c 3; i++) // { // int ret = pthread_create(\u0026rtids[i], NULL, readNum, NULL); // pthread_detach(rtids[i]); // } for (int i = 0; i \u003c 5; i++) { int ret = pthread_create(\u0026rtids[i], NULL, readNum, NULL); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } //不join了 直接将8个线程都分离 由系统回收 pthread_detach(rtids[i]); } //pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程 return 0; //不会执行 } void *writeNum(void *arg) { while (1) { pthread_rwlock_wrlock(\u0026rwlock); tickets++; printf(\"%ld write %d \\n\", pthread_self(), tickets); pthread_rwlock_unlock(\u0026rwlock); usleep(1000); //1000微秒 1毫秒 一个写线程写过一次后 至少有1ms不参与写锁的竞争 } return NULL; } void *readNum(void *arg) { while (1) { pthread_rwlock_rdlock(\u0026rwlock); // 当有线程获得读锁后 其他线程读并发 写阻塞(写线程拿不到写锁) printf(\"%ld read %d \\n\", pthread_self(), tickets); pthread_rwlock_unlock(\u0026rwlock); usleep(1000); } return NULL; } ","wordCount":"705","inLanguage":"en","datePublished":"2022-03-18T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/vgm685/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux多线程开发2 线程同步,互斥量,死锁,读写锁</h1><div class=post-meta><span title=2022-03-18T00:00:00+00:00>创建于 2022-03-18</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>线程同步</strong></p><p>线程的主要优势在于，能够通过全局变量来共享信息。不过这种便捷的共享是有代价的：</p><p>必须确保多个线程不会修改统一变量，或者某一线程不会读取正在被其他线程修改的变量。</p><p>(某个线程在修改某个全局变量时 不允许其他线程修改或访问这个全局变量 确保修改或访问操作的原子性)</p><p>临界区是指访问某一共享资源的代码片段，并且这段代码的操作执行应为原子操作，也就是同时访问同一共享资源的情况(<strong>临界区代码段必须一口气执行完&ndash;原子性 其他线程不能中断这一执行 在执行完之前不允许其他线程运行相同的代码段)</strong>，其他线程不允许中断该代码片段的执行(则这段代码就是临界区) 临界资源就是票 临界区就是对票访问和修改的代码段</p><p><strong>线程同步：即当有一个线程在对共享资源的内存进行操作时，其他线程都不允许对这个内存地址进行操作(读和写都不允许) 都处于等待状态，直到该线程完成操作，其他线程才能对该内存地址进行操作。 A执行临界区代码时B,C线程都不能执行这段代码，当A执行这段代码时，B或C正好运行到这段代码，B或C只能等着，等A运行完后B或C才能运行这段代码， 多线程对于临界区代码的执行不再是并发的而是串行(一个执行完另个再执行)的。</strong></p><p>多线程卖票，票的仓库是同一个但是有三个窗口买票，不能出现多个窗口卖的为同一张票。</p><p><strong>互斥量(互斥锁)</strong></p><p>为避免线程更新共享变量时出现问题，可以使用互斥量(mutex &mdash; mutual exclusion)来确保同一时刻仅有一个线程可以访问某项共享资源。可已使用互斥量来保证对任意共享资源的原子访问。</p><p>互斥量有两种状态：已锁定(locked)和未锁定(unlocked)。**任何时刻至多只有一个线程可以锁定该互斥量。**试图对已经锁定的某一互斥量再次加锁将可能阻塞线程或报错失败这取决于加锁时使用的方法。</p><p>**一旦线程锁定互斥量，随即成为该互斥量的所有者，只有所有者才能给互斥量解锁。**一般情况下，对每一共享资源(可能由多个相关变量组成) 会使用不同的互斥量，每一线程在访问同一资源时将采用如下协议：</p><p>针对共享资源锁定互斥量</p><p>访问共享资源</p><p>对互斥量解锁</p><p>多个线程试图执行临界区代码，只有一个线程能够持有该互斥量(其他线程将遭到阻塞)，即同一时刻只有一个线程能执行临界区代码</p><p><img alt=1647572977320-ab038b8f-a69e-4952-ba0b-b1e5ed45bed8.png loading=lazy src=/images/5C5ggH3T1vJU_KdQ/1647572977320-ab038b8f-a69e-4952-ba0b-b1e5ed45bed8-946016.png></p><p>互斥量类型 pthread_mutex_t</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>多线程卖票，票的仓库是同一个总共有100张票 但是有三个窗口(子线程)买票，不能出现多个窗口卖的为同一张票，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_mutex_init(pthread_mutex_t *restrict mutex
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                        ,const pthread_mutexattr_t *restrict attr)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>初始化互斥量
+</span></span></span><span style=display:flex><span><span style=color:#75715e>mutex 需要初始化的互斥量变量 attr 要设置的互斥量属性
+</span></span></span><span style=display:flex><span><span style=color:#75715e>restrict 为C语言关键字 是个修饰符
+</span></span></span><span style=display:flex><span><span style=color:#75715e>被修饰的指针 不允许别的的指针变量得到此指针地址后 对那块内存(数据)进行操作
+</span></span></span><span style=display:flex><span><span style=color:#75715e>比如 int *restrict a = xxx; int *b=a; b++ or *b = 1 or b--都不行都会报错
+</span></span></span><span style=display:flex><span><span style=color:#75715e>保证了只有的被restrict修饰的指针能对其指向的数据进行操作！！！！
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_mutex_destroy(pthread_mutex_t *mutex)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>释放互斥量资源
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_mutex_lock(pthread_mutex_t *mutex)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>加锁 哪个线程调用了这个函数 那么这个线程就是传入的mutex这个互斥量的所有者
+</span></span></span><span style=display:flex><span><span style=color:#75715e>如果这个锁已经被别的线程获得了 那么会导致阻塞，直到锁被另外的进程释放 获得这个锁后才能继续执行
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_mutex_trylock(pthread_mutex_t *mutex)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>尝试加锁 锁已经被别的线程获得了 也没关系是非阻塞的直接返回
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_mutex_unlock(pthread_mutex_t *mutex)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>解锁
+</span></span></span><span style=display:flex><span><span style=color:#75715e>man手册中找不到pthread_mutex_init, pthread_mutex_destroy等API
+</span></span></span><span style=display:flex><span><span style=color:#75715e>sudo apt-get install glibc-doc
+</span></span></span><span style=display:flex><span><span style=color:#75715e>sudo apt-get install manpages-posix-dev
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;pthread.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> tickets <span style=color:#f92672>=</span> <span style=color:#ae81ff>1000</span>;    <span style=color:#75715e>//仓库里的票是三个线程共有的资源 三个线程都要修改和访问 所以肯定要设置为全局变量
+</span></span></span><span style=display:flex><span>pthread_mutex_t mutex; <span style=color:#75715e>//全局互斥量
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>sell_tick</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//初始化互斥量
+</span></span></span><span style=display:flex><span>    pthread_mutex_init(<span style=color:#f92672>&amp;</span>mutex, NULL);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//  创建3个子线程 主线程只用于管理系统资源
+</span></span></span><span style=display:flex><span>    pthread_t tid1,
+</span></span><span style=display:flex><span>        tid2, tid3;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>tid1, NULL, sell_tick, NULL);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>tid2, NULL, sell_tick, NULL);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>tid3, NULL, sell_tick, NULL);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//主线程等待子线程结束 回收子线程资源
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>t_return;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//返回值是二级指针 是因为callback的返回值类型被规定为一级指针void*
+</span></span></span><span style=display:flex><span>    pthread_join(tid1, (<span style=color:#66d9ef>void</span> <span style=color:#f92672>**</span>)<span style=color:#f92672>&amp;</span>t_return); <span style=color:#75715e>//阻塞回收子线程资源
+</span></span></span><span style=display:flex><span>    pthread_join(tid2, (<span style=color:#66d9ef>void</span> <span style=color:#f92672>**</span>)<span style=color:#f92672>&amp;</span>t_return); <span style=color:#75715e>//阻塞回收子线程资源
+</span></span></span><span style=display:flex><span>    pthread_join(tid3, (<span style=color:#66d9ef>void</span> <span style=color:#f92672>**</span>)<span style=color:#f92672>&amp;</span>t_return); <span style=color:#75715e>//阻塞回收子线程资源
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//也可以直接讲子线程状态设置为分离 当子线程结束系统回收子线程资源 不需要主线程来回收 join后无法分离
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// pthread_detach(tid1);
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// pthread_detach(tid2);
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// pthread_detach(tid3);
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//子线程的返回值保存在 t_return中
+</span></span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;son thread return %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, <span style=color:#f92672>*</span>t_return);
+</span></span><span style=display:flex><span>    pthread_mutex_destroy(<span style=color:#f92672>&amp;</span>mutex); <span style=color:#75715e>//释放互斥量资源
+</span></span></span><span style=display:flex><span>    pthread_exit(NULL);            <span style=color:#75715e>//让主线程退出 当主线程退出时 不会影响其他正常运行的线程
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit
+</span></span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;main thread exsit</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>); <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//当主线程return 相当于进程exit所有子线程全部结束！！！
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>sell_tick</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//卖票
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//多线程对于共享的资源(tickets)的访问和修改 一定要做线程同步
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//当某个线程在对共享资源进行访问或修改时  都不允许其他线程对共享资源做访问或修改  保证操作的原子性
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//临界区 三个线程同时在此代码段对tickets修改或访问
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>) <span style=color:#75715e>//标准C中没有布尔 也就没有true
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        pthread_mutex_lock(<span style=color:#f92672>&amp;</span>mutex); <span style=color:#75715e>//加锁
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (tickets <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;%ld 号线程 卖出了第%d张票</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, pthread_self(), tickets);
+</span></span><span style=display:flex><span>            tickets<span style=color:#f92672>--</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            pthread_mutex_unlock(<span style=color:#f92672>&amp;</span>mutex);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        pthread_mutex_unlock(<span style=color:#f92672>&amp;</span>mutex); <span style=color:#75715e>//解锁
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//加锁 买完一张票后 解锁 三个线程再重新争夺锁
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//临界区
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> NULL;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>死锁</strong></p><p>有时一个线程需要同时访问两个或更多不同的临界资源，而每个资源又都由不同的互斥量管理，当超过一个线程加锁同一组互斥量时就可能发生死锁。</p><p><strong>两个或两个以上的线程在执行过程中，因争夺共享资源而造成的一种互相等待的现象，若无外力作用它们都无法推进下去，此时称系统处于死锁状态或系统产生了死锁。</strong></p><p>死锁的几种场景：</p><p>ABC三个线程</p><p>忘记释放锁</p><p>A拿到锁后，执行完临界区代码忘记释放锁，那么BC线程都无法执行临界区代码都阻塞在临界区入口拿锁的那行代码上(<strong>A执行结束后 再次运行到拿锁这句话 A也拿不到这个已经拥有的锁 也会阻塞</strong>)。</p><p>重复加同一个锁</p><p>pthread_mutex_lock(&amp;mutex); //加锁(拿锁)</p><p>&mldr;</p><p>pthread_mutex_lock(&amp;mutex); //加锁(拿锁)</p><p>&mldr;.临界区代码</p><p>线程执行完第一条加锁后已经拿到mutex这个锁了，执行第二条加锁又是拿mutex这个锁，但是这个锁当前线程一直拿着还没释放，所以当前线程是拿不到这同一个锁的被阻塞在这第二次调用。 这两次拿锁执行可能在两个函数中，这种错误经常出现。</p><p>多线程多锁，抢占锁资源</p><p>虚线是获取锁失败</p><p>线程A访问资源1 先为其上了A锁</p><p>线程B访问资源1但是由于A拥有A锁 B无法获取A锁</p><p>线程B访问资源2为其上了B锁 (B在访问资源1后没拿到锁 也没被阻塞 说明用的是trylock)</p><p>在A释放A锁的语句前，A需要拿B锁但B拿着所以A无法拿到B锁。</p><p>在B释放B锁的语句前，B需要拿A锁但A拿着所以B无法拿到A锁。</p><p>两个线程谁都不让步导致死锁</p><p><img alt=1647573023753-1f2196b2-2ab7-44e2-bc39-1b20c47b247e.png loading=lazy src=/images/5C5ggH3T1vJU_KdQ/1647573023753-1f2196b2-2ab7-44e2-bc39-1b20c47b247e-513250.png></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;pthread.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//两个全局互斥量资源
+</span></span></span><span style=display:flex><span>pthread_mutex_t mutex1;
+</span></span><span style=display:flex><span>pthread_mutex_t mutex2;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>work1</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>work2</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//初始化互斥量
+</span></span></span><span style=display:flex><span>    pthread_mutex_init(<span style=color:#f92672>&amp;</span>mutex1, NULL);
+</span></span><span style=display:flex><span>    pthread_mutex_init(<span style=color:#f92672>&amp;</span>mutex2, NULL);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//  创建3个子线程 主线程只用于管理系统资源
+</span></span></span><span style=display:flex><span>    pthread_t tid1, tid2;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>tid1, NULL, work1, NULL);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>tid2, NULL, work2, NULL);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//主线程等待子线程结束 回收子线程资源
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>t_return;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//返回值是二级指针 是因为callback的返回值类型被规定为一级指针void*
+</span></span></span><span style=display:flex><span>    pthread_join(tid1, (<span style=color:#66d9ef>void</span> <span style=color:#f92672>**</span>)<span style=color:#f92672>&amp;</span>t_return); <span style=color:#75715e>//阻塞回收子线程资源
+</span></span></span><span style=display:flex><span>    pthread_join(tid2, (<span style=color:#66d9ef>void</span> <span style=color:#f92672>**</span>)<span style=color:#f92672>&amp;</span>t_return); <span style=color:#75715e>//阻塞回收子线程资源
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//子线程的返回值保存在 t_return中
+</span></span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;son thread return %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, <span style=color:#f92672>*</span>t_return);
+</span></span><span style=display:flex><span>    pthread_mutex_destroy(<span style=color:#f92672>&amp;</span>mutex1); <span style=color:#75715e>//释放互斥量资源  不是解锁unlock
+</span></span></span><span style=display:flex><span>    pthread_mutex_destroy(<span style=color:#f92672>&amp;</span>mutex2); <span style=color:#75715e>//释放互斥量资源  不是解锁unlock
+</span></span></span><span style=display:flex><span>    pthread_exit(NULL); <span style=color:#75715e>//让主线程退出 当主线程退出时 不会影响其他正常运行的线程
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>work1</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    pthread_mutex_lock(<span style=color:#f92672>&amp;</span>mutex1);
+</span></span><span style=display:flex><span>    sleep(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    pthread_mutex_lock(<span style=color:#f92672>&amp;</span>mutex2);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;1...</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    pthread_mutex_unlock(<span style=color:#f92672>&amp;</span>mutex2);
+</span></span><span style=display:flex><span>    pthread_mutex_unlock(<span style=color:#f92672>&amp;</span>mutex1);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> NULL;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>work2</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    pthread_mutex_lock(<span style=color:#f92672>&amp;</span>mutex2);
+</span></span><span style=display:flex><span>    sleep(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    pthread_mutex_lock(<span style=color:#f92672>&amp;</span>mutex1);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;2...</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    pthread_mutex_unlock(<span style=color:#f92672>&amp;</span>mutex1);
+</span></span><span style=display:flex><span>    pthread_mutex_unlock(<span style=color:#f92672>&amp;</span>mutex2);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> NULL;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//1,2拿到1，2锁后都睡眠了1秒   这个1秒保证了在两个线程执行到第二条加锁语句时线程1，2已经都拿到了锁
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//1拿到1锁，2拿到2锁  接下来第二条加锁语句1，2线程分别想拿对方的锁但因为锁都没有释放
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//导致两个线程分别都阻塞在各自的第二条加锁语句上 出现了死锁现象
+</span></span></span></code></pre></div><p><strong>读写锁</strong></p><p>当有一个线程已经持有互斥锁时，互斥锁将所有试图进入临界区的线程都阻塞住，但是考虑一种情形，当前持有互斥锁的线程只是要读临界资源(共享资源)，而同时有其他几个线程也想读取这个临界资源，但是由于互斥锁定排它性，所有其他线程都无法获取锁，也就无法读临界资源，但是实际上多个线程同时访问读共享资源并不会导致问题。</p><p>在对数据的读写操作中，更多的是读操作，写操作较少例如数据库数据的读写应用。<strong>为了满足当前能够允许多个线程读出，但只允许一个线程写入的需求</strong>，线程提供了读写锁来实现。</p><p>读写锁的特点：</p><p><strong>如果有线程拿到锁在读数据，则允许其他线程执行读操作(读可以并发读)，但不允许写操作。</strong></p><p><strong>如果有线程拿到锁在写数据，则其它线程不允许读和写。</strong></p><p><strong>写是独占的当多个线程在竞争锁时(锁被一个线程拿了 其他线程运行到拿锁函数阻塞了 到锁被释放 则线程开始竞争锁 在这种情况时) 写锁的优先级更高，优先将锁给要写的线程</strong></p><p>读写锁还是一把锁，但是可以控制其行为</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>读写锁类型pthread_rwlock_t
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_rwlock_init(pthread_rwlock_t *restrict rwlock,
+</span></span></span><span style=display:flex><span><span style=color:#75715e>           const pthread_rwlockattr_t *restrict attr);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>初始化读写锁
+</span></span></span><span style=display:flex><span><span style=color:#75715e>rwlock 需要初始化的读写锁变量 attr 要设置的读写锁变量属性
+</span></span></span><span style=display:flex><span><span style=color:#75715e>restrict 为C语言关键字 是个修饰符
+</span></span></span><span style=display:flex><span><span style=color:#75715e>被修饰的指针 不允许别的的指针变量得到此指针地址后 对那块内存(数据)进行操作
+</span></span></span><span style=display:flex><span><span style=color:#75715e>比如 int *restrict a = xxx; int *b=a; b++ or *b = 1 or b--都不行都会报错
+</span></span></span><span style=display:flex><span><span style=color:#75715e>保证了只有的被restrict修饰的指针能对其指向的数据进行操作！！！！
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_rwlock_destroy(pthread_rwlock_t *rwlock)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>释放互斥量资源
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_rwlock_rdlock(pthread_rwlock_t *rwlock)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>上读锁 如果此时有线程拿到写锁了 将会阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_rwlock_tryrdlock(pthread_rwlock_t *rwlock)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>尝试上读锁 非阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_rwlock_wrlock(pthread_rwlock_t *rwlock)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>上写锁 会阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_rwlock_trywrlock(pthread_rwlock_t *rwlock)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>尝试上写锁 非阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_rwlock_unlock(pthread_rwlock_t *rwlock)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>读锁和写锁的解锁 就是这一个函数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>案例：8个线程操作同一全局变量 3个线程不定时写全局变量 5个线程不定时地读这个全局变量
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;pthread.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> tickets <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;         <span style=color:#75715e>//全局共享数据
+</span></span></span><span style=display:flex><span>pthread_rwlock_t rwlock; <span style=color:#75715e>//全局读写锁量
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>writeNum</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>readNum</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//初始化互斥量
+</span></span></span><span style=display:flex><span>    pthread_rwlock_init(<span style=color:#f92672>&amp;</span>rwlock, NULL);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//  创建3个子线程 主线程只用于管理系统资源
+</span></span></span><span style=display:flex><span>    pthread_t wtids[<span style=color:#ae81ff>3</span>], rtids[<span style=color:#ae81ff>5</span>]; <span style=color:#75715e>//线程数组 3个写 5个读
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>3</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>wtids[i], NULL, writeNum, NULL);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//不join了 直接将8个线程都分离 由系统回收
+</span></span></span><span style=display:flex><span>        pthread_detach(wtids[i]);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// for (int i = 0; i &lt; 3; i++)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// {
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     int ret = pthread_create(&amp;rtids[i], NULL, readNum, NULL);
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     pthread_detach(rtids[i]);
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// }
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>5</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>rtids[i], NULL, readNum, NULL);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//不join了 直接将8个线程都分离 由系统回收
+</span></span></span><span style=display:flex><span>        pthread_detach(rtids[i]);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>writeNum</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        pthread_rwlock_wrlock(<span style=color:#f92672>&amp;</span>rwlock);
+</span></span><span style=display:flex><span>        tickets<span style=color:#f92672>++</span>;
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%ld write %d </span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, pthread_self(), tickets);
+</span></span><span style=display:flex><span>        pthread_rwlock_unlock(<span style=color:#f92672>&amp;</span>rwlock);
+</span></span><span style=display:flex><span>        usleep(<span style=color:#ae81ff>1000</span>); <span style=color:#75715e>//1000微秒 1毫秒  一个写线程写过一次后 至少有1ms不参与写锁的竞争
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> NULL;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>readNum</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        pthread_rwlock_rdlock(<span style=color:#f92672>&amp;</span>rwlock); <span style=color:#75715e>// 当有线程获得读锁后 其他线程读并发 写阻塞(写线程拿不到写锁)
+</span></span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%ld read %d </span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, pthread_self(), tickets);
+</span></span><span style=display:flex><span>        pthread_rwlock_unlock(<span style=color:#f92672>&amp;</span>rwlock);
+</span></span><span style=display:flex><span>        usleep(<span style=color:#ae81ff>1000</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> NULL;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

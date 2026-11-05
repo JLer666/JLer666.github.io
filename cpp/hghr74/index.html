@@ -1,0 +1,307 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux多进程开发5 内存映射 | CantBlog</title><meta name=keywords content><meta name=description content='内存映射
+也是进程间通信的一种方式，效率相对于上面基于文件的方法更高(对内存直接操作 而非对物理磁盘操作)。内存映射(Memory-mapped I/O)是将磁盘文件的数据映射到内存，用户通过修改内存就能修改磁盘文件。
+将文件数据映射到虚拟地址空间(进程地址空间)&mdash;加载到动态库(share)的那块区域，可以根据off,len参数选择部分文件内容映射到内存中。对这块内存操作等同于对文件操作，对文件操作也等同于对内存进行修改。
+|  |
+| &mdash; |
+|  |
+| &mdash; |
+两个进程将同一磁盘文件映射到内存中，直接通过对内存的读写就能完成进程间通信。
+#include <sys/mman.h>
+void *mmap(void *addr,size_t length,int prot,int flags,int fd,off_t offset) //映射文件到内存中
+int munmap(void *addr,size_t length)//解除映射 释放映射的内存
+内存映射实现父子进程通信
+/*
+       #include <sys/mman.h>
+
+       void *mmap(void *addr, size_t length, int prot, int flags,
+                  int fd, off_t offset);
+        映射or解除映射 文件、设备 到进程虚拟地址空间
+        addr 映射内存的起始地址 传入NULL 则由内核决定(内核帮你去找一块相应大小的空间)
+
+        length 内存大小 不能为0，一般使用文件的长度。
+        获取文件的长度: stat lseek
+        分配的内存空间并不是length个字节 而是大于length且与length最接近一页内存空间大小的整数倍
+
+        prot 对申请的内存映射区的操作权限 不能与open文件的权限有冲突！！！
+        PROT_EXEC  页内存可执行
+        PROT_READ  页内存可读
+        PROT_WRITE 页内存可写
+        PROT_NONE  无对这块内存的任何权限
+        想要操作至少要有读权限、不能是单独的写权限 至少是PROT_READ|PROT_WRITE
+        flags
+        MAP_SHARED 映射区内存数据会自动与磁盘文件同步 进程间通信 必须要设置这个选项
+        MAP_PRIVATE 不同步 内存映射区的数据改变了 不会修改对应的磁盘文件而是创建一个新的文件 copy on write
+
+        fd 需要映射的文件的文件描述符   注意文件的大小不能为0！！
+        open指定的权限不能和prot有冲突  prot为PROT_READ 则之前open时给 读/读写 权限
+        prot为PROT_READ|PROT_WRITE 则之前open时给 读写 权限\
+        即prot的权限要小于等于open给的权限
+        offset 映射时的偏移量 从文件的offset个字节开始 向下length个字节的内容 映射到内存中，指定的大小必须是一页内存4k的整数倍，0表示不偏移
+
+        返回值 成功 内存映射空间的首地址 失败返回 一个宏MAP_FAILED (that is, (void *) -1)
+       int munmap(void *addr, size_t length);
+        释放映射的内存
+        addr 释放内存的首地址
+        length 空间大小 与mmap中length参数的大小一样
+        返回值 成功0 失败-1
+\*/
+/*
+文件映射
+ 有血缘关系的进程
+ 在还没fork时 创建文件 以及创建内存映射区(在进程内存空间的内核区中 fork后也是直接拷贝给子进程的)
+ fork后共享内存映射区
+匿名映射
+ 准备一个大小不是0的磁盘文件
+ 进程1 通过磁盘文件创建 内存映射区
+ 进程2 通过磁盘文件(同一文件)创建 内存映射区
+ 可以使用内存映射区通信
+ 内存映射区通信是非阻塞的！！(管道默认是阻塞的，没数据后读是阻塞的)
+\*/
+#include <sys/mman.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <stdlib.h>
+#include <unistd.h>    //acess lseek
+#include <fcntl.h>     //open
+#include <sys/types.h> //lseek
+#include <stdlib.h>
+#include <wait.h>
+int main()
+{
+    //打开文件 文件大小不要为0
+    int fd = open("mmap-parent-child-ipc", O_RDWR);
+    //获取文件大小
+    int size = lseek(fd, 0, SEEK_END); //从文件末尾 偏移0
+    //创建内存映射区
+    void *ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (ptr == MAP_FAILED) //创建失败
+    {
+        perror("mmap");
+        exit(0);
+    }
+    //文件映射
+    pid_t pid = fork();
+    if (pid > 0) //父进程
+    {
+        wait(NULL); //回收子进程 子进程没结束就一直阻塞 即等待子进程向文件写数据完成后 再向下执行
+        char buf[1024];
+        strcpy(buf, (char *)ptr); //通过strcpy从文件读数据到buf中
+        printf("data from son: %s \n");
+    }
+    else if (pid == 0) //子进程的第一次fork返回值是0
+    {
+        strcpy((char *)ptr, "hello par"); //通过strcpy向文件写数据
+    }
+    //释放映射空间
+    munmap(ptr, size);
+    return 0;
+}
+mmap调用的一些问题，'><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/hghr74/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/hghr74/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/hghr74/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux多进程开发5 内存映射"><meta property="og:description" content='内存映射
+也是进程间通信的一种方式，效率相对于上面基于文件的方法更高(对内存直接操作 而非对物理磁盘操作)。内存映射(Memory-mapped I/O)是将磁盘文件的数据映射到内存，用户通过修改内存就能修改磁盘文件。
+将文件数据映射到虚拟地址空间(进程地址空间)—加载到动态库(share)的那块区域，可以根据off,len参数选择部分文件内容映射到内存中。对这块内存操作等同于对文件操作，对文件操作也等同于对内存进行修改。
+| |
+| — |
+| |
+| — |
+两个进程将同一磁盘文件映射到内存中，直接通过对内存的读写就能完成进程间通信。
+#include <sys/mman.h> void *mmap(void *addr,size_t length,int prot,int flags,int fd,off_t offset) //映射文件到内存中 int munmap(void *addr,size_t length)//解除映射 释放映射的内存 内存映射实现父子进程通信
+/* #include <sys/mman.h> void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset); 映射or解除映射 文件、设备 到进程虚拟地址空间 addr 映射内存的起始地址 传入NULL 则由内核决定(内核帮你去找一块相应大小的空间) length 内存大小 不能为0，一般使用文件的长度。 获取文件的长度: stat lseek 分配的内存空间并不是length个字节 而是大于length且与length最接近一页内存空间大小的整数倍 prot 对申请的内存映射区的操作权限 不能与open文件的权限有冲突！！！ PROT_EXEC 页内存可执行 PROT_READ 页内存可读 PROT_WRITE 页内存可写 PROT_NONE 无对这块内存的任何权限 想要操作至少要有读权限、不能是单独的写权限 至少是PROT_READ|PROT_WRITE flags MAP_SHARED 映射区内存数据会自动与磁盘文件同步 进程间通信 必须要设置这个选项 MAP_PRIVATE 不同步 内存映射区的数据改变了 不会修改对应的磁盘文件而是创建一个新的文件 copy on write fd 需要映射的文件的文件描述符 注意文件的大小不能为0！！ open指定的权限不能和prot有冲突 prot为PROT_READ 则之前open时给 读/读写 权限 prot为PROT_READ|PROT_WRITE 则之前open时给 读写 权限\ 即prot的权限要小于等于open给的权限 offset 映射时的偏移量 从文件的offset个字节开始 向下length个字节的内容 映射到内存中，指定的大小必须是一页内存4k的整数倍，0表示不偏移 返回值 成功 内存映射空间的首地址 失败返回 一个宏MAP_FAILED (that is, (void *) -1) int munmap(void *addr, size_t length); 释放映射的内存 addr 释放内存的首地址 length 空间大小 与mmap中length参数的大小一样 返回值 成功0 失败-1 \*/ /* 文件映射 有血缘关系的进程 在还没fork时 创建文件 以及创建内存映射区(在进程内存空间的内核区中 fork后也是直接拷贝给子进程的) fork后共享内存映射区 匿名映射 准备一个大小不是0的磁盘文件 进程1 通过磁盘文件创建 内存映射区 进程2 通过磁盘文件(同一文件)创建 内存映射区 可以使用内存映射区通信 内存映射区通信是非阻塞的！！(管道默认是阻塞的，没数据后读是阻塞的) \*/ #include <sys/mman.h> #include <stdio.h> #include <sys/types.h> #include <sys/stat.h> #include <stdlib.h> #include <unistd.h> //acess lseek #include <fcntl.h> //open #include <sys/types.h> //lseek #include <stdlib.h> #include <wait.h> int main() { //打开文件 文件大小不要为0 int fd = open("mmap-parent-child-ipc", O_RDWR); //获取文件大小 int size = lseek(fd, 0, SEEK_END); //从文件末尾 偏移0 //创建内存映射区 void *ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); if (ptr == MAP_FAILED) //创建失败 { perror("mmap"); exit(0); } //文件映射 pid_t pid = fork(); if (pid > 0) //父进程 { wait(NULL); //回收子进程 子进程没结束就一直阻塞 即等待子进程向文件写数据完成后 再向下执行 char buf[1024]; strcpy(buf, (char *)ptr); //通过strcpy从文件读数据到buf中 printf("data from son: %s \n"); } else if (pid == 0) //子进程的第一次fork返回值是0 { strcpy((char *)ptr, "hello par"); //通过strcpy向文件写数据 } //释放映射空间 munmap(ptr, size); return 0; } mmap调用的一些问题，'><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-15T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux多进程开发5 内存映射"><meta name=twitter:description content='内存映射
+也是进程间通信的一种方式，效率相对于上面基于文件的方法更高(对内存直接操作 而非对物理磁盘操作)。内存映射(Memory-mapped I/O)是将磁盘文件的数据映射到内存，用户通过修改内存就能修改磁盘文件。
+将文件数据映射到虚拟地址空间(进程地址空间)—加载到动态库(share)的那块区域，可以根据off,len参数选择部分文件内容映射到内存中。对这块内存操作等同于对文件操作，对文件操作也等同于对内存进行修改。
+| |
+| — |
+| |
+| — |
+两个进程将同一磁盘文件映射到内存中，直接通过对内存的读写就能完成进程间通信。
+#include <sys/mman.h> void *mmap(void *addr,size_t length,int prot,int flags,int fd,off_t offset) //映射文件到内存中 int munmap(void *addr,size_t length)//解除映射 释放映射的内存 内存映射实现父子进程通信
+/* #include <sys/mman.h> void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset); 映射or解除映射 文件、设备 到进程虚拟地址空间 addr 映射内存的起始地址 传入NULL 则由内核决定(内核帮你去找一块相应大小的空间) length 内存大小 不能为0，一般使用文件的长度。 获取文件的长度: stat lseek 分配的内存空间并不是length个字节 而是大于length且与length最接近一页内存空间大小的整数倍 prot 对申请的内存映射区的操作权限 不能与open文件的权限有冲突！！！ PROT_EXEC 页内存可执行 PROT_READ 页内存可读 PROT_WRITE 页内存可写 PROT_NONE 无对这块内存的任何权限 想要操作至少要有读权限、不能是单独的写权限 至少是PROT_READ|PROT_WRITE flags MAP_SHARED 映射区内存数据会自动与磁盘文件同步 进程间通信 必须要设置这个选项 MAP_PRIVATE 不同步 内存映射区的数据改变了 不会修改对应的磁盘文件而是创建一个新的文件 copy on write fd 需要映射的文件的文件描述符 注意文件的大小不能为0！！ open指定的权限不能和prot有冲突 prot为PROT_READ 则之前open时给 读/读写 权限 prot为PROT_READ|PROT_WRITE 则之前open时给 读写 权限\ 即prot的权限要小于等于open给的权限 offset 映射时的偏移量 从文件的offset个字节开始 向下length个字节的内容 映射到内存中，指定的大小必须是一页内存4k的整数倍，0表示不偏移 返回值 成功 内存映射空间的首地址 失败返回 一个宏MAP_FAILED (that is, (void *) -1) int munmap(void *addr, size_t length); 释放映射的内存 addr 释放内存的首地址 length 空间大小 与mmap中length参数的大小一样 返回值 成功0 失败-1 \*/ /* 文件映射 有血缘关系的进程 在还没fork时 创建文件 以及创建内存映射区(在进程内存空间的内核区中 fork后也是直接拷贝给子进程的) fork后共享内存映射区 匿名映射 准备一个大小不是0的磁盘文件 进程1 通过磁盘文件创建 内存映射区 进程2 通过磁盘文件(同一文件)创建 内存映射区 可以使用内存映射区通信 内存映射区通信是非阻塞的！！(管道默认是阻塞的，没数据后读是阻塞的) \*/ #include <sys/mman.h> #include <stdio.h> #include <sys/types.h> #include <sys/stat.h> #include <stdlib.h> #include <unistd.h> //acess lseek #include <fcntl.h> //open #include <sys/types.h> //lseek #include <stdlib.h> #include <wait.h> int main() { //打开文件 文件大小不要为0 int fd = open("mmap-parent-child-ipc", O_RDWR); //获取文件大小 int size = lseek(fd, 0, SEEK_END); //从文件末尾 偏移0 //创建内存映射区 void *ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); if (ptr == MAP_FAILED) //创建失败 { perror("mmap"); exit(0); } //文件映射 pid_t pid = fork(); if (pid > 0) //父进程 { wait(NULL); //回收子进程 子进程没结束就一直阻塞 即等待子进程向文件写数据完成后 再向下执行 char buf[1024]; strcpy(buf, (char *)ptr); //通过strcpy从文件读数据到buf中 printf("data from son: %s \n"); } else if (pid == 0) //子进程的第一次fork返回值是0 { strcpy((char *)ptr, "hello par"); //通过strcpy向文件写数据 } //释放映射空间 munmap(ptr, size); return 0; } mmap调用的一些问题，'><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux多进程开发5 内存映射","item":"https://jler666.github.io/cpp/hghr74/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux多进程开发5 内存映射","name":"Linux多进程开发5 内存映射","description":"内存映射\n也是进程间通信的一种方式，效率相对于上面基于文件的方法更高(对内存直接操作 而非对物理磁盘操作)。内存映射(Memory-mapped I/O)是将磁盘文件的数据映射到内存，用户通过修改内存就能修改磁盘文件。\n将文件数据映射到虚拟地址空间(进程地址空间)\u0026mdash;加载到动态库(share)的那块区域，可以根据off,len参数选择部分文件内容映射到内存中。对这块内存操作等同于对文件操作，对文件操作也等同于对内存进行修改。\n| |\n| \u0026mdash; |\n| |\n| \u0026mdash; |\n两个进程将同一磁盘文件映射到内存中，直接通过对内存的读写就能完成进程间通信。\n#include \u0026lt;sys/mman.h\u0026gt; void *mmap(void *addr,size_t length,int prot,int flags,int fd,off_t offset) //映射文件到内存中 int munmap(void *addr,size_t length)//解除映射 释放映射的内存 内存映射实现父子进程通信\n/* #include \u0026lt;sys/mman.h\u0026gt; void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset); 映射or解除映射 文件、设备 到进程虚拟地址空间 addr 映射内存的起始地址 传入NULL 则由内核决定(内核帮你去找一块相应大小的空间) length 内存大小 不能为0，一般使用文件的长度。 获取文件的长度: stat lseek 分配的内存空间并不是length个字节 而是大于length且与length最接近一页内存空间大小的整数倍 prot 对申请的内存映射区的操作权限 不能与open文件的权限有冲突！！！ PROT_EXEC 页内存可执行 PROT_READ 页内存可读 PROT_WRITE 页内存可写 PROT_NONE 无对这块内存的任何权限 想要操作至少要有读权限、不能是单独的写权限 至少是PROT_READ|PROT_WRITE flags MAP_SHARED 映射区内存数据会自动与磁盘文件同步 进程间通信 必须要设置这个选项 MAP_PRIVATE 不同步 内存映射区的数据改变了 不会修改对应的磁盘文件而是创建一个新的文件 copy on write fd 需要映射的文件的文件描述符 注意文件的大小不能为0！！ open指定的权限不能和prot有冲突 prot为PROT_READ 则之前open时给 读/读写 权限 prot为PROT_READ|PROT_WRITE 则之前open时给 读写 权限\\ 即prot的权限要小于等于open给的权限 offset 映射时的偏移量 从文件的offset个字节开始 向下length个字节的内容 映射到内存中，指定的大小必须是一页内存4k的整数倍，0表示不偏移 返回值 成功 内存映射空间的首地址 失败返回 一个宏MAP_FAILED (that is, (void *) -1) int munmap(void *addr, size_t length); 释放映射的内存 addr 释放内存的首地址 length 空间大小 与mmap中length参数的大小一样 返回值 成功0 失败-1 \\*/ /* 文件映射 有血缘关系的进程 在还没fork时 创建文件 以及创建内存映射区(在进程内存空间的内核区中 fork后也是直接拷贝给子进程的) fork后共享内存映射区 匿名映射 准备一个大小不是0的磁盘文件 进程1 通过磁盘文件创建 内存映射区 进程2 通过磁盘文件(同一文件)创建 内存映射区 可以使用内存映射区通信 内存映射区通信是非阻塞的！！(管道默认是阻塞的，没数据后读是阻塞的) \\*/ #include \u0026lt;sys/mman.h\u0026gt; #include \u0026lt;stdio.h\u0026gt; #include \u0026lt;sys/types.h\u0026gt; #include \u0026lt;sys/stat.h\u0026gt; #include \u0026lt;stdlib.h\u0026gt; #include \u0026lt;unistd.h\u0026gt; //acess lseek #include \u0026lt;fcntl.h\u0026gt; //open #include \u0026lt;sys/types.h\u0026gt; //lseek #include \u0026lt;stdlib.h\u0026gt; #include \u0026lt;wait.h\u0026gt; int main() { //打开文件 文件大小不要为0 int fd = open(\u0026#34;mmap-parent-child-ipc\u0026#34;, O_RDWR); //获取文件大小 int size = lseek(fd, 0, SEEK_END); //从文件末尾 偏移0 //创建内存映射区 void *ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); if (ptr == MAP_FAILED) //创建失败 { perror(\u0026#34;mmap\u0026#34;); exit(0); } //文件映射 pid_t pid = fork(); if (pid \u0026gt; 0) //父进程 { wait(NULL); //回收子进程 子进程没结束就一直阻塞 即等待子进程向文件写数据完成后 再向下执行 char buf[1024]; strcpy(buf, (char *)ptr); //通过strcpy从文件读数据到buf中 printf(\u0026#34;data from son: %s \\n\u0026#34;); } else if (pid == 0) //子进程的第一次fork返回值是0 { strcpy((char *)ptr, \u0026#34;hello par\u0026#34;); //通过strcpy向文件写数据 } //释放映射空间 munmap(ptr, size); return 0; } mmap调用的一些问题，\n","keywords":[],"articleBody":"内存映射\n也是进程间通信的一种方式，效率相对于上面基于文件的方法更高(对内存直接操作 而非对物理磁盘操作)。内存映射(Memory-mapped I/O)是将磁盘文件的数据映射到内存，用户通过修改内存就能修改磁盘文件。\n将文件数据映射到虚拟地址空间(进程地址空间)—加载到动态库(share)的那块区域，可以根据off,len参数选择部分文件内容映射到内存中。对这块内存操作等同于对文件操作，对文件操作也等同于对内存进行修改。\n| |\n| — |\n| |\n| — |\n两个进程将同一磁盘文件映射到内存中，直接通过对内存的读写就能完成进程间通信。\n#include void *mmap(void *addr,size_t length,int prot,int flags,int fd,off_t offset) //映射文件到内存中 int munmap(void *addr,size_t length)//解除映射 释放映射的内存 内存映射实现父子进程通信\n/* #include void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset); 映射or解除映射 文件、设备 到进程虚拟地址空间 addr 映射内存的起始地址 传入NULL 则由内核决定(内核帮你去找一块相应大小的空间) length 内存大小 不能为0，一般使用文件的长度。 获取文件的长度: stat lseek 分配的内存空间并不是length个字节 而是大于length且与length最接近一页内存空间大小的整数倍 prot 对申请的内存映射区的操作权限 不能与open文件的权限有冲突！！！ PROT_EXEC 页内存可执行 PROT_READ 页内存可读 PROT_WRITE 页内存可写 PROT_NONE 无对这块内存的任何权限 想要操作至少要有读权限、不能是单独的写权限 至少是PROT_READ|PROT_WRITE flags MAP_SHARED 映射区内存数据会自动与磁盘文件同步 进程间通信 必须要设置这个选项 MAP_PRIVATE 不同步 内存映射区的数据改变了 不会修改对应的磁盘文件而是创建一个新的文件 copy on write fd 需要映射的文件的文件描述符 注意文件的大小不能为0！！ open指定的权限不能和prot有冲突 prot为PROT_READ 则之前open时给 读/读写 权限 prot为PROT_READ|PROT_WRITE 则之前open时给 读写 权限\\ 即prot的权限要小于等于open给的权限 offset 映射时的偏移量 从文件的offset个字节开始 向下length个字节的内容 映射到内存中，指定的大小必须是一页内存4k的整数倍，0表示不偏移 返回值 成功 内存映射空间的首地址 失败返回 一个宏MAP_FAILED (that is, (void *) -1) int munmap(void *addr, size_t length); 释放映射的内存 addr 释放内存的首地址 length 空间大小 与mmap中length参数的大小一样 返回值 成功0 失败-1 \\*/ /* 文件映射 有血缘关系的进程 在还没fork时 创建文件 以及创建内存映射区(在进程内存空间的内核区中 fork后也是直接拷贝给子进程的) fork后共享内存映射区 匿名映射 准备一个大小不是0的磁盘文件 进程1 通过磁盘文件创建 内存映射区 进程2 通过磁盘文件(同一文件)创建 内存映射区 可以使用内存映射区通信 内存映射区通信是非阻塞的！！(管道默认是阻塞的，没数据后读是阻塞的) \\*/ #include #include #include #include #include #include //acess lseek #include //open #include //lseek #include #include int main() { //打开文件 文件大小不要为0 int fd = open(\"mmap-parent-child-ipc\", O_RDWR); //获取文件大小 int size = lseek(fd, 0, SEEK_END); //从文件末尾 偏移0 //创建内存映射区 void *ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); if (ptr == MAP_FAILED) //创建失败 { perror(\"mmap\"); exit(0); } //文件映射 pid_t pid = fork(); if (pid \u003e 0) //父进程 { wait(NULL); //回收子进程 子进程没结束就一直阻塞 即等待子进程向文件写数据完成后 再向下执行 char buf[1024]; strcpy(buf, (char *)ptr); //通过strcpy从文件读数据到buf中 printf(\"data from son: %s \\n\"); } else if (pid == 0) //子进程的第一次fork返回值是0 { strcpy((char *)ptr, \"hello par\"); //通过strcpy向文件写数据 } //释放映射空间 munmap(ptr, size); return 0; } mmap调用的一些问题，\n1如果对mmap的返回值(内存映射空间的首地址)ptr做++,那么释放时munmap(ptr,size)是否能够成功\n无法成功 size是完整空间的大小\n2如果open时O_RDONLY,mmap时prot参数指定PROT_READ|PROT_WRITE会怎样\n错误，mmap返回MAP_FAILED(void*)-1 prot权限\u003c=open时给的文件权限\n3文件偏移量offset为1000\n偏移量必须是4k的整数倍，会返回MAP_FAILED\n4 mmap什么情况下调用失败\n(1)第二个参数 length = 0\n(2)prot权限\u003eopen时给fd的文件权限\n(3)prot只给了写权限\n(4)3\n5 可以在open的时候O_CREAT一个新文件,此新文件的fd用于mmap来创建映射区吗\n可以 但是创建文件的大小如果为0 肯定不行\n可用lseek或truncate拓展新文件的大小\n6 mmap后关闭文件描述符fd 对mmap映射有什么影响\nint fd = open(…);\nvoid *ptr = mmap(….,fd,.);\nclose(fd);\nclose后对ptr这块空间做操作，映射区还在但是创建映射区的fd被关闭了 无影响\n关闭文件描述符不取消映射的区域\n内存映射复制文件\n| |\n| — |\n//将两个txt文件映射到内存中 并将其中一个文件拷贝到另一个文件中 //注意内存映射一般不做文件拷贝 因为文件太大 比如几个G内存会爆掉 #include #include #include #include #include #include //acess lseek #include //open #include //lseek #include #include #include int main() { // 1对原始文件进行内存映射 int fd = open(\"mmap-parent-child-ipc\", O_RDWR); int len = lseek(fd, 0, SEEK_END); //获取原始文件大小 void *ptr = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); if (ptr == MAP_FAILED) { perror(\"mmap:\"); return -1; } // 2创建一个新的文件 int newfd = open(\"becopy.txt\", O_RDWR | O_CREAT, 0664); // 3拓展新文件大小 truncate(\"becopy.txt\", len); write(newfd, \"\", 1); //文件大小拓展后需要写一下才能实现 // 4把新文件的数据映射到内存中 void *newptr = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_SHARED, newfd, 0); if (newptr == MAP_FAILED) { perror(\"mmap:\"); return -1; } // 5通过内存拷贝将原始文件的内存数据 拷贝到新的文件中 memcpy(newptr, newptr, len); //string.h 拷贝目的地，拷贝源，大小 // 6释放资源 munmap(newptr, len); munmap(ptr, len); close(newfd); close(fd); return 0; } 匿名映射\n/* 匿名映射 不需要通过文件实体来进行内存映射 之前的都是文件映射 文件映射可用于进程间有或没有关系都可以 匿名映射必须在进程间有关系才可以 \\*/ #include #include #include #include #include #include //acess lseek #include //open #include //lseek #include #include int main() { //创建内存映射区 //MAP_ANONYMOUS匿名映射 此种内存映射不需要任何文件支持 内存中的数据都被初始化为0 // fd参数指定了也会被忽略(有些实现需要指定fd为-1) offset 必须是0 int size = 4096; void *ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0); if (ptr == MAP_FAILED) //创建失败 { perror(\"mmap:\"); exit(-1); } //父子进程间通信 pid_t pid = fork(); if (pid \u003e 0) //父 { //父进程先写 写完等待子进程结束 并回收子进程资源 strcpy((char *)ptr, \"hello\"); wait(NULL); } else if (pid == 0) //子 { //读数据 //因为内存映射区通信是非阻塞的在没写完之前 读到的为空 所以要先等待父进程写完 sleep(1); printf(\"%s\\n\", (char *)ptr); } //释放映射空间 munmap(ptr, size); return 0; } ","wordCount":"544","inLanguage":"en","datePublished":"2022-03-15T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/hghr74/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux多进程开发5 内存映射</h1><div class=post-meta><span title=2022-03-15T00:00:00+00:00>创建于 2022-03-15</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>内存映射</strong></p><p><strong>也是进程间通信的一种方式，效率相对于上面基于文件的方法更高</strong>(对内存直接操作 而非对物理磁盘操作)。内存映射(Memory-mapped I/O)是将磁盘文件的数据映射到内存，用户通过修改内存就能修改磁盘文件。</p><p>将文件数据映射到虚拟地址空间(进程地址空间)&mdash;加载到动态库(share)的那块区域，可以根据off,len参数选择部分文件内容映射到内存中。对这块内存操作等同于对文件操作，对文件操作也等同于对内存进行修改。</p><p>| <img alt=1647313232140-f4820091-60ed-4325-9865-e80ba594a343.png loading=lazy src=/images/bZnWMr3JoDkVVguH/1647313232140-f4820091-60ed-4325-9865-e80ba594a343-670970.png> |</p><p>| &mdash; |</p><p>| <img alt=1647313232705-46ee30a6-ccd3-4fdd-bb26-0c6a6b236aff.png loading=lazy src=/images/bZnWMr3JoDkVVguH/1647313232705-46ee30a6-ccd3-4fdd-bb26-0c6a6b236aff-439303.png> |</p><p>| &mdash; |</p><p>两个进程将同一磁盘文件映射到内存中，直接通过对内存的读写就能完成进程间通信。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/mman.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>mmap(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>addr,size_t length,<span style=color:#66d9ef>int</span> prot,<span style=color:#66d9ef>int</span> flags,<span style=color:#66d9ef>int</span> fd,off_t offset) <span style=color:#75715e>//映射文件到内存中
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> munmap(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>addr,size_t length)<span style=color:#75715e>//解除映射 释放映射的内存
+</span></span></span></code></pre></div><p>内存映射实现父子进程通信</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/mman.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       void *mmap(void *addr, size_t length, int prot, int flags,
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                  int fd, off_t offset);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        映射or解除映射 文件、设备 到进程虚拟地址空间
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        addr 映射内存的起始地址 传入NULL 则由内核决定(内核帮你去找一块相应大小的空间)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        length 内存大小 不能为0，一般使用文件的长度。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        获取文件的长度: stat lseek
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        分配的内存空间并不是length个字节 而是大于length且与length最接近一页内存空间大小的整数倍
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        prot 对申请的内存映射区的操作权限 不能与open文件的权限有冲突！！！
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        PROT_EXEC  页内存可执行
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        PROT_READ  页内存可读
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        PROT_WRITE 页内存可写
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        PROT_NONE  无对这块内存的任何权限
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        想要操作至少要有读权限、不能是单独的写权限 至少是PROT_READ|PROT_WRITE
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        flags
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        MAP_SHARED 映射区内存数据会自动与磁盘文件同步 进程间通信 必须要设置这个选项
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        MAP_PRIVATE 不同步 内存映射区的数据改变了 不会修改对应的磁盘文件而是创建一个新的文件 copy on write
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        fd 需要映射的文件的文件描述符   注意文件的大小不能为0！！
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        open指定的权限不能和prot有冲突  prot为PROT_READ 则之前open时给 读/读写 权限
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        prot为PROT_READ|PROT_WRITE 则之前open时给 读写 权限\
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        即prot的权限要小于等于open给的权限
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        offset 映射时的偏移量 从文件的offset个字节开始 向下length个字节的内容 映射到内存中，指定的大小必须是一页内存4k的整数倍，0表示不偏移
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        返回值 成功 内存映射空间的首地址 失败返回 一个宏MAP_FAILED (that is, (void *) -1)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int munmap(void *addr, size_t length);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        释放映射的内存
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        addr 释放内存的首地址
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        length 空间大小 与mmap中length参数的大小一样
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        返回值 成功0 失败-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>文件映射
+</span></span></span><span style=display:flex><span><span style=color:#75715e> 有血缘关系的进程
+</span></span></span><span style=display:flex><span><span style=color:#75715e> 在还没fork时 创建文件 以及创建内存映射区(在进程内存空间的内核区中 fork后也是直接拷贝给子进程的)
+</span></span></span><span style=display:flex><span><span style=color:#75715e> fork后共享内存映射区
+</span></span></span><span style=display:flex><span><span style=color:#75715e>匿名映射
+</span></span></span><span style=display:flex><span><span style=color:#75715e> 准备一个大小不是0的磁盘文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e> 进程1 通过磁盘文件创建 内存映射区
+</span></span></span><span style=display:flex><span><span style=color:#75715e> 进程2 通过磁盘文件(同一文件)创建 内存映射区
+</span></span></span><span style=display:flex><span><span style=color:#75715e> 可以使用内存映射区通信
+</span></span></span><span style=display:flex><span><span style=color:#75715e> 内存映射区通信是非阻塞的！！(管道默认是阻塞的，没数据后读是阻塞的)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/mman.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>    </span><span style=color:#75715e>//acess lseek
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>     </span><span style=color:#75715e>//open
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//lseek
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;wait.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//打开文件 文件大小不要为0
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;mmap-parent-child-ipc&#34;</span>, O_RDWR);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//获取文件大小
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> size <span style=color:#f92672>=</span> lseek(fd, <span style=color:#ae81ff>0</span>, SEEK_END); <span style=color:#75715e>//从文件末尾 偏移0
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//创建内存映射区
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>ptr <span style=color:#f92672>=</span> mmap(NULL, size, PROT_READ <span style=color:#f92672>|</span> PROT_WRITE, MAP_SHARED, fd, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ptr <span style=color:#f92672>==</span> MAP_FAILED) <span style=color:#75715e>//创建失败
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;mmap&#34;</span>);
+</span></span><span style=display:flex><span>        exit(<span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//文件映射
+</span></span></span><span style=display:flex><span>    pid_t pid <span style=color:#f92672>=</span> fork();
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//父进程
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        wait(NULL); <span style=color:#75715e>//回收子进程 子进程没结束就一直阻塞 即等待子进程向文件写数据完成后 再向下执行
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>1024</span>];
+</span></span><span style=display:flex><span>        strcpy(buf, (<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>)ptr); <span style=color:#75715e>//通过strcpy从文件读数据到buf中
+</span></span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;data from son: %s </span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//子进程的第一次fork返回值是0
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        strcpy((<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>)ptr, <span style=color:#e6db74>&#34;hello par&#34;</span>); <span style=color:#75715e>//通过strcpy向文件写数据
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//释放映射空间
+</span></span></span><span style=display:flex><span>    munmap(ptr, size);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>mmap调用的一些问题，</p><p>1如果对mmap的返回值(内存映射空间的首地址)ptr做++,那么释放时munmap(ptr,size)是否能够成功</p><p>无法成功 size是完整空间的大小</p><p>2如果open时O_RDONLY,mmap时prot参数指定PROT_READ|PROT_WRITE会怎样</p><p>错误，mmap返回MAP_FAILED(void*)-1 prot权限&lt;=open时给的文件权限</p><p>3文件偏移量offset为1000</p><p>偏移量必须是4k的整数倍，会返回MAP_FAILED</p><p>4 mmap什么情况下调用失败</p><p>(1)第二个参数 length = 0</p><p>(2)prot权限>open时给fd的文件权限</p><p>(3)prot只给了写权限</p><p>(4)3</p><p>5 可以在open的时候O_CREAT一个新文件,此新文件的fd用于mmap来创建映射区吗</p><p>可以 但是创建文件的大小如果为0 肯定不行</p><p>可用lseek或truncate拓展新文件的大小</p><p>6 mmap后关闭文件描述符fd 对mmap映射有什么影响</p><p>int fd = open(&mldr;);</p><p>void *ptr = mmap(&mldr;.,fd,.);</p><p>close(fd);</p><p>close后对ptr这块空间做操作，映射区还在但是创建映射区的fd被关闭了 无影响</p><p>关闭文件描述符不取消映射的区域</p><p>内存映射复制文件</p><p>| <img alt=1647313233699-1e94336e-05f9-4b8b-ad7c-3b5096f331e0.png loading=lazy src=/images/bZnWMr3JoDkVVguH/1647313233699-1e94336e-05f9-4b8b-ad7c-3b5096f331e0-921167.png> |</p><p>| &mdash; |</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>//将两个txt文件映射到内存中 并将其中一个文件拷贝到另一个文件中
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//注意内存映射一般不做文件拷贝 因为文件太大 比如几个G内存会爆掉
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/mman.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>    </span><span style=color:#75715e>//acess lseek
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>     </span><span style=color:#75715e>//open
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//lseek
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;wait.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 1对原始文件进行内存映射
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;mmap-parent-child-ipc&#34;</span>, O_RDWR);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> lseek(fd, <span style=color:#ae81ff>0</span>, SEEK_END); <span style=color:#75715e>//获取原始文件大小
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>ptr <span style=color:#f92672>=</span> mmap(NULL, len, PROT_READ <span style=color:#f92672>|</span> PROT_WRITE, MAP_SHARED, fd, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ptr <span style=color:#f92672>==</span> MAP_FAILED)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;mmap:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 2创建一个新的文件
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> newfd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;becopy.txt&#34;</span>, O_RDWR <span style=color:#f92672>|</span> O_CREAT, <span style=color:#ae81ff>0664</span>);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 3拓展新文件大小
+</span></span></span><span style=display:flex><span>    truncate(<span style=color:#e6db74>&#34;becopy.txt&#34;</span>, len);
+</span></span><span style=display:flex><span>    write(newfd, <span style=color:#e6db74>&#34;&#34;</span>, <span style=color:#ae81ff>1</span>); <span style=color:#75715e>//文件大小拓展后需要写一下才能实现
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 4把新文件的数据映射到内存中
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>newptr <span style=color:#f92672>=</span> mmap(NULL, len, PROT_READ <span style=color:#f92672>|</span> PROT_WRITE, MAP_SHARED, newfd, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (newptr <span style=color:#f92672>==</span> MAP_FAILED)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;mmap:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 5通过内存拷贝将原始文件的内存数据 拷贝到新的文件中
+</span></span></span><span style=display:flex><span>    memcpy(newptr, newptr, len); <span style=color:#75715e>//string.h 拷贝目的地，拷贝源，大小
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 6释放资源
+</span></span></span><span style=display:flex><span>    munmap(newptr, len);
+</span></span><span style=display:flex><span>    munmap(ptr, len);
+</span></span><span style=display:flex><span>    close(newfd);
+</span></span><span style=display:flex><span>    close(fd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>匿名映射</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    匿名映射 不需要通过文件实体来进行内存映射
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    之前的都是文件映射 文件映射可用于进程间有或没有关系都可以
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    匿名映射必须在进程间有关系才可以
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/mman.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>    </span><span style=color:#75715e>//acess lseek
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>     </span><span style=color:#75715e>//open
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//lseek
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;wait.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建内存映射区
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//MAP_ANONYMOUS匿名映射 此种内存映射不需要任何文件支持 内存中的数据都被初始化为0
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// fd参数指定了也会被忽略(有些实现需要指定fd为-1) offset 必须是0
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> size <span style=color:#f92672>=</span> <span style=color:#ae81ff>4096</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>ptr <span style=color:#f92672>=</span> mmap(NULL, size, PROT_READ <span style=color:#f92672>|</span> PROT_WRITE, MAP_SHARED <span style=color:#f92672>|</span> MAP_ANONYMOUS, <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ptr <span style=color:#f92672>==</span> MAP_FAILED) <span style=color:#75715e>//创建失败
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;mmap:&#34;</span>);
+</span></span><span style=display:flex><span>        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//父子进程间通信
+</span></span></span><span style=display:flex><span>    pid_t pid <span style=color:#f92672>=</span> fork();
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//父
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//父进程先写 写完等待子进程结束 并回收子进程资源
+</span></span></span><span style=display:flex><span>        strcpy((<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>)ptr, <span style=color:#e6db74>&#34;hello&#34;</span>);
+</span></span><span style=display:flex><span>        wait(NULL);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//子
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//读数据
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//因为内存映射区通信是非阻塞的在没写完之前 读到的为空 所以要先等待父进程写完
+</span></span></span><span style=display:flex><span>        sleep(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, (<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>)ptr);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//释放映射空间
+</span></span></span><span style=display:flex><span>    munmap(ptr, size);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

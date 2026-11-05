@@ -1,0 +1,404 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux网络编程8 UDP,socket本地通信 | CantBlog</title><meta name=keywords content><meta name=description content='UDP通信实现
+通信前无三次握手建立连接不需要创建监听套接字直接创建通信的套接字。
+
+send/recv用于tcp  sendto/recvfrom用于udp
+#include <sys/types.h>
+#include <sys/socket.h>
+ssize_t sendto(int sockfd,const void*buf,size_t len,int flags,const struct sockaddr* dest_addr,socklen_t* addrlen);
+//sockfd UDP通信的fd
+//buf 要发送的数据
+//len 要发送的数据长度
+//flags 一些配置去看man 可以直接给0
+//dest_addr 目的地址 sockaddr类型填端口号+IP地址
+//addrlen   dest_addr的大小(和recvfrom不一样 那个是要求指针)
+//成功返回发送的字节数量失败返回-1
+ssize_t recvfrom(int sockfd,const void*buf,size_t len,int flags,struct sockaddr* src_addr,socklen_t *addrlen);
+//sockfd UDP通信的fd
+//buf 接收数据的buffer
+//len 接收buffer的大小
+//flags 一些配置去看man 可以直接给0
+//src_addr 从哪接收 sockaddr类型 是传出参数 可以通过这个参数看到是哪个客户端给我发消息
+//addrlen   src_addr大小的指针 src_addr为NULL 这个长度也要为NULL
+//成功返回接收的字节数量失败返回-1
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <string.h>
+#include <sys/types.h>
+
+int main()
+{
+    //1创建UDP socket
+    int cfd = socket(PF_INET, SOCK_DGRAM, 0); //udp SOCK_DGRAM tcp SOCK_STREAM
+    //2 绑定
+    struct sockaddr_in saddr;
+    saddr.sin_port = htons(9999);
+    saddr.sin_family = AF_INET;
+    saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip
+    int ret = bind(cfd, (struct sockaddr *)&amp;saddr, sizeof(saddr));
+    if (ret == -1)
+    {
+        perror("bind:");
+        exit(-1);
+    }
+    //3 通信
+    while (1)
+    {
+        char recvbuf[128];
+        struct sockaddr_in client_addr;
+        int len = sizeof(client_addr);
+        int recv_num = recvfrom(cfd, recvbuf, sizeof(recvbuf), 0, (struct sockaddr *)&amp;client_addr, &amp;len); //client_addr是传出参数 将传出是从哪个客户端收到数据
+        if (recv_num == -1)                                                                               //出错
+        {
+            perror("recvfrom:");
+            exit(-1);
+        }
+        else
+        {
+            char ipbuf[16]; //传出参数 将转换后的字符串传出 inet_ntop的返回值也是这个传出参数
+            printf("server recv from ip:%s port:%d  %d bytes\n",
+                   inet_ntop(AF_INET, &amp;client_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)),
+                   ntohs(client_addr.sin_port),
+                   recv_num);
+            printf("server recv data:%s", recvbuf);
+            //发送数据
+            sendto(cfd, recvbuf, strlen(recvbuf) + 1, 0, (struct sockaddr *)&amp;client_addr, sizeof(client_addr)); //回显 将收到的数据原封不动发回去
+        }
+    }
+    close(cfd);
+    return 0;
+}
+广播'><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/bly3mo/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/bly3mo/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/bly3mo/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux网络编程8 UDP,socket本地通信"><meta property="og:description" content='UDP通信实现
+通信前无三次握手建立连接不需要创建监听套接字直接创建通信的套接字。
+send/recv用于tcp sendto/recvfrom用于udp
+#include <sys/types.h> #include <sys/socket.h> ssize_t sendto(int sockfd,const void*buf,size_t len,int flags,const struct sockaddr* dest_addr,socklen_t* addrlen); //sockfd UDP通信的fd //buf 要发送的数据 //len 要发送的数据长度 //flags 一些配置去看man 可以直接给0 //dest_addr 目的地址 sockaddr类型填端口号+IP地址 //addrlen dest_addr的大小(和recvfrom不一样 那个是要求指针) //成功返回发送的字节数量失败返回-1 ssize_t recvfrom(int sockfd,const void*buf,size_t len,int flags,struct sockaddr* src_addr,socklen_t *addrlen); //sockfd UDP通信的fd //buf 接收数据的buffer //len 接收buffer的大小 //flags 一些配置去看man 可以直接给0 //src_addr 从哪接收 sockaddr类型 是传出参数 可以通过这个参数看到是哪个客户端给我发消息 //addrlen src_addr大小的指针 src_addr为NULL 这个长度也要为NULL //成功返回接收的字节数量失败返回-1 #include <unistd.h> #include <arpa/inet.h> #include <string.h> #include <sys/types.h> int main() { //1创建UDP socket int cfd = socket(PF_INET, SOCK_DGRAM, 0); //udp SOCK_DGRAM tcp SOCK_STREAM //2 绑定 struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip int ret = bind(cfd, (struct sockaddr *)&amp;saddr, sizeof(saddr)); if (ret == -1) { perror("bind:"); exit(-1); } //3 通信 while (1) { char recvbuf[128]; struct sockaddr_in client_addr; int len = sizeof(client_addr); int recv_num = recvfrom(cfd, recvbuf, sizeof(recvbuf), 0, (struct sockaddr *)&amp;client_addr, &amp;len); //client_addr是传出参数 将传出是从哪个客户端收到数据 if (recv_num == -1) //出错 { perror("recvfrom:"); exit(-1); } else { char ipbuf[16]; //传出参数 将转换后的字符串传出 inet_ntop的返回值也是这个传出参数 printf("server recv from ip:%s port:%d %d bytes\n", inet_ntop(AF_INET, &amp;client_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)), ntohs(client_addr.sin_port), recv_num); printf("server recv data:%s", recvbuf); //发送数据 sendto(cfd, recvbuf, strlen(recvbuf) + 1, 0, (struct sockaddr *)&amp;client_addr, sizeof(client_addr)); //回显 将收到的数据原封不动发回去 } } close(cfd); return 0; } 广播'><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-24T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux网络编程8 UDP,socket本地通信"><meta name=twitter:description content='UDP通信实现
+通信前无三次握手建立连接不需要创建监听套接字直接创建通信的套接字。
+send/recv用于tcp sendto/recvfrom用于udp
+#include <sys/types.h> #include <sys/socket.h> ssize_t sendto(int sockfd,const void*buf,size_t len,int flags,const struct sockaddr* dest_addr,socklen_t* addrlen); //sockfd UDP通信的fd //buf 要发送的数据 //len 要发送的数据长度 //flags 一些配置去看man 可以直接给0 //dest_addr 目的地址 sockaddr类型填端口号+IP地址 //addrlen dest_addr的大小(和recvfrom不一样 那个是要求指针) //成功返回发送的字节数量失败返回-1 ssize_t recvfrom(int sockfd,const void*buf,size_t len,int flags,struct sockaddr* src_addr,socklen_t *addrlen); //sockfd UDP通信的fd //buf 接收数据的buffer //len 接收buffer的大小 //flags 一些配置去看man 可以直接给0 //src_addr 从哪接收 sockaddr类型 是传出参数 可以通过这个参数看到是哪个客户端给我发消息 //addrlen src_addr大小的指针 src_addr为NULL 这个长度也要为NULL //成功返回接收的字节数量失败返回-1 #include <unistd.h> #include <arpa/inet.h> #include <string.h> #include <sys/types.h> int main() { //1创建UDP socket int cfd = socket(PF_INET, SOCK_DGRAM, 0); //udp SOCK_DGRAM tcp SOCK_STREAM //2 绑定 struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip int ret = bind(cfd, (struct sockaddr *)&amp;saddr, sizeof(saddr)); if (ret == -1) { perror("bind:"); exit(-1); } //3 通信 while (1) { char recvbuf[128]; struct sockaddr_in client_addr; int len = sizeof(client_addr); int recv_num = recvfrom(cfd, recvbuf, sizeof(recvbuf), 0, (struct sockaddr *)&amp;client_addr, &amp;len); //client_addr是传出参数 将传出是从哪个客户端收到数据 if (recv_num == -1) //出错 { perror("recvfrom:"); exit(-1); } else { char ipbuf[16]; //传出参数 将转换后的字符串传出 inet_ntop的返回值也是这个传出参数 printf("server recv from ip:%s port:%d %d bytes\n", inet_ntop(AF_INET, &amp;client_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)), ntohs(client_addr.sin_port), recv_num); printf("server recv data:%s", recvbuf); //发送数据 sendto(cfd, recvbuf, strlen(recvbuf) + 1, 0, (struct sockaddr *)&amp;client_addr, sizeof(client_addr)); //回显 将收到的数据原封不动发回去 } } close(cfd); return 0; } 广播'><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux网络编程8 UDP,socket本地通信","item":"https://jler666.github.io/cpp/bly3mo/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux网络编程8 UDP,socket本地通信","name":"Linux网络编程8 UDP,socket本地通信","description":"UDP通信实现\n通信前无三次握手建立连接不需要创建监听套接字直接创建通信的套接字。\nsend/recv用于tcp sendto/recvfrom用于udp\n#include \u0026lt;sys/types.h\u0026gt; #include \u0026lt;sys/socket.h\u0026gt; ssize_t sendto(int sockfd,const void*buf,size_t len,int flags,const struct sockaddr* dest_addr,socklen_t* addrlen); //sockfd UDP通信的fd //buf 要发送的数据 //len 要发送的数据长度 //flags 一些配置去看man 可以直接给0 //dest_addr 目的地址 sockaddr类型填端口号+IP地址 //addrlen dest_addr的大小(和recvfrom不一样 那个是要求指针) //成功返回发送的字节数量失败返回-1 ssize_t recvfrom(int sockfd,const void*buf,size_t len,int flags,struct sockaddr* src_addr,socklen_t *addrlen); //sockfd UDP通信的fd //buf 接收数据的buffer //len 接收buffer的大小 //flags 一些配置去看man 可以直接给0 //src_addr 从哪接收 sockaddr类型 是传出参数 可以通过这个参数看到是哪个客户端给我发消息 //addrlen src_addr大小的指针 src_addr为NULL 这个长度也要为NULL //成功返回接收的字节数量失败返回-1 #include \u0026lt;unistd.h\u0026gt; #include \u0026lt;arpa/inet.h\u0026gt; #include \u0026lt;string.h\u0026gt; #include \u0026lt;sys/types.h\u0026gt; int main() { //1创建UDP socket int cfd = socket(PF_INET, SOCK_DGRAM, 0); //udp SOCK_DGRAM tcp SOCK_STREAM //2 绑定 struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip int ret = bind(cfd, (struct sockaddr *)\u0026amp;saddr, sizeof(saddr)); if (ret == -1) { perror(\u0026#34;bind:\u0026#34;); exit(-1); } //3 通信 while (1) { char recvbuf[128]; struct sockaddr_in client_addr; int len = sizeof(client_addr); int recv_num = recvfrom(cfd, recvbuf, sizeof(recvbuf), 0, (struct sockaddr *)\u0026amp;client_addr, \u0026amp;len); //client_addr是传出参数 将传出是从哪个客户端收到数据 if (recv_num == -1) //出错 { perror(\u0026#34;recvfrom:\u0026#34;); exit(-1); } else { char ipbuf[16]; //传出参数 将转换后的字符串传出 inet_ntop的返回值也是这个传出参数 printf(\u0026#34;server recv from ip:%s port:%d %d bytes\\n\u0026#34;, inet_ntop(AF_INET, \u0026amp;client_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)), ntohs(client_addr.sin_port), recv_num); printf(\u0026#34;server recv data:%s\u0026#34;, recvbuf); //发送数据 sendto(cfd, recvbuf, strlen(recvbuf) + 1, 0, (struct sockaddr *)\u0026amp;client_addr, sizeof(client_addr)); //回显 将收到的数据原封不动发回去 } } close(cfd); return 0; } 广播\n","keywords":[],"articleBody":"UDP通信实现\n通信前无三次握手建立连接不需要创建监听套接字直接创建通信的套接字。\nsend/recv用于tcp sendto/recvfrom用于udp\n#include #include ssize_t sendto(int sockfd,const void*buf,size_t len,int flags,const struct sockaddr* dest_addr,socklen_t* addrlen); //sockfd UDP通信的fd //buf 要发送的数据 //len 要发送的数据长度 //flags 一些配置去看man 可以直接给0 //dest_addr 目的地址 sockaddr类型填端口号+IP地址 //addrlen dest_addr的大小(和recvfrom不一样 那个是要求指针) //成功返回发送的字节数量失败返回-1 ssize_t recvfrom(int sockfd,const void*buf,size_t len,int flags,struct sockaddr* src_addr,socklen_t *addrlen); //sockfd UDP通信的fd //buf 接收数据的buffer //len 接收buffer的大小 //flags 一些配置去看man 可以直接给0 //src_addr 从哪接收 sockaddr类型 是传出参数 可以通过这个参数看到是哪个客户端给我发消息 //addrlen src_addr大小的指针 src_addr为NULL 这个长度也要为NULL //成功返回接收的字节数量失败返回-1 #include #include #include #include int main() { //1创建UDP socket int cfd = socket(PF_INET, SOCK_DGRAM, 0); //udp SOCK_DGRAM tcp SOCK_STREAM //2 绑定 struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip int ret = bind(cfd, (struct sockaddr *)\u0026saddr, sizeof(saddr)); if (ret == -1) { perror(\"bind:\"); exit(-1); } //3 通信 while (1) { char recvbuf[128]; struct sockaddr_in client_addr; int len = sizeof(client_addr); int recv_num = recvfrom(cfd, recvbuf, sizeof(recvbuf), 0, (struct sockaddr *)\u0026client_addr, \u0026len); //client_addr是传出参数 将传出是从哪个客户端收到数据 if (recv_num == -1) //出错 { perror(\"recvfrom:\"); exit(-1); } else { char ipbuf[16]; //传出参数 将转换后的字符串传出 inet_ntop的返回值也是这个传出参数 printf(\"server recv from ip:%s port:%d %d bytes\\n\", inet_ntop(AF_INET, \u0026client_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)), ntohs(client_addr.sin_port), recv_num); printf(\"server recv data:%s\", recvbuf); //发送数据 sendto(cfd, recvbuf, strlen(recvbuf) + 1, 0, (struct sockaddr *)\u0026client_addr, sizeof(client_addr)); //回显 将收到的数据原封不动发回去 } } close(cfd); return 0; } 广播\n向子网(同一局域网)中多台计算机发送消息，并且子网中所有的计算机都可以接收到对方发送的消息，之前有讲过IP 为网络IP段+主机IP段 当主机IP段全为1则是此子网内的广播IP。\n完成广播服务器和客户端需要规定统一的广播端口\n**服务器向机IP段全为1的IP地址 的 广播端口发数据 **\n注意客户端需要绑定广播端口才能接收到广播数据\n服务器设置广播属性客户端绑定广播端口\n服务器设置广播属性 int setsockopt(int sockfd,int level,int optname,const void* optval,socklen_t optlen);\nsockfd 套接字文件描述符\nlevel 指定系统中解释选项的代码或为通用套接字代码，或为某个特定于协议的代码(如IPV4,IPV6,TCP) 可选参数 SOL_SOCKET IPPROTO_IP IPPROTO_IPV6 IPPROTO_TCP…\nlecvel和optname是一起使用的 在某个level下某个optname有…的设置作用。参数太多看具体的可以看上面讲的那本书，下面这张图只是其中一部分\n设置广播 level :SOL_SOCKET optname:SO_BROADCAST\noptval: int 1允许广播 0不允许 传输指针\noptlen: int型的大小\n服务器\n//1创建UDP socket int cfd = socket(PF_INET, SOCK_DGRAM, 0); //udp SOCK_DGRAM tcp SOCK_STREAM //2 绑定通信 int opv = 1; setsockopt(cfd, SOL_SOCKET, SO_BROADCAST, \u0026opv, sizeof(opv)); //设置广播属性 //绑定用于和其他客户端通信的IP和端口 struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip int ret = bind(cfd, (struct sockaddr *)\u0026saddr, sizeof(saddr)); if (ret == -1) { perror(\"bind:\"); exit(-1); } //创建广播地址 struct sockaddr_in bro_addr; bro_addr.sin_port = htons(8989); //客户端 需要绑定到8989端口才能接收到广播信息 bro_addr.sin_family = AF_INET; //ip地址需要是一个广播地址ip 中主机字段全为1 inet_pton(AF_INET, \"192.168.91.255\", \u0026bro_addr.sin_addr.s_addr); //广播不需要绑定 因为在广播中服务器是发端 就是向这个已知规定的广播地址发数据 客户端\nint cfd = socket(PF_INET, SOCK_DGRAM, 0); //udp SOCK_DGRAM tcp SOCK_STREAM //客户端向服务器发数据 下面是服务器的IP 以及 端口 struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; // saddr.sin_addr.s_addr = ; //服务器的地址 inet_pton(AF_INET, \"127.0.0.1\", \u0026saddr.sin_addr.s_addr); //服务器的地址直接传出到s_addr中 int len = sizeof(saddr); int num = 0; //客户端绑定IP以及广播端口 用于接收服务器的广播信息 struct sockaddr_in bro_addr; bro_addr.sin_port = htons(8989); bro_addr.sin_family = AF_INET; bro_addr.sin_addr.s_addr = INADDR_ANY; //客户端绑定任一网卡的ip int ret = bind(cfd, (struct sockaddr *)\u0026bro_addr, sizeof(bro_addr)); if (ret == -1) { perror(\"bind:\"); exit(-1); } 组播(多播)\n服务器会专门向组播地址去发送信息(类比广播时向全1主机IP的地址去发送广播信息)，客户端需要加入多播组(监听组播地址发来的信息)才能接受到服务器的多播信息，多播即可用于局域网，也可跨广域网使用。\n组播地址\n224.0.0.0-239.255.255.255被划分为局部链接多播地址、预留多播地址和管理权限多播地址三类\n224.0.0.0-224.0.0.255 局部链接多播地址:路由器不会转发属于此范围的IP(即在这范围内的多播地址 只能在局域网内使用)\n224.0.1.0-224.0.1.255 预留多播地址–公用多播地址 可用于广域网(INTERNET)，使用前需要申请\n224.0.2.0-238.255.255.255 预留多播地址–用户可用多播地址(临时组地址)全网范围内有效\n239.0.0.0-239.255.255.255 本地管理多播地址，供组织内部使用，类似于私有IP地址，不能用于INTERNET，限制在私有的多个局域网内使用。\n服务端与客户端通信的fd设置多播属性，客户端需开一个端口加入多播组 用于接收客户端的多播信息。\n服务端与客户端通信的fd设置多播属性，客户端需开一个端口加入多播组 用于接收客户端的多播信息。\n服务器端还是要通过setsockopt设置多播属性 level:IPPROTO_IP optname:IP_MULTICAST_IF指定外出接口 val类型为in_addr\n客户端通过setsockopt设置加入多播组 level:IPPROTO_IP optname:IP_ADD_MEMBERSHIP加入多播组 val类型为ip_mreq\nstruct ip_mreq { //组播组的IP地址 struct in_addr imr_multiaddr; //本地某一网络设备接口的IP地址 struct in_addr imr_interface; }; typedef unint32_t in_addr_t; struct in_addr { in_addr_t s_addr; }; 服务器\n//1创建UDP socket int cfd = socket(PF_INET, SOCK_DGRAM, 0); //udp SOCK_DGRAM tcp SOCK_STREAM //2 绑定通信 struct in_addr opv; //239.0.0.0-239.255.255.255本地管理多播地址，供组织内部使用 inet_pton(AF_INET, \"239.0.0.10\", \u0026opv.s_addr); //设置多播地址 setsockopt(cfd, IPPROTO_IP, IP_MULTICAST_IF, \u0026opv, sizeof(opv)); //设置多播属性 //绑定用于和其他客户端通信的IP和端口 struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip int ret = bind(cfd, (struct sockaddr *)\u0026saddr, sizeof(saddr)); if (ret == -1) { perror(\"bind:\"); exit(-1); } //创建多播地址 struct sockaddr_in multi_addr; multi_addr.sin_port = htons(8989); //客户端 需要绑定到8989端口才能接收到组播信息 multi_addr.sin_family = AF_INET; inet_pton(AF_INET, \"239.0.0.10\", \u0026multi_addr.sin_addr.s_addr); //组播不需要绑定 因为在组播服务器是发端 就是向这个已知规定的组播地址发数据 客户端\n//1创建UDP socket int cfd = socket(PF_INET, SOCK_DGRAM, 0); //udp SOCK_DGRAM tcp SOCK_STREAM //客户端向服务器发数据 下面是服务器的IP 以及 端口 struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; // saddr.sin_addr.s_addr = ; //服务器的地址 inet_pton(AF_INET, \"127.0.0.1\", \u0026saddr.sin_addr.s_addr); //服务器的地址直接传出到s_addr中 int len = sizeof(saddr); int num = 0; //客户端绑定IP以及组播端口 用于接收服务器的组播信息 struct sockaddr_in multi_addr; multi_addr.sin_port = htons(8989); multi_addr.sin_family = AF_INET; multi_addr.sin_addr.s_addr = INADDR_ANY; //客户端绑定任一网卡的ip int ret = bind(cfd, (struct sockaddr *)\u0026multi_addr, sizeof(multi_addr)); if (ret == -1) { perror(\"bind:\"); exit(-1); } //将此cfd加入多播组中 struct ip_mreq opv; // //组播组的IP地址 // struct in_addr imr_multiaddr; // //本地某一网络设备接口的IP地址 // struct in_addr imr_interface; //239.0.0.10为服务器端规定的多播地址 inet_pton(AF_INET, \"239.0.0.10\", \u0026opv.imr_multiaddr.s_addr); //设置组播地址 opv.imr_interface.s_addr = INADDR_ANY; //设置本地地址 为任一网卡IP setsockopt(cfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, \u0026opv, sizeof(opv)); //设置多播属性 socket本地通信\n本地套接字用于进程间(本地的进程间)的通信，本地套接字实现流程和网络套接字通信流程类似(也可看为是服务器端和客户端) 类TCP通信。\n上图中的strcut sockaddr_un用于本地套接字通信\n#include #define UNIX_PATH_MAX 108 strcut sockaddr_un{ sa_family_t sun_family;//地址协议族 af_local char sun_path[UNIX_PATH_MAX];//套接字文件的路径 注意这是个伪文件 大小永远为0 //其对应的是内存中的一块缓冲区 我们可以通过操作这个文件去操作内核缓冲区 }; 服务器端\n1 服务器端创建监听套接字\nint lfd = socket(AF_LOCAL,SOCK_STREAM,0);//AF_LOCAL or AF_UNIX本地通信协议族\n2 绑定监听套接字 到 本地套接字文件\nstruct sockaddr_un addr;\nbind(lfd,addr,len);\n//绑定成功后 指定的 sun_path套接字文件会自动生成\n3 监听\nlisten(lfd,100);\n4 等待客户端连接请求\nstruct sockaddr_un client_addr;//用于接收本地的客户端地址 accept传出\nint cfd = accept(lfd,\u0026client_addr,len);\n5 通信\nread/recv write/send\n客户端\n1 客户器端创建通信套接字\nint cfd = socket(AF_LOCAL,SOCK_STREAM,0);//AF_LOCAL or AF_UNIX本地通信协议族\n2 绑定套接字 到 本地套接字文件(和服务器端的那个文件不是同一个)\nstruct sockaddr_un addr;\nbind(lfd,addr,len);\n//绑定成功后 指定的 sun_path套接字文件会自动生成\n4 连接服务器\nstruct sockaddr_un server_addr;\n//…输入服务器地址和通信端口\nconnect(fd,\u0026server_addr);\n5 通信\nread/recv write/send\n服务器端\n#include #include #include #include #include #include #include //unlink的一些宏 //unlink 删除指定名字的文件 //当我们生成文件并已经通信成功 第二次启动程序如果不将之前定义的用于通信的socket文件删掉 //在bind时会报错address already in use(之前网络通信刚断开1分钟以内再此连接也会报这个错 //是因为tcp四次挥手的最后的TIME_WAIT状态还没过完 所以需要再多等) int main() { unlink(\"server.sock\"); //1创建监听套接字 int lfd = socket(AF_LOCAL, SOCK_STREAM, 0); if (lfd == -1) { perror(\"socket:\"); exit(-1); } //2绑定本地套接字 struct sockaddr_un addr; // sa_family_t sun_family; //地址协议族 af_local // char sun_path[UNIX_PATH_MAX]; //套接字文件的路径 注意这是个伪文件 大小永远为0 // //其对应的是内存中的一块缓冲区 我们可以通过操作这个文件去操作内核缓冲区 addr.sun_family = AF_LOCAL; strcpy(addr.sun_path, \"server.sock\"); //在本.c路径下生成一个本地socket 文件 bind(lfd, (struct sockaddr *)\u0026addr, sizeof(addr)); //3监听 listen(lfd, 8); //4等待客户端连接 struct sockaddr_un client_addr; int len = sizeof(client_addr); int cfd = accept(lfd, (struct sockaddr *)\u0026client_addr, \u0026len); //阻塞等待 client_addr为传出参数 传出连接的客户端信息 if (cfd == -1) { perror(\"accept:\"); exit(-1); } printf(\"client socket filename:%s\\n\", client_addr.sun_path); //5通信 while (1) { char buf[128]; int len = recv(cfd, buf, sizeof(buf), 0); if (len == -1) { perror(\"recv:\"); exit(-1); } else if (len == 0) { printf(\"client closed\\n\"); close(cfd); break; } else if (len \u003e 0) { printf(\"client say:%s\\n\", buf); send(cfd, buf, len, 0); } } close(lfd); return 0; } 客户端\n#include #include #include #include #include #include #include //unlink的一些宏 //unlink 删除指定名字的文件 //当我们生成文件并已经通信成功 第二次启动程序如果不将之前定义的用于通信的socket文件删掉 //在bind时会报错address already in use(之前网络通信刚断开1分钟以内再此连接也会报这个错 //是因为tcp四次挥手的最后的TIME_WAIT状态还没过完 所以需要再多等) int main() { unlink(\"client.sock\"); //1创建通信套接字 int cfd = socket(AF_LOCAL, SOCK_STREAM, 0); if (cfd == -1) { perror(\"socket:\"); exit(-1); } //2绑定本地套接字 struct sockaddr_un addr; // sa_family_t sun_family; //地址协议族 af_local // char sun_path[UNIX_PATH_MAX]; //套接字文件的路径 注意这是个伪文件 大小永远为0 // //其对应的是内存中的一块缓冲区 我们可以通过操作这个文件去操作内核缓冲区 addr.sun_family = AF_LOCAL; strcpy(addr.sun_path, \"client.sock\"); //在本.c路径下生成一个本地socket 文件 bind(cfd, (struct sockaddr *)\u0026addr, sizeof(addr)); //3主动连接服务器 struct sockaddr_un sever_addr; addr.sun_family = AF_LOCAL; strcpy(addr.sun_path, \"server.sock\"); //指定服务器的文件 这样客户端才可以向这个文件内写内容 //(等同对服务器进程的内核区读缓冲区内写数据) int ret = connect(cfd, (struct sockaddr *)\u0026sever_addr, sizeof(sever_addr)); if (ret == -1) { perror(\"connect:\"); exit(-1); } //通信 int num = 0; while (1) { char buf[128]; sprintf(buf, \"hello im client:%d\\n\", num++); send(cfd, buf, strlen(buf) + 1, 0); //接收数据 int len = recv(cfd, buf, sizeof(buf), 0); if (len == -1) { perror(\"recv:\"); exit(-1); } else if (len == 0) { printf(\"sever closed\\n\"); close(cfd); break; } else if (len \u003e 0) { printf(\"sever say:%s\\n\", buf); } sleep(1); } return 0; } ","wordCount":"1033","inLanguage":"en","datePublished":"2022-03-24T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/bly3mo/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux网络编程8 UDP,socket本地通信</h1><div class=post-meta><span title=2022-03-24T00:00:00+00:00>创建于 2022-03-24</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>UDP通信实现</strong></p><p>通信前无三次握手建立连接不需要创建监听套接字直接创建通信的套接字。</p><p><img alt=1648091949510-15e54c50-eef0-4bc2-a863-154a7f4c31ba.png loading=lazy src=/images/J0km29uArNhDShJN/1648091949510-15e54c50-eef0-4bc2-a863-154a7f4c31ba-587451.png></p><p>send/recv用于tcp sendto/recvfrom用于udp</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/socket.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span>ssize_t <span style=color:#a6e22e>sendto</span>(<span style=color:#66d9ef>int</span> sockfd,<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>buf,size_t len,<span style=color:#66d9ef>int</span> flags,<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span><span style=color:#f92672>*</span> dest_addr,socklen_t<span style=color:#f92672>*</span> addrlen);
+</span></span><span style=display:flex><span><span style=color:#75715e>//sockfd UDP通信的fd
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//buf 要发送的数据
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//len 要发送的数据长度
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//flags 一些配置去看man 可以直接给0
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//dest_addr 目的地址 sockaddr类型填端口号+IP地址
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//addrlen   dest_addr的大小(和recvfrom不一样 那个是要求指针)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//成功返回发送的字节数量失败返回-1
+</span></span></span><span style=display:flex><span>ssize_t <span style=color:#a6e22e>recvfrom</span>(<span style=color:#66d9ef>int</span> sockfd,<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>buf,size_t len,<span style=color:#66d9ef>int</span> flags,<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span><span style=color:#f92672>*</span> src_addr,socklen_t <span style=color:#f92672>*</span>addrlen);
+</span></span><span style=display:flex><span><span style=color:#75715e>//sockfd UDP通信的fd
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//buf 接收数据的buffer
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//len 接收buffer的大小
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//flags 一些配置去看man 可以直接给0
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//src_addr 从哪接收 sockaddr类型 是传出参数 可以通过这个参数看到是哪个客户端给我发消息
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//addrlen   src_addr大小的指针 src_addr为NULL 这个长度也要为NULL
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//成功返回接收的字节数量失败返回-1
+</span></span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;arpa/inet.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//1创建UDP socket
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> cfd <span style=color:#f92672>=</span> socket(PF_INET, SOCK_DGRAM, <span style=color:#ae81ff>0</span>); <span style=color:#75715e>//udp SOCK_DGRAM tcp SOCK_STREAM
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//2 绑定
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> saddr;
+</span></span><span style=display:flex><span>    saddr.sin_port <span style=color:#f92672>=</span> htons(<span style=color:#ae81ff>9999</span>);
+</span></span><span style=display:flex><span>    saddr.sin_family <span style=color:#f92672>=</span> AF_INET;
+</span></span><span style=display:flex><span>    saddr.sin_addr.s_addr <span style=color:#f92672>=</span> INADDR_ANY; <span style=color:#75715e>//服务器要绑定的地址 服务器任一网卡的ip
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> bind(cfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>saddr, <span style=color:#66d9ef>sizeof</span>(saddr));
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;bind:&#34;</span>);
+</span></span><span style=display:flex><span>        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//3 通信
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> recvbuf[<span style=color:#ae81ff>128</span>];
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> client_addr;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> <span style=color:#66d9ef>sizeof</span>(client_addr);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> recv_num <span style=color:#f92672>=</span> recvfrom(cfd, recvbuf, <span style=color:#66d9ef>sizeof</span>(recvbuf), <span style=color:#ae81ff>0</span>, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>client_addr, <span style=color:#f92672>&amp;</span>len); <span style=color:#75715e>//client_addr是传出参数 将传出是从哪个客户端收到数据
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (recv_num <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)                                                                               <span style=color:#75715e>//出错
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;recvfrom:&#34;</span>);
+</span></span><span style=display:flex><span>            exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>char</span> ipbuf[<span style=color:#ae81ff>16</span>]; <span style=color:#75715e>//传出参数 将转换后的字符串传出 inet_ntop的返回值也是这个传出参数
+</span></span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;server recv from ip:%s port:%d  %d bytes</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>,
+</span></span><span style=display:flex><span>                   inet_ntop(AF_INET, <span style=color:#f92672>&amp;</span>client_addr.sin_addr.s_addr, ipbuf, <span style=color:#66d9ef>sizeof</span>(ipbuf)),
+</span></span><span style=display:flex><span>                   ntohs(client_addr.sin_port),
+</span></span><span style=display:flex><span>                   recv_num);
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;server recv data:%s&#34;</span>, recvbuf);
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//发送数据
+</span></span></span><span style=display:flex><span>            sendto(cfd, recvbuf, strlen(recvbuf) <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>, <span style=color:#ae81ff>0</span>, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>client_addr, <span style=color:#66d9ef>sizeof</span>(client_addr)); <span style=color:#75715e>//回显 将收到的数据原封不动发回去
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    close(cfd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>广播</strong></p><p>向子网(同一局域网)中多台计算机发送消息，并且子网中所有的计算机都可以接收到对方发送的消息，之前有讲过IP 为网络IP段+主机IP段 <strong>当主机IP段全为1则是此子网内的广播IP。</strong></p><p><strong>完成广播服务器和客户端需要规定统一的广播端口</strong></p><p>**服务器向机IP段全为1的IP地址 的 广播端口发数据 **</p><p><strong>注意客户端需要绑定广播端口才能接收到广播数据</strong></p><p>服务器设置广播属性客户端绑定广播端口</p><p>服务器设置广播属性 int setsockopt(int sockfd,int level,int optname,const void* optval,socklen_t optlen);</p><p>sockfd 套接字文件描述符</p><p>level 指定系统中解释选项的代码或为通用套接字代码，或为某个特定于协议的代码(如IPV4,IPV6,TCP) 可选参数 SOL_SOCKET IPPROTO_IP IPPROTO_IPV6 IPPROTO_TCP&mldr;</p><p>lecvel和optname是一起使用的 在某个level下某个optname有&mldr;的设置作用。参数太多看具体的可以看上面讲的那本书，下面这张图只是其中一部分</p><p><img alt=1648092022945-066fc82a-f4b9-4b52-9748-d49c8a048dc8.png loading=lazy src=/images/J0km29uArNhDShJN/1648092022945-066fc82a-f4b9-4b52-9748-d49c8a048dc8-326159.png></p><p>设置广播 level :SOL_SOCKET optname:SO_BROADCAST</p><p>optval: int 1允许广播 0不允许 传输指针</p><p>optlen: int型的大小</p><p>服务器</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span>    <span style=color:#75715e>//1创建UDP socket
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> cfd <span style=color:#f92672>=</span> socket(PF_INET, SOCK_DGRAM, <span style=color:#ae81ff>0</span>); <span style=color:#75715e>//udp SOCK_DGRAM tcp SOCK_STREAM
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//2 绑定通信
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> opv <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    setsockopt(cfd, SOL_SOCKET, SO_BROADCAST, <span style=color:#f92672>&amp;</span>opv, <span style=color:#66d9ef>sizeof</span>(opv)); <span style=color:#75715e>//设置广播属性
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//绑定用于和其他客户端通信的IP和端口
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> saddr;
+</span></span><span style=display:flex><span>    saddr.sin_port <span style=color:#f92672>=</span> htons(<span style=color:#ae81ff>9999</span>);
+</span></span><span style=display:flex><span>    saddr.sin_family <span style=color:#f92672>=</span> AF_INET;
+</span></span><span style=display:flex><span>    saddr.sin_addr.s_addr <span style=color:#f92672>=</span> INADDR_ANY; <span style=color:#75715e>//服务器要绑定的地址 服务器任一网卡的ip
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> bind(cfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>saddr, <span style=color:#66d9ef>sizeof</span>(saddr));
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;bind:&#34;</span>);
+</span></span><span style=display:flex><span>        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建广播地址
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> bro_addr;
+</span></span><span style=display:flex><span>    bro_addr.sin_port <span style=color:#f92672>=</span> htons(<span style=color:#ae81ff>8989</span>); <span style=color:#75715e>//客户端 需要绑定到8989端口才能接收到广播信息
+</span></span></span><span style=display:flex><span>    bro_addr.sin_family <span style=color:#f92672>=</span> AF_INET;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//ip地址需要是一个广播地址ip 中主机字段全为1
+</span></span></span><span style=display:flex><span>    inet_pton(AF_INET, <span style=color:#e6db74>&#34;192.168.91.255&#34;</span>, <span style=color:#f92672>&amp;</span>bro_addr.sin_addr.s_addr);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//广播不需要绑定 因为在广播中服务器是发端 就是向这个已知规定的广播地址发数据
+</span></span></span></code></pre></div><p>客户端</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span>    <span style=color:#66d9ef>int</span> cfd <span style=color:#f92672>=</span> socket(PF_INET, SOCK_DGRAM, <span style=color:#ae81ff>0</span>); <span style=color:#75715e>//udp SOCK_DGRAM tcp SOCK_STREAM
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//客户端向服务器发数据 下面是服务器的IP 以及 端口
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> saddr;
+</span></span><span style=display:flex><span>    saddr.sin_port <span style=color:#f92672>=</span> htons(<span style=color:#ae81ff>9999</span>);
+</span></span><span style=display:flex><span>    saddr.sin_family <span style=color:#f92672>=</span> AF_INET;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// saddr.sin_addr.s_addr = ; //服务器的地址
+</span></span></span><span style=display:flex><span>    inet_pton(AF_INET, <span style=color:#e6db74>&#34;127.0.0.1&#34;</span>, <span style=color:#f92672>&amp;</span>saddr.sin_addr.s_addr); <span style=color:#75715e>//服务器的地址直接传出到s_addr中
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> <span style=color:#66d9ef>sizeof</span>(saddr);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> num <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//客户端绑定IP以及广播端口 用于接收服务器的广播信息
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> bro_addr;
+</span></span><span style=display:flex><span>    bro_addr.sin_port <span style=color:#f92672>=</span> htons(<span style=color:#ae81ff>8989</span>);
+</span></span><span style=display:flex><span>    bro_addr.sin_family <span style=color:#f92672>=</span> AF_INET;
+</span></span><span style=display:flex><span>    bro_addr.sin_addr.s_addr <span style=color:#f92672>=</span> INADDR_ANY; <span style=color:#75715e>//客户端绑定任一网卡的ip
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> bind(cfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>bro_addr, <span style=color:#66d9ef>sizeof</span>(bro_addr));
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;bind:&#34;</span>);
+</span></span><span style=display:flex><span>        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span></code></pre></div><p><strong>组播(多播)</strong></p><p>服务器会专门向组播地址去发送信息(类比广播时向全1主机IP的地址去发送广播信息)，客户端需要加入多播组(监听组播地址发来的信息)才能接受到服务器的多播信息，多播即可用于局域网，也可跨广域网使用。</p><p>组播地址</p><p>224.0.0.0-239.255.255.255被划分为局部链接多播地址、预留多播地址和管理权限多播地址三类</p><p>224.0.0.0-224.0.0.255 局部链接多播地址:路由器不会转发属于此范围的IP(即在这范围内的多播地址 只能在局域网内使用)</p><p>224.0.1.0-224.0.1.255 预留多播地址&ndash;公用多播地址 可用于广域网(INTERNET)，使用前需要申请</p><p>224.0.2.0-238.255.255.255 预留多播地址&ndash;用户可用多播地址(临时组地址)全网范围内有效</p><p>239.0.0.0-239.255.255.255 本地管理多播地址，供组织内部使用，类似于私有IP地址，不能用于INTERNET，限制在私有的多个局域网内使用。</p><p>服务端与客户端通信的fd设置多播属性，客户端需开一个端口加入多播组 用于接收客户端的多播信息。</p><p>服务端与客户端通信的fd设置多播属性，客户端需开一个端口加入多播组 用于接收客户端的多播信息。</p><p>服务器端还是要通过setsockopt设置多播属性 level:IPPROTO_IP optname:IP_MULTICAST_IF指定外出接口 val类型为in_addr</p><p>客户端通过setsockopt设置加入多播组 level:IPPROTO_IP optname:IP_ADD_MEMBERSHIP加入多播组 val类型为ip_mreq</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>ip_mreq</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>	<span style=color:#75715e>//组播组的IP地址
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>in_addr</span> imr_multiaddr;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//本地某一网络设备接口的IP地址
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>in_addr</span> imr_interface;
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> unint32_t in_addr_t;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>in_addr</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>	in_addr_t s_addr;
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><p><strong>服务器</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>//1创建UDP socket
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> cfd <span style=color:#f92672>=</span> socket(PF_INET, SOCK_DGRAM, <span style=color:#ae81ff>0</span>); <span style=color:#75715e>//udp SOCK_DGRAM tcp SOCK_STREAM
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>//2 绑定通信
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>in_addr</span> opv;
+</span></span><span style=display:flex><span><span style=color:#75715e>//239.0.0.0-239.255.255.255本地管理多播地址，供组织内部使用
+</span></span></span><span style=display:flex><span>inet_pton(AF_INET, <span style=color:#e6db74>&#34;239.0.0.10&#34;</span>, <span style=color:#f92672>&amp;</span>opv.s_addr);                   <span style=color:#75715e>//设置多播地址
+</span></span></span><span style=display:flex><span>setsockopt(cfd, IPPROTO_IP, IP_MULTICAST_IF, <span style=color:#f92672>&amp;</span>opv, <span style=color:#66d9ef>sizeof</span>(opv)); <span style=color:#75715e>//设置多播属性
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//绑定用于和其他客户端通信的IP和端口
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> saddr;
+</span></span><span style=display:flex><span>saddr.sin_port <span style=color:#f92672>=</span> htons(<span style=color:#ae81ff>9999</span>);
+</span></span><span style=display:flex><span>saddr.sin_family <span style=color:#f92672>=</span> AF_INET;
+</span></span><span style=display:flex><span>saddr.sin_addr.s_addr <span style=color:#f92672>=</span> INADDR_ANY; <span style=color:#75715e>//服务器要绑定的地址 服务器任一网卡的ip
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> bind(cfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>saddr, <span style=color:#66d9ef>sizeof</span>(saddr));
+</span></span><span style=display:flex><span><span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    perror(<span style=color:#e6db74>&#34;bind:&#34;</span>);
+</span></span><span style=display:flex><span>    exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//创建多播地址
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> multi_addr;
+</span></span><span style=display:flex><span>multi_addr.sin_port <span style=color:#f92672>=</span> htons(<span style=color:#ae81ff>8989</span>); <span style=color:#75715e>//客户端 需要绑定到8989端口才能接收到组播信息
+</span></span></span><span style=display:flex><span>multi_addr.sin_family <span style=color:#f92672>=</span> AF_INET;
+</span></span><span style=display:flex><span>inet_pton(AF_INET, <span style=color:#e6db74>&#34;239.0.0.10&#34;</span>, <span style=color:#f92672>&amp;</span>multi_addr.sin_addr.s_addr);
+</span></span><span style=display:flex><span><span style=color:#75715e>//组播不需要绑定 因为在组播服务器是发端 就是向这个已知规定的组播地址发数据
+</span></span></span></code></pre></div><p><strong>客户端</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>//1创建UDP socket
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> cfd <span style=color:#f92672>=</span> socket(PF_INET, SOCK_DGRAM, <span style=color:#ae81ff>0</span>); <span style=color:#75715e>//udp SOCK_DGRAM tcp SOCK_STREAM
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>//客户端向服务器发数据 下面是服务器的IP 以及 端口
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> saddr;
+</span></span><span style=display:flex><span>saddr.sin_port <span style=color:#f92672>=</span> htons(<span style=color:#ae81ff>9999</span>);
+</span></span><span style=display:flex><span>saddr.sin_family <span style=color:#f92672>=</span> AF_INET;
+</span></span><span style=display:flex><span><span style=color:#75715e>// saddr.sin_addr.s_addr = ; //服务器的地址
+</span></span></span><span style=display:flex><span>inet_pton(AF_INET, <span style=color:#e6db74>&#34;127.0.0.1&#34;</span>, <span style=color:#f92672>&amp;</span>saddr.sin_addr.s_addr); <span style=color:#75715e>//服务器的地址直接传出到s_addr中
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> <span style=color:#66d9ef>sizeof</span>(saddr);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> num <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span><span style=color:#75715e>//客户端绑定IP以及组播端口 用于接收服务器的组播信息
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> multi_addr;
+</span></span><span style=display:flex><span>multi_addr.sin_port <span style=color:#f92672>=</span> htons(<span style=color:#ae81ff>8989</span>);
+</span></span><span style=display:flex><span>multi_addr.sin_family <span style=color:#f92672>=</span> AF_INET;
+</span></span><span style=display:flex><span>multi_addr.sin_addr.s_addr <span style=color:#f92672>=</span> INADDR_ANY; <span style=color:#75715e>//客户端绑定任一网卡的ip
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> bind(cfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>multi_addr, <span style=color:#66d9ef>sizeof</span>(multi_addr));
+</span></span><span style=display:flex><span><span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    perror(<span style=color:#e6db74>&#34;bind:&#34;</span>);
+</span></span><span style=display:flex><span>    exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//将此cfd加入多播组中
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>ip_mreq</span> opv;
+</span></span><span style=display:flex><span><span style=color:#75715e>// //组播组的IP地址
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// struct in_addr imr_multiaddr;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// //本地某一网络设备接口的IP地址
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// struct in_addr imr_interface;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//239.0.0.10为服务器端规定的多播地址
+</span></span></span><span style=display:flex><span>inet_pton(AF_INET, <span style=color:#e6db74>&#34;239.0.0.10&#34;</span>, <span style=color:#f92672>&amp;</span>opv.imr_multiaddr.s_addr);       <span style=color:#75715e>//设置组播地址
+</span></span></span><span style=display:flex><span>opv.imr_interface.s_addr <span style=color:#f92672>=</span> INADDR_ANY;                             <span style=color:#75715e>//设置本地地址 为任一网卡IP
+</span></span></span><span style=display:flex><span>setsockopt(cfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, <span style=color:#f92672>&amp;</span>opv, <span style=color:#66d9ef>sizeof</span>(opv)); <span style=color:#75715e>//设置多播属性
+</span></span></span></code></pre></div><p><strong>socket本地通信</strong></p><p>本地套接字用于进程间(本地的进程间)的通信，本地套接字实现流程和网络套接字通信流程类似(也可看为是服务器端和客户端) 类TCP通信。</p><p><img alt=1648092264399-f63f9ca2-ae4c-48c6-925c-99a9dc26f6bc.png loading=lazy src=/images/J0km29uArNhDShJN/1648092264399-f63f9ca2-ae4c-48c6-925c-99a9dc26f6bc-295030.png></p><p>上图中的strcut sockaddr_un用于本地套接字通信</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/un.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#define UNIX_PATH_MAX 108
+</span></span></span><span style=display:flex><span>strcut sockaddr_un{
+</span></span><span style=display:flex><span>sa_family_t sun_family;<span style=color:#75715e>//地址协议族 af_local
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>char</span> sun_path[UNIX_PATH_MAX];<span style=color:#75715e>//套接字文件的路径 注意这是个伪文件 大小永远为0
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//其对应的是内存中的一块缓冲区 我们可以通过操作这个文件去操作内核缓冲区
+</span></span></span><span style=display:flex><span>};
+</span></span></code></pre></div><p>服务器端</p><p>1 服务器端创建监听套接字</p><p>int lfd = socket(AF_LOCAL,SOCK_STREAM,0);//AF_LOCAL or AF_UNIX本地通信协议族</p><p>2 绑定监听套接字 到 本地套接字文件</p><p>struct sockaddr_un addr;</p><p>bind(lfd,addr,len);</p><p>//绑定成功后 指定的 sun_path套接字文件会自动生成</p><p>3 监听</p><p>listen(lfd,100);</p><p>4 等待客户端连接请求</p><p>struct sockaddr_un client_addr;//用于接收本地的客户端地址 accept传出</p><p>int cfd = accept(lfd,&amp;client_addr,len);</p><p>5 通信</p><p>read/recv write/send</p><p>客户端</p><p>1 客户器端创建通信套接字</p><p>int cfd = socket(AF_LOCAL,SOCK_STREAM,0);//AF_LOCAL or AF_UNIX本地通信协议族</p><p>2 绑定套接字 到 本地套接字文件(和服务器端的那个文件不是同一个)</p><p>struct sockaddr_un addr;</p><p>bind(lfd,addr,len);</p><p>//绑定成功后 指定的 sun_path套接字文件会自动生成</p><p>4 连接服务器</p><p>struct sockaddr_un server_addr;</p><p>//&mldr;输入服务器地址和通信端口</p><p>connect(fd,&amp;server_addr);</p><p>5 通信</p><p>read/recv write/send</p><p>服务器端</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;arpa/inet.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/un.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//unlink的一些宏
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//unlink 删除指定名字的文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//当我们生成文件并已经通信成功 第二次启动程序如果不将之前定义的用于通信的socket文件删掉
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//在bind时会报错address already in use(之前网络通信刚断开1分钟以内再此连接也会报这个错
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//是因为tcp四次挥手的最后的TIME_WAIT状态还没过完 所以需要再多等)
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    unlink(<span style=color:#e6db74>&#34;server.sock&#34;</span>);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//1创建监听套接字
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> lfd <span style=color:#f92672>=</span> socket(AF_LOCAL, SOCK_STREAM, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (lfd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;socket:&#34;</span>);
+</span></span><span style=display:flex><span>        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//2绑定本地套接字
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_un</span> addr;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// sa_family_t sun_family;       //地址协议族 af_local
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// char sun_path[UNIX_PATH_MAX]; //套接字文件的路径 注意这是个伪文件 大小永远为0
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//                               //其对应的是内存中的一块缓冲区 我们可以通过操作这个文件去操作内核缓冲区
+</span></span></span><span style=display:flex><span>    addr.sun_family <span style=color:#f92672>=</span> AF_LOCAL;
+</span></span><span style=display:flex><span>    strcpy(addr.sun_path, <span style=color:#e6db74>&#34;server.sock&#34;</span>); <span style=color:#75715e>//在本.c路径下生成一个本地socket 文件
+</span></span></span><span style=display:flex><span>    bind(lfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>addr, <span style=color:#66d9ef>sizeof</span>(addr));
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//3监听
+</span></span></span><span style=display:flex><span>    listen(lfd, <span style=color:#ae81ff>8</span>);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//4等待客户端连接
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_un</span> client_addr;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> <span style=color:#66d9ef>sizeof</span>(client_addr);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> cfd <span style=color:#f92672>=</span> accept(lfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>client_addr, <span style=color:#f92672>&amp;</span>len); <span style=color:#75715e>//阻塞等待 client_addr为传出参数 传出连接的客户端信息
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (cfd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;accept:&#34;</span>);
+</span></span><span style=display:flex><span>        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;client socket filename:%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, client_addr.sun_path);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//5通信
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>128</span>];
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> recv(cfd, buf, <span style=color:#66d9ef>sizeof</span>(buf), <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;recv:&#34;</span>);
+</span></span><span style=display:flex><span>            exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;client closed</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>            close(cfd);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;client say:%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buf);
+</span></span><span style=display:flex><span>            send(cfd, buf, len, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    close(lfd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>客户端</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;arpa/inet.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/un.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//unlink的一些宏
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//unlink 删除指定名字的文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//当我们生成文件并已经通信成功 第二次启动程序如果不将之前定义的用于通信的socket文件删掉
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//在bind时会报错address already in use(之前网络通信刚断开1分钟以内再此连接也会报这个错
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//是因为tcp四次挥手的最后的TIME_WAIT状态还没过完 所以需要再多等)
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    unlink(<span style=color:#e6db74>&#34;client.sock&#34;</span>);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//1创建通信套接字
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> cfd <span style=color:#f92672>=</span> socket(AF_LOCAL, SOCK_STREAM, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (cfd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;socket:&#34;</span>);
+</span></span><span style=display:flex><span>        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//2绑定本地套接字
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_un</span> addr;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// sa_family_t sun_family;       //地址协议族 af_local
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// char sun_path[UNIX_PATH_MAX]; //套接字文件的路径 注意这是个伪文件 大小永远为0
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//                               //其对应的是内存中的一块缓冲区 我们可以通过操作这个文件去操作内核缓冲区
+</span></span></span><span style=display:flex><span>    addr.sun_family <span style=color:#f92672>=</span> AF_LOCAL;
+</span></span><span style=display:flex><span>    strcpy(addr.sun_path, <span style=color:#e6db74>&#34;client.sock&#34;</span>); <span style=color:#75715e>//在本.c路径下生成一个本地socket 文件
+</span></span></span><span style=display:flex><span>    bind(cfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>addr, <span style=color:#66d9ef>sizeof</span>(addr));
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//3主动连接服务器
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_un</span> sever_addr;
+</span></span><span style=display:flex><span>    addr.sun_family <span style=color:#f92672>=</span> AF_LOCAL;
+</span></span><span style=display:flex><span>    strcpy(addr.sun_path, <span style=color:#e6db74>&#34;server.sock&#34;</span>); <span style=color:#75715e>//指定服务器的文件 这样客户端才可以向这个文件内写内容
+</span></span></span><span style=display:flex><span>                                          <span style=color:#75715e>//(等同对服务器进程的内核区读缓冲区内写数据)
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> connect(cfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>sever_addr, <span style=color:#66d9ef>sizeof</span>(sever_addr));
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;connect:&#34;</span>);
+</span></span><span style=display:flex><span>        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//通信
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> num <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>128</span>];
+</span></span><span style=display:flex><span>        sprintf(buf, <span style=color:#e6db74>&#34;hello im client:%d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, num<span style=color:#f92672>++</span>);
+</span></span><span style=display:flex><span>        send(cfd, buf, strlen(buf) <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//接收数据
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> recv(cfd, buf, <span style=color:#66d9ef>sizeof</span>(buf), <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;recv:&#34;</span>);
+</span></span><span style=display:flex><span>            exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;sever closed</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>            close(cfd);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;sever say:%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buf);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        sleep(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

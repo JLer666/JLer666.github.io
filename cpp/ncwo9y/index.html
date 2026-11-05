@@ -1,0 +1,335 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux多进程开发6 信号介绍以及信号相关函数1 | CantBlog</title><meta name=keywords content><meta name=description content="信号
+信号是Linux进程间通信的最古老的方式之一，是事件发生时对进程的通知机制，有时也称之为软件中断,它是在软件层次上对中断机制的一种模拟，是一种异步通信的方式。信号可以导致一个正在运行的进程被另一个正在运行的异步进程中断，转而处理某一个突发事件，发往进程的诸多信号，通常都是源于内核。引发内核为进程产生信号的各类事件如下:
+对于前台进程(占用shell)，用户可以通过输入特殊的终端字符来给它发送信号。比如Ctrl+C通常会给进程发送一个中断信号。
+硬件发生异常，即硬件检查到一个错误条件并通知内核，随即再由内核发送相应信号给相关进程。比如执行一条异常的机器语言指令，诸如被除0，或者引用了无法访问的内存区域。
+系统状态变化，比如alarm定时器到期将引起SIGALRM信号，进程执行的cpu时间超限，或者该进程的某个子进程退出。
+运行kill命令或调用kill命令
+一般信号用于两种用途:1让进程知道已经发生了一个特定的事情2强迫进程执行它自己代码中的信号处理程序
+信号的特定：简单，不能携带大量信息，满足某个特定条件才发送，优先级比较高。
+查看系统定义的信号列表：kill -l 前31个信号为常规信号 其余为实时信号
+
+
+SIGHUP	 2) SIGINT	 3) SIGQUIT	 4) SIGILL	 5) SIGTRAP
+
+
+SIGABRT	 7) SIGBUS	 8) SIGFPE	 9) SIGKILL	10) SIGUSR1
+
+
+SIGSEGV	12) SIGUSR2	13) SIGPIPE	14) SIGALRM	15) SIGTERM
+
+
+SIGSTKFLT	17) SIGCHLD	18) SIGCONT	19) SIGSTOP	20) SIGTSTP
+
+
+SIGTTIN	22) SIGTTOU	23) SIGURG	24) SIGXCPU	25) SIGXFSZ
+
+
+SIGVTALRM	27) SIGPROF	28) SIGWINCH	29) SIGIO	30) SIGPWR
+
+
+SIGSYS	34) SIGRTMIN	35) SIGRTMIN+1	36) SIGRTMIN+2	37) SIGRTMIN+3
+
+
+SIGRTMIN+4	39) SIGRTMIN+5	40) SIGRTMIN+6	41) SIGRTMIN+7	42) SIGRTMIN+8
+
+
+SIGRTMIN+9	44) SIGRTMIN+10	45) SIGRTMIN+11	46) SIGRTMIN+12	47) SIGRTMIN+13
+
+
+SIGRTMIN+14	49) SIGRTMIN+15	50) SIGRTMAX-14	51) SIGRTMAX-13	52) SIGRTMAX-12
+
+
+SIGRTMAX-11	54) SIGRTMAX-10	55) SIGRTMAX-9	56) SIGRTMAX-8	57) SIGRTMAX-7
+
+
+SIGRTMAX-6	59) SIGRTMAX-5	60) SIGRTMAX-4	61) SIGRTMAX-3	62) SIGRTMAX-2
+
+
+SIGRTMAX-1	64) SIGRTMAX
+
+"><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/ncwo9y/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/ncwo9y/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/ncwo9y/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux多进程开发6 信号介绍以及信号相关函数1"><meta property="og:description" content="信号
+信号是Linux进程间通信的最古老的方式之一，是事件发生时对进程的通知机制，有时也称之为软件中断,它是在软件层次上对中断机制的一种模拟，是一种异步通信的方式。信号可以导致一个正在运行的进程被另一个正在运行的异步进程中断，转而处理某一个突发事件，发往进程的诸多信号，通常都是源于内核。引发内核为进程产生信号的各类事件如下:
+对于前台进程(占用shell)，用户可以通过输入特殊的终端字符来给它发送信号。比如Ctrl+C通常会给进程发送一个中断信号。
+硬件发生异常，即硬件检查到一个错误条件并通知内核，随即再由内核发送相应信号给相关进程。比如执行一条异常的机器语言指令，诸如被除0，或者引用了无法访问的内存区域。
+系统状态变化，比如alarm定时器到期将引起SIGALRM信号，进程执行的cpu时间超限，或者该进程的某个子进程退出。
+运行kill命令或调用kill命令
+一般信号用于两种用途:1让进程知道已经发生了一个特定的事情2强迫进程执行它自己代码中的信号处理程序
+信号的特定：简单，不能携带大量信息，满足某个特定条件才发送，优先级比较高。
+查看系统定义的信号列表：kill -l 前31个信号为常规信号 其余为实时信号
+SIGHUP	2) SIGINT	3) SIGQUIT	4) SIGILL	5) SIGTRAP
+SIGABRT	7) SIGBUS	8) SIGFPE	9) SIGKILL	10) SIGUSR1
+SIGSEGV	12) SIGUSR2	13) SIGPIPE	14) SIGALRM	15) SIGTERM
+SIGSTKFLT	17) SIGCHLD	18) SIGCONT	19) SIGSTOP	20) SIGTSTP
+SIGTTIN	22) SIGTTOU	23) SIGURG	24) SIGXCPU	25) SIGXFSZ
+SIGVTALRM	27) SIGPROF	28) SIGWINCH	29) SIGIO	30) SIGPWR
+SIGSYS	34) SIGRTMIN	35) SIGRTMIN+1	36) SIGRTMIN+2	37) SIGRTMIN+3
+SIGRTMIN+4	39) SIGRTMIN+5	40) SIGRTMIN+6	41) SIGRTMIN+7	42) SIGRTMIN+8
+SIGRTMIN+9	44) SIGRTMIN+10	45) SIGRTMIN+11	46) SIGRTMIN+12	47) SIGRTMIN+13
+SIGRTMIN+14	49) SIGRTMIN+15	50) SIGRTMAX-14	51) SIGRTMAX-13	52) SIGRTMAX-12
+SIGRTMAX-11	54) SIGRTMAX-10	55) SIGRTMAX-9	56) SIGRTMAX-8	57) SIGRTMAX-7
+SIGRTMAX-6	59) SIGRTMAX-5	60) SIGRTMAX-4	61) SIGRTMAX-3	62) SIGRTMAX-2
+SIGRTMAX-1	64) SIGRTMAX"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-16T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux多进程开发6 信号介绍以及信号相关函数1"><meta name=twitter:description content="信号
+信号是Linux进程间通信的最古老的方式之一，是事件发生时对进程的通知机制，有时也称之为软件中断,它是在软件层次上对中断机制的一种模拟，是一种异步通信的方式。信号可以导致一个正在运行的进程被另一个正在运行的异步进程中断，转而处理某一个突发事件，发往进程的诸多信号，通常都是源于内核。引发内核为进程产生信号的各类事件如下:
+对于前台进程(占用shell)，用户可以通过输入特殊的终端字符来给它发送信号。比如Ctrl+C通常会给进程发送一个中断信号。
+硬件发生异常，即硬件检查到一个错误条件并通知内核，随即再由内核发送相应信号给相关进程。比如执行一条异常的机器语言指令，诸如被除0，或者引用了无法访问的内存区域。
+系统状态变化，比如alarm定时器到期将引起SIGALRM信号，进程执行的cpu时间超限，或者该进程的某个子进程退出。
+运行kill命令或调用kill命令
+一般信号用于两种用途:1让进程知道已经发生了一个特定的事情2强迫进程执行它自己代码中的信号处理程序
+信号的特定：简单，不能携带大量信息，满足某个特定条件才发送，优先级比较高。
+查看系统定义的信号列表：kill -l 前31个信号为常规信号 其余为实时信号
+SIGHUP	2) SIGINT	3) SIGQUIT	4) SIGILL	5) SIGTRAP
+SIGABRT	7) SIGBUS	8) SIGFPE	9) SIGKILL	10) SIGUSR1
+SIGSEGV	12) SIGUSR2	13) SIGPIPE	14) SIGALRM	15) SIGTERM
+SIGSTKFLT	17) SIGCHLD	18) SIGCONT	19) SIGSTOP	20) SIGTSTP
+SIGTTIN	22) SIGTTOU	23) SIGURG	24) SIGXCPU	25) SIGXFSZ
+SIGVTALRM	27) SIGPROF	28) SIGWINCH	29) SIGIO	30) SIGPWR
+SIGSYS	34) SIGRTMIN	35) SIGRTMIN+1	36) SIGRTMIN+2	37) SIGRTMIN+3
+SIGRTMIN+4	39) SIGRTMIN+5	40) SIGRTMIN+6	41) SIGRTMIN+7	42) SIGRTMIN+8
+SIGRTMIN+9	44) SIGRTMIN+10	45) SIGRTMIN+11	46) SIGRTMIN+12	47) SIGRTMIN+13
+SIGRTMIN+14	49) SIGRTMIN+15	50) SIGRTMAX-14	51) SIGRTMAX-13	52) SIGRTMAX-12
+SIGRTMAX-11	54) SIGRTMAX-10	55) SIGRTMAX-9	56) SIGRTMAX-8	57) SIGRTMAX-7
+SIGRTMAX-6	59) SIGRTMAX-5	60) SIGRTMAX-4	61) SIGRTMAX-3	62) SIGRTMAX-2
+SIGRTMAX-1	64) SIGRTMAX"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux多进程开发6 信号介绍以及信号相关函数1","item":"https://jler666.github.io/cpp/ncwo9y/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux多进程开发6 信号介绍以及信号相关函数1","name":"Linux多进程开发6 信号介绍以及信号相关函数1","description":"信号\n信号是Linux进程间通信的最古老的方式之一，是事件发生时对进程的通知机制，有时也称之为软件中断,它是在软件层次上对中断机制的一种模拟，是一种异步通信的方式。信号可以导致一个正在运行的进程被另一个正在运行的异步进程中断，转而处理某一个突发事件，发往进程的诸多信号，通常都是源于内核。引发内核为进程产生信号的各类事件如下:\n对于前台进程(占用shell)，用户可以通过输入特殊的终端字符来给它发送信号。比如Ctrl+C通常会给进程发送一个中断信号。\n硬件发生异常，即硬件检查到一个错误条件并通知内核，随即再由内核发送相应信号给相关进程。比如执行一条异常的机器语言指令，诸如被除0，或者引用了无法访问的内存区域。\n系统状态变化，比如alarm定时器到期将引起SIGALRM信号，进程执行的cpu时间超限，或者该进程的某个子进程退出。\n运行kill命令或调用kill命令\n一般信号用于两种用途:1让进程知道已经发生了一个特定的事情2强迫进程执行它自己代码中的信号处理程序\n信号的特定：简单，不能携带大量信息，满足某个特定条件才发送，优先级比较高。\n查看系统定义的信号列表：kill -l 前31个信号为常规信号 其余为实时信号\nSIGHUP\t2) SIGINT\t3) SIGQUIT\t4) SIGILL\t5) SIGTRAP\nSIGABRT\t7) SIGBUS\t8) SIGFPE\t9) SIGKILL\t10) SIGUSR1\nSIGSEGV\t12) SIGUSR2\t13) SIGPIPE\t14) SIGALRM\t15) SIGTERM\nSIGSTKFLT\t17) SIGCHLD\t18) SIGCONT\t19) SIGSTOP\t20) SIGTSTP\nSIGTTIN\t22) SIGTTOU\t23) SIGURG\t24) SIGXCPU\t25) SIGXFSZ\nSIGVTALRM\t27) SIGPROF\t28) SIGWINCH\t29) SIGIO\t30) SIGPWR\nSIGSYS\t34) SIGRTMIN\t35) SIGRTMIN+1\t36) SIGRTMIN+2\t37) SIGRTMIN+3\nSIGRTMIN+4\t39) SIGRTMIN+5\t40) SIGRTMIN+6\t41) SIGRTMIN+7\t42) SIGRTMIN+8\nSIGRTMIN+9\t44) SIGRTMIN+10\t45) SIGRTMIN+11\t46) SIGRTMIN+12\t47) SIGRTMIN+13\nSIGRTMIN+14\t49) SIGRTMIN+15\t50) SIGRTMAX-14\t51) SIGRTMAX-13\t52) SIGRTMAX-12\nSIGRTMAX-11\t54) SIGRTMAX-10\t55) SIGRTMAX-9\t56) SIGRTMAX-8\t57) SIGRTMAX-7\nSIGRTMAX-6\t59) SIGRTMAX-5\t60) SIGRTMAX-4\t61) SIGRTMAX-3\t62) SIGRTMAX-2\nSIGRTMAX-1\t64) SIGRTMAX\n","keywords":[],"articleBody":"信号\n信号是Linux进程间通信的最古老的方式之一，是事件发生时对进程的通知机制，有时也称之为软件中断,它是在软件层次上对中断机制的一种模拟，是一种异步通信的方式。信号可以导致一个正在运行的进程被另一个正在运行的异步进程中断，转而处理某一个突发事件，发往进程的诸多信号，通常都是源于内核。引发内核为进程产生信号的各类事件如下:\n对于前台进程(占用shell)，用户可以通过输入特殊的终端字符来给它发送信号。比如Ctrl+C通常会给进程发送一个中断信号。\n硬件发生异常，即硬件检查到一个错误条件并通知内核，随即再由内核发送相应信号给相关进程。比如执行一条异常的机器语言指令，诸如被除0，或者引用了无法访问的内存区域。\n系统状态变化，比如alarm定时器到期将引起SIGALRM信号，进程执行的cpu时间超限，或者该进程的某个子进程退出。\n运行kill命令或调用kill命令\n一般信号用于两种用途:1让进程知道已经发生了一个特定的事情2强迫进程执行它自己代码中的信号处理程序\n信号的特定：简单，不能携带大量信息，满足某个特定条件才发送，优先级比较高。\n查看系统定义的信号列表：kill -l 前31个信号为常规信号 其余为实时信号\nSIGHUP\t2) SIGINT\t3) SIGQUIT\t4) SIGILL\t5) SIGTRAP\nSIGABRT\t7) SIGBUS\t8) SIGFPE\t9) SIGKILL\t10) SIGUSR1\nSIGSEGV\t12) SIGUSR2\t13) SIGPIPE\t14) SIGALRM\t15) SIGTERM\nSIGSTKFLT\t17) SIGCHLD\t18) SIGCONT\t19) SIGSTOP\t20) SIGTSTP\nSIGTTIN\t22) SIGTTOU\t23) SIGURG\t24) SIGXCPU\t25) SIGXFSZ\nSIGVTALRM\t27) SIGPROF\t28) SIGWINCH\t29) SIGIO\t30) SIGPWR\nSIGSYS\t34) SIGRTMIN\t35) SIGRTMIN+1\t36) SIGRTMIN+2\t37) SIGRTMIN+3\nSIGRTMIN+4\t39) SIGRTMIN+5\t40) SIGRTMIN+6\t41) SIGRTMIN+7\t42) SIGRTMIN+8\nSIGRTMIN+9\t44) SIGRTMIN+10\t45) SIGRTMIN+11\t46) SIGRTMIN+12\t47) SIGRTMIN+13\nSIGRTMIN+14\t49) SIGRTMIN+15\t50) SIGRTMAX-14\t51) SIGRTMAX-13\t52) SIGRTMAX-12\nSIGRTMAX-11\t54) SIGRTMAX-10\t55) SIGRTMAX-9\t56) SIGRTMAX-8\t57) SIGRTMAX-7\nSIGRTMAX-6\t59) SIGRTMAX-5\t60) SIGRTMAX-4\t61) SIGRTMAX-3\t62) SIGRTMAX-2\nSIGRTMAX-1\t64) SIGRTMAX\nSIGCHILD不是只在子进程结束才发出，在子进程状态改变 比如子进程挂起。。都会发出这个信号\n注意SIGCONT,SIGSTOP中说的进程停止并不是指进程结束，指的是进程暂停。\n常见的5种信号默认处理动作\n查看信号的详细信息 man 7 signal\n1Term 终止进程 2Ign当前进程忽略掉这个信号3Core终止进程 并生成一个Core文件4Stop暂停当前进程5Cont继续执行当前被暂停的进程\n信号的几种状态：产生、未决(信号还未被进程接收到)、递达(进程接收并处理信号)\nSIGKILL和SIGSTOP信号不能被捕捉、阻塞或者忽略 只能执行默认动作\nCORE文件会将程序终止的异常信息保存。ulimit -a中有一个参数core file size (block -c) 默认为0表示不会生成core文件，ulimit -c 1024将core文件的最大大小改为1024个字节。这样的话如果产生核心以转储的错误，错误信息会存在同路径下的core文件中，core文件需要gdb调试才能用，需要在编译时gcc -g(调试，断点信息)\ngdb a.out (gdb)core-file core(core文件文件名) 会输出错误信息\nkill、raise、abort函数\nint kill(pid_t pid,int sig);\nint raise(int sig);\nvois abort(void);\n/* #include #include int kill(pid_t pid, int sig); 给任何进程或进程组发送信号 pid\u003e0 则发送给这个特定PID的进程信号，pid=0给当前调用kill的进程所在的进程组中的所有进程发送信号 pid=-1向允许接收当前进程信号的所有进程发送信号(除了1号init进程) pid\u003c-1 向进程组号为-pid的所有进程发送信号 sig=0则不发送信号 成功返回0 失败返回-1 不要被名字迷惑了 kill不仅仅用于杀死进程 kill(getpid(),9) kill(getppid(),9) kill用于向某个进程(pid)发送信号(sig 信号编号或宏值(信号名称)) #include int raise(int sig); 给当前调用raise的进程发送信号 成功返回0 失败返回非0 vois abort(void); 发送 SIGABRT信号给当前的进程 SIGABRT 终止进程并产生core文件 \\*/ #include #include #include int main() { //演示kill pid_t pid = fork(); if (pid == 0) //子进程 { ; } else if (pid \u003e 0) //父进程 { //父进程中 返回的pid是子进程的pid kill(pid, 9); } return 0; } alarm函数\nusigned int alarm(unsigned int seconds);\n/* #include unsigned int alarm(unsigned int seconds); 设置定时器 函数调用开始倒计时seconds秒 参数为0定时器无效 不进行倒计时也不发送信号 我们取消定时器就是通过将alarm设置为0实现的 当时间到后 函数会给调用alarm的当前进程发送SIGALAEM信号 返回值 第一次调用 alarm 返回0 之前已调用过alarm 返回之前的定时器的倒计时剩余时间 进程收到SIGALRM信号 默认终止当前进程 每个进程都有且只有唯一的一个定时器！！！ alarm(10); 过了1秒.... unsigned int rest = alarm(5);//这个5秒倒计时会将上面的10秒定时器给取消掉并且重新从0开始记5秒 返回的rest为之前10秒定时器余下的没走完的时间 即9秒 定时器与进程的状态无关，无论进程处于什么状态 alarm都会计时!!!! alarm不阻塞 \\*/ #include #include #include #include int main() { //实际运行时间 = 内核时间(系统调用)+用户程序时间+IO消耗的时间 //alarm为系统调用 return 0; } setitimer定时器函数\nint setitimer(int which,const struct itimerval *new_val,struct itimerval *old_value);\n/* #include int getitimer(int which, struct itimerval *curr_value); int setitimer(int which, const struct itimerval *new_value, struct itimerval *old_value); 非阻塞 设置定时器 替代alarm函数， alarm精度只能是秒，setitimer进度可以达到us 可以实现周期性定时 which 使用什么定时时间类型 ITIMER_REAL 真实时间(物理世界的时间)=内核时间(系统调用)+用户程序时间+IO消耗的时间+.... 每次倒计时 时间到发送SIGALRM信号 并重新开始计时 ITIMER_VIRTUAL 虚拟时间 这个线程使用的用户程序时间 计算在应用层递减的时间 不计算在内核层的递减的时间 (包含这个在进程中所有线程消耗的时间) 每次倒计时 时间到发送SIGVTALRM信号 并重新开始计时 ITIMER_PROF 这个线程使用的内核时间(系统调用)+用户程序时间CPU时间 会减去在系统中阻塞的时间(无内核与用户间切换消耗的时间) (包含在这个进程中所有线程消耗的时间) 每次倒计时 时间到发送SIGPROF信号 并重新开始计时 new_value 设置定时器的属性 struct itimerval//定时器结构体 { struct timeval it_interval; //计时器重新启动动的间歇值 it_interval减到0 发送信号 并重新填充 struct timeval it_value; //计时器安装后首先启动的初始值 it_value的时间值减到0 也会发送一个信号 }; 也可以这么理解 it_interval 下次定时取值 it_value 本次定时设置值 定时器工作时，先将it_value的时间值减到0，发送一个信号，再将it_value赋值为it_interval的值，重新开始定时，如此反复。 如果it_value值被设置为0，则定时器停止定时；如果it_value值不为0但it_interval值为0，则定时器在一次定时后终止 struct timeval//时间结构体 { time_t tv_sec; //秒 suseconds_t tv_usec;//微秒 }; 在setitimer后经过it_value后启动定时器 it_interval就为定时器周期定时时长 old_value :记录了上次调用setitimer所设置的定时器的属性 这是个传出参数 返回值 成功0 失败-1 \\*/ #include #include #include #include #include int main() { struct itimerval new_value; new_value.it_interval.tv_sec = 2; //定时器周期时间 new_value.it_interval.tv_usec = 0; //虽然用不到微秒 但还是设置一下 否则是个随机值 负数的话 是tv_sec-|tv_usec| 正数的话是tv_sec+tv_usec new_value.it_value.tv_sec = 3; //过多长时间第一次启动定时器 new_value.it_value.tv_usec = 0; // //过3秒后启动定时器 定时器周期为2秒 setitimer(ITIMER_REAL, \u0026new_value, NULL); //不需要上次的定时器属性 所以old传的是null 非阻塞立即向下执行 } signal信号捕捉函数\nsighandler_t signal(int signum,sighandler_t handler);\nint sigaction(int signum,const struct sigaction *act,struct sigaction *oldact);\n/* #include typedef void (*sighandler_t)(int);//sighandler_t为函数指针类型 指向只有一个int参数 返回值为0的函数 signal在不同的linux版本是不同的 所以最好用sigaction函数来代替！！！！ sighandler_t signal(int signum, sighandler_t handler); 捕获信号后 执行相关处理 SIGKILL SIGSTOP 无法被捕获和忽略 signum 要捕获的信号的编号 用宏值 handler 信号处理函数 handler 可以用宏值SIG_IGN忽略这个信号 SIG_DFL采取这个信号默认的动作(看笔记里的表 有讲每个signal的默认动作) 如果有给这个信号对应的回调函数指针 则(内核自动调用)执行这个函数 返回值 成功 前一次的handler值(第一次调用 返回null) 失败 返回宏SIG_ERR \\*/ #include #include #include #include #include #include void sig_handler(int num); int main() { //注册SIGALRM的信号的回调函数 __sighandler_t ret = signal(SIGALRM, sig_handler); //函数名相当于 这个函数的地址 if (ret == SIG_ERR) { perror(\"signal:\"); return -1; } struct itimerval new_value; new_value.it_interval.tv_sec = 2; //定时器周期时间 new_value.it_interval.tv_usec = 0; //虽然用不到微秒 但还是设置一下 否则是个随机值 负数的话 是tv_sec-|tv_usec| 正数的话是tv_sec+tv_usec new_value.it_value.tv_sec = 3; //过多长时间第一次启动定时器 new_value.it_value.tv_usec = 0; // //过3秒后启动定时器 定时器周期为2秒 setitimer(ITIMER_REAL, \u0026new_value, NULL); //不需要上次的定时器属性 所以old传的是null 非阻塞立即向下执行 while (1) ; //不断地 等待定时器触发回调函数 } void sig_handler(int num) { printf(\"捕获到的信号编号为：%d\\n\", num); //num=14 SIGALRM } 信号集以及相关函数\n信号集许多信号相关的系统调用都需要能表示一组不同的信号，多个信号可以使用一个叫信号集的数据结构来表示，其系统数据类型为sigset_t(64位数据 每一位代表一种信号)。在PCB中有两个非常重要的信号集，一个称之为“阻塞信号集”另一个称之为“未决信号集”。这两个信号集都是内核使用位图(二进制)机制来实现的，但操作系统不允许我们直接对这两个信号集进行位操作，而需要自定义另一个集合，借助信号集操作函数(系统调用)来对PCB的信号集进行修改。阻塞信号集可以修改未决信号集无法修改(只能读)\n信号集的“未决”是一种状态指的是从信号的产生到信号被处理前的这一段时间(信号被处理了 就是递达状态)，信号的“阻塞”是一个开关动作，指的是阻止信号被处理，但不是阻止信号产生。\n信号的阻塞就是让系统暂时保留信号待以后发送，由于另外有办法让系统忽略信号，所以一般情况下信号的阻塞只是暂时的，只是为了防止信号打断敏感的操作所以暂时阻塞一些信号。\n用户通过键盘 ctrl+c 产生2号信号SIGINT(信号被创建)，此时SIGINT还未被处理属于未决状态，**未决信号集存储已经被创建但是没有被处理的信号，此时2-SIGINT位置被置为1（未决信号集中0表示非未决状态 1表示未决状态）。**在未决信号被处理前需要和阻塞信号集进行比较，若此时阻塞信号集的2号位置为0表示2号信号不阻塞(2号信号可被发送)，进程接收到并处理结束后未决信号集的2号位置立即变为0。若此时阻塞信号集的2号位置为1表示2号信号阻塞，则2号信号被阻塞内核暂时不会发送2号信号给线程(直到阻塞信号集中 2号位置为0 内核才会发送这个信号)。 阻塞信号集默认全不阻塞(全0)\n信号集相关函数\nint sigemptyset(sigset_t *set);\nint sigfillset(sigset_t *set);\nint sigaddset(sigset_t *set,int signum);\nint sigdelset(sigset_t *set,int signum);\nint sigismember(const sigset_t *set,int signum);\n/* 一下信号集函数都是对自定义的信号集 进行操作！！！！！！！ int sigemptyset(sigset_t *set); 清空信号集中的数据(64位数全置为0) sigset_t相当于一个64位数 传入后将这个六十四位数清0，当这个函数结束后再查看传入的set已经清0了 成功返回0 失败返回-1 int sigfillset(sigset_t *set); 将信号集中所有的标志位置为1(64位数全置为1) 成功返回0 失败返回-1 int sigaddset(sigset_t *set,int signum); 设置信号集set中的signum号信号对应的位置 设为1(用于阻塞某个信号) 设置过后的set会通过set参数传出 成功返回0 失败返回-1 int sigdelset(sigset_t *set,int signum); 设置信号集set中的signum号信号对应的位置 设为0 (不阻塞某个信号) 设置过后的set会通过set参数传出 成功返回0 失败返回-1 int sigismember(const sigset_t *set,int signum); 判断set中signum号信号是否为1(是否阻塞) signum号信号为1 返回1(被阻塞) 为0 返回0(不被阻塞) 失败返回-1 \\*/ #include #include #include #include #include //信号集函数 #include int main() { //创建一个信号集 sigset_t set; //创建set 但没有初始化 其内容是随机的 所以需要先清空 sigemptyset(\u0026set); //判断SIGINT 是否被置为1了 int ret = sigismember(\u0026set, SIGINT); if (ret == 0) { printf(\"SIGINT不阻塞\\n\"); } else if (ret == 1) { printf(\"SIGINT阻塞\\n\"); } else { printf(\"出错\\n\"); return -1; } //添加信号到信号集中 sigaddset(\u0026set, SIGINT); sigaddset(\u0026set, SIGQUIT); //从信号集中删除信号 sigdelset(\u0026set, SIGQUIT); int ret = sigismember(\u0026set, SIGQUIT); if (ret == 0) { printf(\"SIGQUIT不阻塞\\n\"); } else if (ret == 1) { printf(\"SIGQUIT阻塞\\n\"); } else { printf(\"出错\\n\"); return -1; } return 0; } ","wordCount":"750","inLanguage":"en","datePublished":"2022-03-16T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/ncwo9y/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux多进程开发6 信号介绍以及信号相关函数1</h1><div class=post-meta><span title=2022-03-16T00:00:00+00:00>创建于 2022-03-16</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>信号</strong></p><p>信号是Linux进程间通信的最古老的方式之一，是事件发生时对进程的通知机制，有时也称之为<strong>软件中断</strong>,<strong>它是在软件层次上对中断机制的一种模拟，是一种异步通信的方式</strong>。<strong>信号可以导致一个正在运行的进程被另一个正在运行的异步进程中断，转而处理某一个突发事件</strong>，发往进程的诸多信号，通常都是源于内核。<strong>引发内核为进程产生信号的各类事件</strong>如下:</p><p>对于前台进程(占用shell)，用户可以通过输入特殊的终端字符来给它发送信号。比如Ctrl+C通常会给进程发送一个中断信号。</p><p>硬件发生异常，即硬件检查到一个错误条件并通知内核，随即再由内核发送相应信号给相关进程。比如执行一条异常的机器语言指令，诸如被除0，或者引用了无法访问的内存区域。</p><p>系统状态变化，比如alarm定时器到期将引起SIGALRM信号，进程执行的cpu时间超限，或者该进程的某个子进程退出。</p><p>运行kill命令或调用kill命令</p><p>一般信号用于两种用途:1让进程知道已经发生了一个特定的事情2强迫进程执行它自己代码中的信号处理程序</p><p>信号的特定：简单，不能携带大量信息，满足某个特定条件才发送，优先级比较高。</p><p>查看系统定义的信号列表：kill -l 前31个信号为常规信号 其余为实时信号</p><ol><li><p>SIGHUP 2) SIGINT 3) SIGQUIT 4) SIGILL 5) SIGTRAP</p></li><li><p>SIGABRT 7) SIGBUS 8) SIGFPE 9) SIGKILL 10) SIGUSR1</p></li><li><p>SIGSEGV 12) SIGUSR2 13) SIGPIPE 14) SIGALRM 15) SIGTERM</p></li><li><p>SIGSTKFLT 17) SIGCHLD 18) SIGCONT 19) SIGSTOP 20) SIGTSTP</p></li><li><p>SIGTTIN 22) SIGTTOU 23) SIGURG 24) SIGXCPU 25) SIGXFSZ</p></li><li><p>SIGVTALRM 27) SIGPROF 28) SIGWINCH 29) SIGIO 30) SIGPWR</p></li><li><p>SIGSYS 34) SIGRTMIN 35) SIGRTMIN+1 36) SIGRTMIN+2 37) SIGRTMIN+3</p></li><li><p>SIGRTMIN+4 39) SIGRTMIN+5 40) SIGRTMIN+6 41) SIGRTMIN+7 42) SIGRTMIN+8</p></li><li><p>SIGRTMIN+9 44) SIGRTMIN+10 45) SIGRTMIN+11 46) SIGRTMIN+12 47) SIGRTMIN+13</p></li><li><p>SIGRTMIN+14 49) SIGRTMIN+15 50) SIGRTMAX-14 51) SIGRTMAX-13 52) SIGRTMAX-12</p></li><li><p>SIGRTMAX-11 54) SIGRTMAX-10 55) SIGRTMAX-9 56) SIGRTMAX-8 57) SIGRTMAX-7</p></li><li><p>SIGRTMAX-6 59) SIGRTMAX-5 60) SIGRTMAX-4 61) SIGRTMAX-3 62) SIGRTMAX-2</p></li><li><p>SIGRTMAX-1 64) SIGRTMAX</p></li></ol><p><img alt=1647400343438-a28d720d-ad25-43c7-b915-940a69cbe66a.png loading=lazy src=/images/nSB7WgCwpACLdXhJ/1647400343438-a28d720d-ad25-43c7-b915-940a69cbe66a-910397.png></p><p>SIGCHILD不是只在子进程结束才发出，在子进程状态改变 比如子进程挂起。。都会发出这个信号</p><p>注意SIGCONT,SIGSTOP中说的进程停止并不是指进程结束，指的是进程暂停。</p><p><img alt=1647400367107-4e04b692-b78b-4e06-9735-752e19bd27aa.png loading=lazy src=/images/nSB7WgCwpACLdXhJ/1647400367107-4e04b692-b78b-4e06-9735-752e19bd27aa-551429.png></p><p>常见的5种信号默认处理动作</p><p>查看信号的详细信息 man 7 signal</p><p>1Term 终止进程 2Ign当前进程忽略掉这个信号3Core终止进程 并生成一个Core文件4Stop暂停当前进程5Cont继续执行当前被暂停的进程</p><p>信号的几种状态：产生、未决(信号还未被进程接收到)、递达(进程接收并处理信号)</p><p>SIGKILL和SIGSTOP信号不能被捕捉、阻塞或者忽略 只能执行默认动作</p><p>CORE文件会将程序终止的异常信息保存。ulimit -a中有一个参数core file size (block -c) 默认为0表示不会生成core文件，ulimit -c 1024将core文件的最大大小改为1024个字节。这样的话如果产生核心以转储的错误，错误信息会存在同路径下的core文件中，core文件需要gdb调试才能用，需要在编译时gcc -g(调试，断点信息)</p><p>gdb a.out (gdb)core-file core(core文件文件名) 会输出错误信息</p><p><strong>kill、raise、abort函数</strong></p><p>int kill(pid_t pid,int sig);</p><p>int raise(int sig);</p><p>vois abort(void);</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/types.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;signal.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int kill(pid_t pid, int sig);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       给任何进程或进程组发送信号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       pid&gt;0 则发送给这个特定PID的进程信号，pid=0给当前调用kill的进程所在的进程组中的所有进程发送信号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       pid=-1向允许接收当前进程信号的所有进程发送信号(除了1号init进程)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       pid&lt;-1 向进程组号为-pid的所有进程发送信号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       sig=0则不发送信号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       成功返回0 失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       不要被名字迷惑了 kill不仅仅用于杀死进程 kill(getpid(),9) kill(getppid(),9)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       kill用于向某个进程(pid)发送信号(sig 信号编号或宏值(信号名称))
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;signal.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int raise(int sig);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       给当前调用raise的进程发送信号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       成功返回0 失败返回非0
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       vois abort(void);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       发送 SIGABRT信号给当前的进程 SIGABRT 终止进程并产生core文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;signal.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//演示kill
+</span></span></span><span style=display:flex><span>    pid_t pid <span style=color:#f92672>=</span> fork();
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//子进程
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        ;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//父进程
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//父进程中 返回的pid是子进程的pid
+</span></span></span><span style=display:flex><span>        kill(pid, <span style=color:#ae81ff>9</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>alarm函数</strong></p><p>usigned int alarm(unsigned int seconds);</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       unsigned int alarm(unsigned int seconds);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       设置定时器 函数调用开始倒计时seconds秒
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       参数为0定时器无效 不进行倒计时也不发送信号 我们取消定时器就是通过将alarm设置为0实现的
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       当时间到后 函数会给调用alarm的当前进程发送SIGALAEM信号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回值
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       第一次调用 alarm 返回0
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       之前已调用过alarm 返回之前的定时器的倒计时剩余时间
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       进程收到SIGALRM信号 默认终止当前进程
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       每个进程都有且只有唯一的一个定时器！！！
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       alarm(10);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       过了1秒....
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       unsigned int rest = alarm(5);//这个5秒倒计时会将上面的10秒定时器给取消掉并且重新从0开始记5秒
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回的rest为之前10秒定时器余下的没走完的时间 即9秒
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       定时器与进程的状态无关，无论进程处于什么状态 alarm都会计时!!!!
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       alarm不阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;signal.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//实际运行时间 = 内核时间(系统调用)+用户程序时间+IO消耗的时间
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//alarm为系统调用
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>setitimer定时器函数</strong></p><p>int setitimer(int which,const struct itimerval *new_val,struct itimerval *old_value);</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/time.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int getitimer(int which, struct itimerval *curr_value);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int setitimer(int which, const struct itimerval *new_value,
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                     struct itimerval *old_value);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       非阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       设置定时器 替代alarm函数， alarm精度只能是秒，setitimer进度可以达到us
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       可以实现周期性定时
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       which 使用什么定时时间类型
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       ITIMER_REAL  真实时间(物理世界的时间)=内核时间(系统调用)+用户程序时间+IO消耗的时间+....
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       每次倒计时 时间到发送SIGALRM信号 并重新开始计时
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       ITIMER_VIRTUAL 虚拟时间 这个线程使用的用户程序时间  计算在应用层递减的时间 不计算在内核层的递减的时间
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       (包含这个在进程中所有线程消耗的时间)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       每次倒计时 时间到发送SIGVTALRM信号 并重新开始计时
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       ITIMER_PROF  这个线程使用的内核时间(系统调用)+用户程序时间CPU时间 会减去在系统中阻塞的时间(无内核与用户间切换消耗的时间)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       (包含在这个进程中所有线程消耗的时间)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       每次倒计时 时间到发送SIGPROF信号 并重新开始计时
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       new_value 设置定时器的属性
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       struct itimerval//定时器结构体
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       {
+</span></span></span><span style=display:flex><span><span style=color:#75715e>          struct timeval it_interval; //计时器重新启动动的间歇值  it_interval减到0 发送信号 并重新填充
+</span></span></span><span style=display:flex><span><span style=color:#75715e>          struct timeval it_value; //计时器安装后首先启动的初始值 it_value的时间值减到0 也会发送一个信号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       };
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       也可以这么理解 it_interval 下次定时取值  it_value 本次定时设置值
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       定时器工作时，先将it_value的时间值减到0，发送一个信号，再将it_value赋值为it_interval的值，重新开始定时，如此反复。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       如果it_value值被设置为0，则定时器停止定时；如果it_value值不为0但it_interval值为0，则定时器在一次定时后终止
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       struct timeval//时间结构体
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       {
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              time_t tv_sec; //秒
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              suseconds_t tv_usec;//微秒
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       };
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       在setitimer后经过it_value后启动定时器 it_interval就为定时器周期定时时长
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       old_value :记录了上次调用setitimer所设置的定时器的属性 这是个传出参数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回值 成功0 失败-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;signal.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/time.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>       <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>itimerval</span> new_value;
+</span></span><span style=display:flex><span>       new_value.it_interval.tv_sec <span style=color:#f92672>=</span> <span style=color:#ae81ff>2</span>;  <span style=color:#75715e>//定时器周期时间
+</span></span></span><span style=display:flex><span>       new_value.it_interval.tv_usec <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//虽然用不到微秒 但还是设置一下 否则是个随机值 负数的话 是tv_sec-|tv_usec| 正数的话是tv_sec+tv_usec
+</span></span></span><span style=display:flex><span>       new_value.it_value.tv_sec <span style=color:#f92672>=</span> <span style=color:#ae81ff>3</span>;  <span style=color:#75715e>//过多长时间第一次启动定时器
+</span></span></span><span style=display:flex><span>       new_value.it_value.tv_usec <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//
+</span></span></span><span style=display:flex><span>       <span style=color:#75715e>//过3秒后启动定时器 定时器周期为2秒
+</span></span></span><span style=display:flex><span>       setitimer(ITIMER_REAL, <span style=color:#f92672>&amp;</span>new_value, NULL); <span style=color:#75715e>//不需要上次的定时器属性 所以old传的是null 非阻塞立即向下执行
+</span></span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>signal信号捕捉函数</strong></p><p>sighandler_t signal(int signum,sighandler_t handler);</p><p>int sigaction(int signum,const struct sigaction *act,struct sigaction *oldact);</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;signal.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       typedef void (*sighandler_t)(int);//sighandler_t为函数指针类型 指向只有一个int参数 返回值为0的函数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       signal在不同的linux版本是不同的 所以最好用sigaction函数来代替！！！！
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       sighandler_t signal(int signum, sighandler_t handler);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       捕获信号后 执行相关处理
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       SIGKILL SIGSTOP 无法被捕获和忽略
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       signum 要捕获的信号的编号 用宏值
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       handler 信号处理函数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       handler 可以用宏值SIG_IGN忽略这个信号 SIG_DFL采取这个信号默认的动作(看笔记里的表 有讲每个signal的默认动作)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       如果有给这个信号对应的回调函数指针 则(内核自动调用)执行这个函数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回值
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       成功 前一次的handler值(第一次调用 返回null) 失败 返回宏SIG_ERR
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;signal.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/time.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>sig_handler</span>(<span style=color:#66d9ef>int</span> num);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//注册SIGALRM的信号的回调函数
+</span></span></span><span style=display:flex><span>    __sighandler_t ret <span style=color:#f92672>=</span> signal(SIGALRM, sig_handler); <span style=color:#75715e>//函数名相当于 这个函数的地址
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> SIG_ERR)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;signal:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>itimerval</span> new_value;
+</span></span><span style=display:flex><span>    new_value.it_interval.tv_sec <span style=color:#f92672>=</span> <span style=color:#ae81ff>2</span>;  <span style=color:#75715e>//定时器周期时间
+</span></span></span><span style=display:flex><span>    new_value.it_interval.tv_usec <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//虽然用不到微秒 但还是设置一下 否则是个随机值 负数的话 是tv_sec-|tv_usec| 正数的话是tv_sec+tv_usec
+</span></span></span><span style=display:flex><span>    new_value.it_value.tv_sec <span style=color:#f92672>=</span> <span style=color:#ae81ff>3</span>;  <span style=color:#75715e>//过多长时间第一次启动定时器
+</span></span></span><span style=display:flex><span>    new_value.it_value.tv_usec <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//过3秒后启动定时器 定时器周期为2秒
+</span></span></span><span style=display:flex><span>    setitimer(ITIMER_REAL, <span style=color:#f92672>&amp;</span>new_value, NULL); <span style=color:#75715e>//不需要上次的定时器属性 所以old传的是null 非阻塞立即向下执行
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        ; <span style=color:#75715e>//不断地 等待定时器触发回调函数
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>sig_handler</span>(<span style=color:#66d9ef>int</span> num)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;捕获到的信号编号为：%d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, num); <span style=color:#75715e>//num=14 SIGALRM
+</span></span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>信号集以及相关函数</strong></p><p>信号集许多信号相关的系统调用都需要能表示一组不同的信号，<strong>多个信号可以使用一个叫信号集的数据结构来表示，其系统数据类型为sigset_t(64位数据 每一位代表一种信号)。<strong>在PCB中有两个非常重要的信号集，一个称之为“阻塞信号集”另一个称之为“未决信号集”。这两个信号集都是内核使用位图(二进制)机制来实现的，但</strong>操作系统不允许我们直接对这两个信号集进行位操作</strong>，而需要自定义另一个集合，<strong>借助信号集操作函数(系统调用)来对PCB的信号集进行修改</strong>。阻塞信号集可以修改未决信号集无法修改(只能读)</p><p>信号集的“未决”是一种状态指的是从信号的产生到信号被处理前的这一段时间(信号被处理了 就是递达状态)，信号的“阻塞”是一个开关动作，指的是阻止信号被处理，但不是阻止信号产生。</p><p>信号的阻塞就是让系统暂时保留信号待以后发送，由于另外有办法让系统忽略信号，所以一般情况下信号的阻塞只是暂时的，只是为了防止信号打断敏感的操作所以暂时阻塞一些信号。</p><p><img alt=1647400465208-34f87422-285c-4bfb-b207-c13ae6cb4fa6.png loading=lazy src=/images/nSB7WgCwpACLdXhJ/1647400465208-34f87422-285c-4bfb-b207-c13ae6cb4fa6-376086.png></p><p>用户通过键盘 ctrl+c 产生2号信号SIGINT(信号被创建)，此时SIGINT还未被处理属于未决状态，**未决信号集存储已经被创建但是没有被处理的信号，此时2-SIGINT位置被置为1（未决信号集中0表示非未决状态 1表示未决状态）。**在未决信号被处理前需要和阻塞信号集进行比较，若此时阻塞信号集的2号位置为0表示2号信号不阻塞(2号信号可被发送)，进程接收到并处理结束后未决信号集的2号位置立即变为0。若此时阻塞信号集的2号位置为1表示2号信号阻塞，则2号信号被阻塞内核暂时不会发送2号信号给线程(直到阻塞信号集中 2号位置为0 内核才会发送这个信号)。 阻塞信号集默认全不阻塞(全0)</p><p>信号集相关函数</p><p>int sigemptyset(sigset_t *set);</p><p>int sigfillset(sigset_t *set);</p><p>int sigaddset(sigset_t *set,int signum);</p><p>int sigdelset(sigset_t *set,int signum);</p><p>int sigismember(const sigset_t *set,int signum);</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    一下信号集函数都是对自定义的信号集 进行操作！！！！！！！
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int sigemptyset(sigset_t *set);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        清空信号集中的数据(64位数全置为0) sigset_t相当于一个64位数 传入后将这个六十四位数清0，当这个函数结束后再查看传入的set已经清0了
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        成功返回0 失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int sigfillset(sigset_t *set);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        将信号集中所有的标志位置为1(64位数全置为1)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        成功返回0 失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int sigaddset(sigset_t *set,int signum);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        设置信号集set中的signum号信号对应的位置 设为1(用于阻塞某个信号)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        设置过后的set会通过set参数传出
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        成功返回0 失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int sigdelset(sigset_t *set,int signum);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        设置信号集set中的signum号信号对应的位置 设为0 (不阻塞某个信号)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        设置过后的set会通过set参数传出
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        成功返回0 失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int sigismember(const sigset_t *set,int signum);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        判断set中signum号信号是否为1(是否阻塞)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        signum号信号为1 返回1(被阻塞)    为0 返回0(不被阻塞)  失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;signal.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//信号集函数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/time.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建一个信号集
+</span></span></span><span style=display:flex><span>    sigset_t set;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建set 但没有初始化 其内容是随机的 所以需要先清空
+</span></span></span><span style=display:flex><span>    sigemptyset(<span style=color:#f92672>&amp;</span>set);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//判断SIGINT 是否被置为1了
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> sigismember(<span style=color:#f92672>&amp;</span>set, SIGINT);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;SIGINT不阻塞</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;SIGINT阻塞</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;出错</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//添加信号到信号集中
+</span></span></span><span style=display:flex><span>    sigaddset(<span style=color:#f92672>&amp;</span>set, SIGINT);
+</span></span><span style=display:flex><span>    sigaddset(<span style=color:#f92672>&amp;</span>set, SIGQUIT);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//从信号集中删除信号
+</span></span></span><span style=display:flex><span>    sigdelset(<span style=color:#f92672>&amp;</span>set, SIGQUIT);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> sigismember(<span style=color:#f92672>&amp;</span>set, SIGQUIT);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;SIGQUIT不阻塞</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;SIGQUIT阻塞</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;出错</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

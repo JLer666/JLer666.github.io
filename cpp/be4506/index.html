@@ -1,0 +1,262 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>2自己动手来实现一个shared_ptr智能指针3 实现代码 | CantBlog</title><meta name=keywords content><meta name=description content="template <typename T>
+class smart_ptr {
+  …
+  smart_ptr(smart_ptr&& other) noexcept//拷贝构造参数改为右值引用 变为移动构造函数
+  {
+    ptr_ = other.release();
+  }
+  smart_ptr& operator=(smart_ptr rhs)//不传入引用而传入对象
+  {//传入对象构造形参rhs时 因为只定义了移动构造所以在调用op=必须传入右值引用或者右值(临时对象)，来构造形参 传入左值会出错
+    rhs.swap(*this);
+    return *this;
+  }
+//原
+//smart_ptr& operator=(smart_ptr& rhs)
+//{
+//smart_ptr(rhs).swap(*this);
+//return *this;
+//}
+  …
+};
+根据 C++ 的规则，如果我提供了移动构造函数而没有手动提供拷贝构造函数，那后者自动被禁用（记住，C++ 里那些复杂的规则也是为方便编程而设立的）。于是，我们自然地得到了以下结果：
+smart_ptr<shape> ptr1{create_shape(shape_type::circle)};//移动构造
+smart_ptr<shape> ptr2{ptr1};             // 编译出错 因为没写拷贝构造
+smart_ptr<shape> ptr3;
+ptr3 = ptr1;                             // 编译出错 因为没写拷贝构造在调用op=时 无法通过拷贝构造来构造形参
+ptr3 = std::move(ptr1);                  // OK，可以 调用op=时 通过移动构造来构造形参
+smart_ptr<shape> ptr4{std::move(ptr3)};  // OK，可以 移动构造
+这也是 C++11 的 unique_ptr 的基本行为。"><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/be4506/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/be4506/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/be4506/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="2自己动手来实现一个shared_ptr智能指针3 实现代码"><meta property="og:description" content="template <typename T> class smart_ptr { … smart_ptr(smart_ptr&& other) noexcept//拷贝构造参数改为右值引用 变为移动构造函数 { ptr_ = other.release(); } smart_ptr& operator=(smart_ptr rhs)//不传入引用而传入对象 {//传入对象构造形参rhs时 因为只定义了移动构造所以在调用op=必须传入右值引用或者右值(临时对象)，来构造形参 传入左值会出错 rhs.swap(*this); return *this; } //原 //smart_ptr& operator=(smart_ptr& rhs) //{ //smart_ptr(rhs).swap(*this); //return *this; //} … }; 根据 C++ 的规则，如果我提供了移动构造函数而没有手动提供拷贝构造函数，那后者自动被禁用（记住，C++ 里那些复杂的规则也是为方便编程而设立的）。于是，我们自然地得到了以下结果：
+smart_ptr<shape> ptr1{create_shape(shape_type::circle)};//移动构造 smart_ptr<shape> ptr2{ptr1}; // 编译出错 因为没写拷贝构造 smart_ptr<shape> ptr3; ptr3 = ptr1; // 编译出错 因为没写拷贝构造在调用op=时 无法通过拷贝构造来构造形参 ptr3 = std::move(ptr1); // OK，可以 调用op=时 通过移动构造来构造形参 smart_ptr<shape> ptr4{std::move(ptr3)}; // OK，可以 移动构造 这也是 C++11 的 unique_ptr 的基本行为。"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-02-22T00:00:00+00:00"><meta property="article:modified_time" content="2022-12-21T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="2自己动手来实现一个shared_ptr智能指针3 实现代码"><meta name=twitter:description content="template <typename T> class smart_ptr { … smart_ptr(smart_ptr&& other) noexcept//拷贝构造参数改为右值引用 变为移动构造函数 { ptr_ = other.release(); } smart_ptr& operator=(smart_ptr rhs)//不传入引用而传入对象 {//传入对象构造形参rhs时 因为只定义了移动构造所以在调用op=必须传入右值引用或者右值(临时对象)，来构造形参 传入左值会出错 rhs.swap(*this); return *this; } //原 //smart_ptr& operator=(smart_ptr& rhs) //{ //smart_ptr(rhs).swap(*this); //return *this; //} … }; 根据 C++ 的规则，如果我提供了移动构造函数而没有手动提供拷贝构造函数，那后者自动被禁用（记住，C++ 里那些复杂的规则也是为方便编程而设立的）。于是，我们自然地得到了以下结果：
+smart_ptr<shape> ptr1{create_shape(shape_type::circle)};//移动构造 smart_ptr<shape> ptr2{ptr1}; // 编译出错 因为没写拷贝构造 smart_ptr<shape> ptr3; ptr3 = ptr1; // 编译出错 因为没写拷贝构造在调用op=时 无法通过拷贝构造来构造形参 ptr3 = std::move(ptr1); // OK，可以 调用op=时 通过移动构造来构造形参 smart_ptr<shape> ptr4{std::move(ptr3)}; // OK，可以 移动构造 这也是 C++11 的 unique_ptr 的基本行为。"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"2自己动手来实现一个shared_ptr智能指针3 实现代码","item":"https://jler666.github.io/cpp/be4506/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"2自己动手来实现一个shared_ptr智能指针3 实现代码","name":"2自己动手来实现一个shared_ptr智能指针3 实现代码","description":"template \u0026lt;typename T\u0026gt; class smart_ptr { … smart_ptr(smart_ptr\u0026amp;\u0026amp; other) noexcept//拷贝构造参数改为右值引用 变为移动构造函数 { ptr_ = other.release(); } smart_ptr\u0026amp; operator=(smart_ptr rhs)//不传入引用而传入对象 {//传入对象构造形参rhs时 因为只定义了移动构造所以在调用op=必须传入右值引用或者右值(临时对象)，来构造形参 传入左值会出错 rhs.swap(*this); return *this; } //原 //smart_ptr\u0026amp; operator=(smart_ptr\u0026amp; rhs) //{ //smart_ptr(rhs).swap(*this); //return *this; //} … }; 根据 C++ 的规则，如果我提供了移动构造函数而没有手动提供拷贝构造函数，那后者自动被禁用（记住，C++ 里那些复杂的规则也是为方便编程而设立的）。于是，我们自然地得到了以下结果：\nsmart_ptr\u0026lt;shape\u0026gt; ptr1{create_shape(shape_type::circle)};//移动构造 smart_ptr\u0026lt;shape\u0026gt; ptr2{ptr1}; // 编译出错 因为没写拷贝构造 smart_ptr\u0026lt;shape\u0026gt; ptr3; ptr3 = ptr1; // 编译出错 因为没写拷贝构造在调用op=时 无法通过拷贝构造来构造形参 ptr3 = std::move(ptr1); // OK，可以 调用op=时 通过移动构造来构造形参 smart_ptr\u0026lt;shape\u0026gt; ptr4{std::move(ptr3)}; // OK，可以 移动构造 这也是 C++11 的 unique_ptr 的基本行为。\n","keywords":[],"articleBody":"template \u003ctypename T\u003e class smart_ptr { … smart_ptr(smart_ptr\u0026\u0026 other) noexcept//拷贝构造参数改为右值引用 变为移动构造函数 { ptr_ = other.release(); } smart_ptr\u0026 operator=(smart_ptr rhs)//不传入引用而传入对象 {//传入对象构造形参rhs时 因为只定义了移动构造所以在调用op=必须传入右值引用或者右值(临时对象)，来构造形参 传入左值会出错 rhs.swap(*this); return *this; } //原 //smart_ptr\u0026 operator=(smart_ptr\u0026 rhs) //{ //smart_ptr(rhs).swap(*this); //return *this; //} … }; 根据 C++ 的规则，如果我提供了移动构造函数而没有手动提供拷贝构造函数，那后者自动被禁用（记住，C++ 里那些复杂的规则也是为方便编程而设立的）。于是，我们自然地得到了以下结果：\nsmart_ptr\u003cshape\u003e ptr1{create_shape(shape_type::circle)};//移动构造 smart_ptr\u003cshape\u003e ptr2{ptr1}; // 编译出错 因为没写拷贝构造 smart_ptr\u003cshape\u003e ptr3; ptr3 = ptr1; // 编译出错 因为没写拷贝构造在调用op=时 无法通过拷贝构造来构造形参 ptr3 = std::move(ptr1); // OK，可以 调用op=时 通过移动构造来构造形参 smart_ptr\u003cshape\u003e ptr4{std::move(ptr3)}; // OK，可以 移动构造 这也是 C++11 的 unique_ptr 的基本行为。\n子类指针向父类指针的转换(将子类指针强转为父类指针 可实现多态 ) 隐式模板类型转换\ncircle*(子类指针) 是可以隐式转换成 shape*(父类指针) 的，但上面的 smart_ptr 却无法自动转换成 smart_ptr。这个行为显然还是不够“自然”。\n添加一个构造函数，就能实现smart_ptr自动移动成 smart_ptr\ntemplate \u003ctypename U\u003e smart_ptr(smart_ptr\u003cU\u003e\u0026\u0026 other) { ptr_ = other.release(); } 添加了这个构造函数后，能实现smart_ptr自动(隐式转换)移动成 smart_ptr，但smart_ptr不能移动给smart_ptr兄弟类\n需要注意smart_ptr(smart_ptr\u0026\u0026 other)这个函数不会被编译器当作移动构造函数，因而不会自动触发删除拷贝构造函数的行为。如果我们想要实现自动移动，需要显示地将拷贝构造函数标记为=delete，或者定义含模板参数的拷贝构造函数\n引用计数\n上面讲的smart_ptr就是std中unique_ptr，unique_ptr算是较为安全的智能指针。但是一个堆上内存(或者其他资源)只能被单个unique_ptr所拥有–unique_ptr的op= 或者构造 会将右边的资源移到左边，右边的资源指针清为null，这也就导致了只有一个unique_ptr能拥有资源。下面来讲一下std中的shared_ptr，多个shared_ptr智能指针能同时拥有一个堆上内存(或者其他资源)，当所有shared_ptr失效(生命周期结束)才会去释放这个资源。\nshared_ptr实现共享同一个对象的功能需要同时共享一个计数，记录当前有多少个shared_ptr共享了这一资源，引用计数为1时的这个shared_ptr生命周期结束才释放资源。\n共享引用计数的接口\nclass shared_count { public: shared_count(); void add_count();//增加计数 long reduce_count();//减少计数 需要返回减少后的计数值以便调用者判断 计数是否变为0了 long get_count() const;//返回计数 }; 多线程安全版本的引用计数需要用到一些目前还没学到的知识 先实现一个简单版本的\nclass shared_count { public: //因为在移动构造中有用到下面这些代码 所以全部都需要添加 不会报错的声明noexcept shared_count() noexcept : count_(1) {} void add_count() noexcept { ++count_; } long reduce_count() noexcept { return --count_; } long get_count() const noexcept { return count_; } private: long count_; }; 实现shared_ptr\ntemplate \u003ctypename T\u003e class smart_ptr { public: // 模板的各个实例间并不天然就有 friend 关系， // 因而不能互访私有成员 ptr_ 和 shared_count_。 // 我们需要在 smart_ptr 的定义中显式声明 // smart_ptr和smart_ptr不是同一个类!!!! template \u003ctypename U\u003e friend class smart_ptr; explicit smart_ptr(T* ptr = nullptr) : ptr_(ptr) //explicit 标识该构造函数的调用必须是显示的 //不能隐式调用(传入一个T*指针给一个smart_ptr类型形参 让编译器构造自动调用构造函数去构造这个形参) { if (ptr) { shared_count_ = new shared_count(); } } ~smart_ptr() { if (ptr_ \u0026\u0026 !shared_count_ -\u003ereduce_count()) { //资源ptr存在 并且当前为 //最后一个指向该资源的指针(引用计数为0)才析构释放资源 delete ptr_; delete shared_count_; } } #include // std::swap void swap(smart_ptr\u0026 rhs)//用于资源交换 { using std::swap; swap(ptr_, rhs.ptr_); swap(shared_count_, rhs.shared_count_); } smart_ptr(const smart_ptr\u0026 other)//拷贝构造 { //使this 共享 other的资源 ptr_ = other.ptr_; if (ptr_) { other.shared_count_ -\u003eadd_count();//与other一样指向同一块资源 此资源的引用计数+1 shared_count_ = other.shared_count_; } } template \u003ctypename U\u003e smart_ptr(const smart_ptr\u003cU\u003e\u0026 other) noexcept //隐式类型转换(子类转父类) 拷贝构造 { //使this 共享 other的资源 ptr_ = other.ptr_; if (ptr_) { other.shared_count_ -\u003eadd_count(); shared_count_ = other.shared_count_; } } template \u003ctypename U\u003e smart_ptr(smart_ptr\u003cU\u003e\u0026\u0026 other) noexcept //移动构造的本质是“偷”，所以直接other的资源偷来 //不是与other共享ptr资源而是 直接替代other所以引用计数不需要加 //隐式类型转换(子类转父类) 或者 同类型(U和T的类别一样) 的移动构造 { ptr_ = other.ptr_; if (ptr_) { shared_count_ = other.shared_count_; //不是与other共享ptr资源而是 直接替代other所以引用计数不需要加 other.ptr_ = nullptr;//偷走other的资源后 将other的资源置为null } } //为了实现强制的smart_ptr模板参数类型转换，添加下面这个构造函数 //允许在对智能指针内部的指针对象ptr赋值时， //使用一个现有的智能指针的共享计数 template \u003ctypename U\u003e smart_ptr(const smart_ptr\u003cU\u003e\u0026 other,T* ptr) noexcept { //将ptr作为资源 将other资源的引用计数+1作为这个ptr的引用计数 ptr_ = ptr; //ptr是外面传进来的，不是other资源指针 if (ptr_) { other.shared_count_-\u003eadd_count(); shared_count_ = other.shared_count_; } } //依据传入的实参是右值还是左值来构造形参rhs //形参得到传入实参的资源后(实参是左值拷贝资源 实参是右值偷走资源) //与this进行资源的互换 返回this,函数结束 //自动析构形参 因为形参的资源由实参而来 所以函数结束就释放形参资源(引用计数--) smart_ptr\u0026 operator=(smart_ptr rhs) noexcept { rhs.swap(*this); return *this; } //返回共享资源指针 T* get() const noexcept { return ptr_; } //用于调试 返回当前资源ptr的引用计数 long use_count() const noexcept { if (ptr_) { return shared_count_ -\u003eget_count(); } else { return 0; } } // 添加下面3个操作符重载使smart_ptr行为更像指针 T\u0026 operator*() const noexcept { return *ptr_; } T* operator-\u003e() const noexcept { return ptr_; } operator bool() const noexcept { return ptr_; } private: T* ptr_; shared_count* shared_count_; }; 强制类型转换 实现父类-\u003e子类的强制转换\n// 调用时子类是T,父类是U template \u003ctypename T\u003e void swap(smart_ptr\u003cT\u003e\u0026 lhs, smart_ptr\u003cT\u003e\u0026 rhs) noexcept { lhs.swap(rhs); } template \u003ctypename T, typename U\u003e smart_ptr\u003cT\u003e static_pointer_cast( const smart_ptr\u003cU\u003e\u0026 other) noexcept { T* ptr = static_cast\u003cT*\u003e(other.get()); return smart_ptr\u003cT\u003e(other, ptr); } template \u003ctypename T, typename U\u003e smart_ptr\u003cT\u003e reinterpret_pointer_cast( const smart_ptr\u003cU\u003e\u0026 other) noexcept { T* ptr = reinterpret_cast\u003cT*\u003e(other.get()); return smart_ptr\u003cT\u003e(other, ptr); } template \u003ctypename T, typename U\u003e smart_ptr\u003cT\u003e const_pointer_cast( const smart_ptr\u003cU\u003e\u0026 other) noexcept { T* ptr = const_cast\u003cT*\u003e(other.get()); return smart_ptr\u003cT\u003e(other, ptr); } // smart_ptr ptr1(new circle()); // smart_ptr ptr2; // ptr2 = ptr1; // smart_ptr ptr3 = dynamic_pointer_cast(ptr2);//ptr2 shape-\u003ecircle 父类转为子类 // 调用时circle是T,shape是U // printf(\"use count of ptr3 is %ld\\n\",ptr3.use_count());//use count of ptr3 is 3 template \u003ctypename T, typename U\u003e smart_ptr\u003cT\u003e dynamic_pointer_cast( const smart_ptr\u003cU\u003e\u0026 other) noexcept { T* ptr = dynamic_cast\u003cT*\u003e(other.get());//将other 内部的U* shape* -\u003e T* circle return smart_ptr\u003cT\u003e(other, ptr); } ","wordCount":"558","inLanguage":"en","datePublished":"2022-02-22T00:00:00Z","dateModified":"2022-12-21T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/be4506/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">2自己动手来实现一个shared_ptr智能指针3 实现代码</h1><div class=post-meta><span title=2022-02-22T00:00:00+00:00>创建于 2022-02-22</span>&nbsp;·&nbsp;<span title=2022-12-21T00:00:00+00:00>最后修改于 2022-12-21</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>smart_ptr</span> {
+</span></span><span style=display:flex><span>  <span style=color:#960050;background-color:#1e0010>…</span>
+</span></span><span style=display:flex><span>  smart_ptr(smart_ptr<span style=color:#f92672>&amp;&amp;</span> other) <span style=color:#66d9ef>noexcept</span><span style=color:#75715e>//拷贝构造参数改为右值引用 变为移动构造函数
+</span></span></span><span style=display:flex><span>  {
+</span></span><span style=display:flex><span>    ptr_ <span style=color:#f92672>=</span> other.release();
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  smart_ptr<span style=color:#f92672>&amp;</span> <span style=color:#66d9ef>operator</span><span style=color:#f92672>=</span>(smart_ptr rhs)<span style=color:#75715e>//不传入引用而传入对象
+</span></span></span><span style=display:flex><span>  {<span style=color:#75715e>//传入对象构造形参rhs时 因为只定义了移动构造所以在调用op=必须传入右值引用或者右值(临时对象)，来构造形参 传入左值会出错
+</span></span></span><span style=display:flex><span>    rhs.swap(<span style=color:#f92672>*</span><span style=color:#66d9ef>this</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#f92672>*</span><span style=color:#66d9ef>this</span>;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span><span style=color:#75715e>//原
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//smart_ptr&amp; operator=(smart_ptr&amp; rhs)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//{
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//smart_ptr(rhs).swap(*this);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//return *this;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//}
+</span></span></span><span style=display:flex><span>  <span style=color:#960050;background-color:#1e0010>…</span>
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><p>根据 C++ 的规则，如果我提供了移动构造函数而没有手动提供拷贝构造函数，那后者自动被禁用（记住，C++ 里那些复杂的规则也是为方便编程而设立的）。于是，我们自然地得到了以下结果：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span>smart_ptr<span style=color:#f92672>&lt;</span>shape<span style=color:#f92672>&gt;</span> ptr1{create_shape(shape_type<span style=color:#f92672>::</span>circle)};<span style=color:#75715e>//移动构造
+</span></span></span><span style=display:flex><span>smart_ptr<span style=color:#f92672>&lt;</span>shape<span style=color:#f92672>&gt;</span> ptr2{ptr1};             <span style=color:#75715e>// 编译出错 因为没写拷贝构造
+</span></span></span><span style=display:flex><span>smart_ptr<span style=color:#f92672>&lt;</span>shape<span style=color:#f92672>&gt;</span> ptr3;
+</span></span><span style=display:flex><span>ptr3 <span style=color:#f92672>=</span> ptr1;                             <span style=color:#75715e>// 编译出错 因为没写拷贝构造在调用op=时 无法通过拷贝构造来构造形参
+</span></span></span><span style=display:flex><span>ptr3 <span style=color:#f92672>=</span> std<span style=color:#f92672>::</span>move(ptr1);                  <span style=color:#75715e>// OK，可以 调用op=时 通过移动构造来构造形参
+</span></span></span><span style=display:flex><span>smart_ptr<span style=color:#f92672>&lt;</span>shape<span style=color:#f92672>&gt;</span> ptr4{std<span style=color:#f92672>::</span>move(ptr3)};  <span style=color:#75715e>// OK，可以 移动构造
+</span></span></span></code></pre></div><p>这也是 C++11 的 unique_ptr 的基本行为。</p><p><strong>子类指针向父类指针的转换(将子类指针强转为父类指针 可实现多态 ) 隐式模板类型转换</strong></p><p>circle*(子类指针) 是可以隐式转换成 shape*(父类指针) 的，但上面的 smart_ptr 却无法自动转换成 smart_ptr。这个行为显然还是不够“自然”。</p><p>添加一个构造函数，就能实现smart_ptr自动移动成 smart_ptr</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span>  <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> U<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>  smart_ptr(smart_ptr<span style=color:#f92672>&lt;</span>U<span style=color:#f92672>&gt;&amp;&amp;</span> other)
+</span></span><span style=display:flex><span>  {
+</span></span><span style=display:flex><span>    ptr_ <span style=color:#f92672>=</span> other.release();
+</span></span><span style=display:flex><span>  }
+</span></span></code></pre></div><p>添加了这个构造函数后，能实现smart_ptr自动(<strong>隐式转换</strong>)移动成 smart_ptr，但smart_ptr不能移动给smart_ptr兄弟类</p><p><strong>需要注意smart_ptr(smart_ptr&& other)这个函数不会被编译器当作移动构造函数，因而不会自动触发删除拷贝构造函数的行为。如果我们想要实现自动移动，需要显示地将拷贝构造函数标记为=delete，或者定义含模板参数的拷贝构造函数</strong></p><p><strong>引用计数</strong></p><p>上面讲的smart_ptr就是std中unique_ptr，unique_ptr算是较为安全的智能指针。但是一个堆上内存(或者其他资源)只能被单个unique_ptr所拥有&ndash;<strong>unique_ptr的op= 或者构造 会将右边的资源移到左边，右边的资源指针清为null，这也就导致了只有一个unique_ptr能拥有资源</strong>。下面来讲一下std中的shared_ptr，<strong>多个shared_ptr智能指针能同时拥有一个堆上内存(或者其他资源)</strong>，<strong>当所有shared_ptr失效(生命周期结束)才会去释放这个资源</strong>。</p><p><img alt=1645498071426-ec3cb913-ef85-4f24-809f-8f9cdd543e1c.png loading=lazy src=/images/YWGA2IsMcYy_LLMs/1645498071426-ec3cb913-ef85-4f24-809f-8f9cdd543e1c-760141.png></p><p>shared_ptr实现共享同一个对象的功能需要同时共享一个计数，记录当前有多少个shared_ptr共享了这一资源，引用计数为1时的这个shared_ptr生命周期结束才释放资源。</p><p>共享引用计数的接口</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>shared_count</span> {
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>  shared_count();
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>add_count</span>();<span style=color:#75715e>//增加计数
+</span></span></span><span style=display:flex><span>  <span style=color:#66d9ef>long</span> <span style=color:#a6e22e>reduce_count</span>();<span style=color:#75715e>//减少计数 需要返回减少后的计数值以便调用者判断 计数是否变为0了
+</span></span></span><span style=display:flex><span>  <span style=color:#66d9ef>long</span> <span style=color:#a6e22e>get_count</span>() <span style=color:#66d9ef>const</span>;<span style=color:#75715e>//返回计数
+</span></span></span><span style=display:flex><span>};
+</span></span></code></pre></div><p>多线程安全版本的引用计数需要用到一些目前还没学到的知识 先实现一个简单版本的</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>shared_count</span> {
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//因为在移动构造中有用到下面这些代码 所以全部都需要添加 不会报错的声明noexcept
+</span></span></span><span style=display:flex><span>  shared_count() <span style=color:#66d9ef>noexcept</span> <span style=color:#f92672>:</span> count_(<span style=color:#ae81ff>1</span>) {}
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>add_count</span>() <span style=color:#66d9ef>noexcept</span>
+</span></span><span style=display:flex><span>  {
+</span></span><span style=display:flex><span>    <span style=color:#f92672>++</span>count_;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>long</span> <span style=color:#a6e22e>reduce_count</span>() <span style=color:#66d9ef>noexcept</span>
+</span></span><span style=display:flex><span>  {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#f92672>--</span>count_;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>long</span> <span style=color:#a6e22e>get_count</span>() <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>noexcept</span>
+</span></span><span style=display:flex><span>  {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> count_;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>long</span> count_;
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><p>实现shared_ptr</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>smart_ptr</span> {
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 模板的各个实例间并不天然就有 friend 关系，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 因而不能互访私有成员 ptr_ 和 shared_count_。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 我们需要在 smart_ptr 的定义中显式声明
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// smart_ptr&lt;T&gt;和smart_ptr&lt;U&gt;不是同一个类!!!!
+</span></span></span><span style=display:flex><span>  <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> U<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>friend</span> <span style=color:#66d9ef>class</span> <span style=color:#a6e22e>smart_ptr</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>explicit</span> <span style=color:#a6e22e>smart_ptr</span>(T<span style=color:#f92672>*</span> ptr <span style=color:#f92672>=</span> <span style=color:#66d9ef>nullptr</span>)
+</span></span><span style=display:flex><span>    <span style=color:#f92672>:</span> ptr_(ptr) <span style=color:#75715e>//explicit 标识该构造函数的调用必须是显示的
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//不能隐式调用(传入一个T*指针给一个smart_ptr类型形参 让编译器构造自动调用构造函数去构造这个形参)
+</span></span></span><span style=display:flex><span>  {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ptr) {
+</span></span><span style=display:flex><span>      shared_count_ <span style=color:#f92672>=</span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>new</span> shared_count();
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  <span style=color:#f92672>~</span>smart_ptr()
+</span></span><span style=display:flex><span>  {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ptr_ <span style=color:#f92672>&amp;&amp;</span>
+</span></span><span style=display:flex><span>      <span style=color:#f92672>!</span>shared_count_
+</span></span><span style=display:flex><span>         <span style=color:#f92672>-&gt;</span>reduce_count()) {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//资源ptr存在 并且当前为
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//最后一个指向该资源的指针(引用计数为0)才析构释放资源
+</span></span></span><span style=display:flex><span>      <span style=color:#66d9ef>delete</span> ptr_;
+</span></span><span style=display:flex><span>      <span style=color:#66d9ef>delete</span> shared_count_;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  <span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;utility&gt;</span><span style=color:#75715e>// std::swap
+</span></span></span><span style=display:flex><span>  <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>swap</span>(smart_ptr<span style=color:#f92672>&amp;</span> rhs)<span style=color:#75715e>//用于资源交换
+</span></span></span><span style=display:flex><span>  {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>using</span> std<span style=color:#f92672>::</span>swap;
+</span></span><span style=display:flex><span>    swap(ptr_, rhs.ptr_);
+</span></span><span style=display:flex><span>    swap(shared_count_,
+</span></span><span style=display:flex><span>         rhs.shared_count_);
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  smart_ptr(<span style=color:#66d9ef>const</span> smart_ptr<span style=color:#f92672>&amp;</span> other)<span style=color:#75715e>//拷贝构造
+</span></span></span><span style=display:flex><span>  {
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//使this 共享 other的资源
+</span></span></span><span style=display:flex><span>    ptr_ <span style=color:#f92672>=</span> other.ptr_;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ptr_) {
+</span></span><span style=display:flex><span>      other.shared_count_
+</span></span><span style=display:flex><span>        <span style=color:#f92672>-&gt;</span>add_count();<span style=color:#75715e>//与other一样指向同一块资源 此资源的引用计数+1
+</span></span></span><span style=display:flex><span>      shared_count_ <span style=color:#f92672>=</span>
+</span></span><span style=display:flex><span>        other.shared_count_;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> U<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>  smart_ptr(<span style=color:#66d9ef>const</span> smart_ptr<span style=color:#f92672>&lt;</span>U<span style=color:#f92672>&gt;&amp;</span> other) <span style=color:#66d9ef>noexcept</span> <span style=color:#75715e>//隐式类型转换(子类转父类) 拷贝构造
+</span></span></span><span style=display:flex><span>  {
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//使this 共享 other的资源
+</span></span></span><span style=display:flex><span>    ptr_ <span style=color:#f92672>=</span> other.ptr_;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ptr_) {
+</span></span><span style=display:flex><span>      other.shared_count_
+</span></span><span style=display:flex><span>        <span style=color:#f92672>-&gt;</span>add_count();
+</span></span><span style=display:flex><span>      shared_count_ <span style=color:#f92672>=</span>
+</span></span><span style=display:flex><span>        other.shared_count_;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> U<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>  smart_ptr(smart_ptr<span style=color:#f92672>&lt;</span>U<span style=color:#f92672>&gt;&amp;&amp;</span> other) <span style=color:#66d9ef>noexcept</span>
+</span></span><span style=display:flex><span>  <span style=color:#75715e>//移动构造的本质是“偷”，所以直接other的资源偷来
+</span></span></span><span style=display:flex><span>  <span style=color:#75715e>//不是与other共享ptr资源而是 直接替代other所以引用计数不需要加
+</span></span></span><span style=display:flex><span>  <span style=color:#75715e>//隐式类型转换(子类转父类) 或者 同类型(U和T的类别一样) 的移动构造
+</span></span></span><span style=display:flex><span>  {
+</span></span><span style=display:flex><span>    ptr_ <span style=color:#f92672>=</span> other.ptr_;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ptr_) {
+</span></span><span style=display:flex><span>      shared_count_ <span style=color:#f92672>=</span>
+</span></span><span style=display:flex><span>        other.shared_count_;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//不是与other共享ptr资源而是 直接替代other所以引用计数不需要加
+</span></span></span><span style=display:flex><span>      other.ptr_ <span style=color:#f92672>=</span> <span style=color:#66d9ef>nullptr</span>;<span style=color:#75715e>//偷走other的资源后 将other的资源置为null
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#75715e>//为了实现强制的smart_ptr模板参数类型转换，添加下面这个构造函数
+</span></span></span><span style=display:flex><span>  <span style=color:#75715e>//允许在对智能指针内部的指针对象ptr赋值时，
+</span></span></span><span style=display:flex><span>  <span style=color:#75715e>//使用一个现有的智能指针的共享计数
+</span></span></span><span style=display:flex><span>  <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> U<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>  smart_ptr(<span style=color:#66d9ef>const</span> smart_ptr<span style=color:#f92672>&lt;</span>U<span style=color:#f92672>&gt;&amp;</span> other,T<span style=color:#f92672>*</span> ptr) <span style=color:#66d9ef>noexcept</span>
+</span></span><span style=display:flex><span>  {
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//将ptr作为资源 将other资源的引用计数+1作为这个ptr的引用计数
+</span></span></span><span style=display:flex><span>    ptr_ <span style=color:#f92672>=</span> ptr;    <span style=color:#75715e>//ptr是外面传进来的，不是other资源指针
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ptr_) {
+</span></span><span style=display:flex><span>      other.shared_count_<span style=color:#f92672>-&gt;</span>add_count();
+</span></span><span style=display:flex><span>      shared_count_ <span style=color:#f92672>=</span> other.shared_count_;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>   <span style=color:#75715e>//依据传入的实参是右值还是左值来构造形参rhs
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//形参得到传入实参的资源后(实参是左值拷贝资源 实参是右值偷走资源)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//与this进行资源的互换 返回this,函数结束
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//自动析构形参 因为形参的资源由实参而来 所以函数结束就释放形参资源(引用计数--)
+</span></span></span><span style=display:flex><span>   smart_ptr<span style=color:#f92672>&amp;</span> <span style=color:#66d9ef>operator</span><span style=color:#f92672>=</span>(smart_ptr rhs) <span style=color:#66d9ef>noexcept</span>
+</span></span><span style=display:flex><span>   {
+</span></span><span style=display:flex><span>        rhs.swap(<span style=color:#f92672>*</span><span style=color:#66d9ef>this</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>*</span><span style=color:#66d9ef>this</span>;
+</span></span><span style=display:flex><span>   }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#75715e>//返回共享资源指针
+</span></span></span><span style=display:flex><span>  T<span style=color:#f92672>*</span> <span style=color:#a6e22e>get</span>() <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>noexcept</span> { <span style=color:#66d9ef>return</span> ptr_; }
+</span></span><span style=display:flex><span>  <span style=color:#75715e>//用于调试 返回当前资源ptr的引用计数
+</span></span></span><span style=display:flex><span>  <span style=color:#66d9ef>long</span> <span style=color:#a6e22e>use_count</span>() <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>noexcept</span>
+</span></span><span style=display:flex><span>  {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ptr_) {
+</span></span><span style=display:flex><span>      <span style=color:#66d9ef>return</span> shared_count_
+</span></span><span style=display:flex><span>        <span style=color:#f92672>-&gt;</span>get_count();
+</span></span><span style=display:flex><span>    } <span style=color:#66d9ef>else</span> {
+</span></span><span style=display:flex><span>      <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// 添加下面3个操作符重载使smart_ptr行为更像指针
+</span></span></span><span style=display:flex><span>  T<span style=color:#f92672>&amp;</span> <span style=color:#66d9ef>operator</span><span style=color:#f92672>*</span>() <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>noexcept</span> { <span style=color:#66d9ef>return</span> <span style=color:#f92672>*</span>ptr_; }
+</span></span><span style=display:flex><span>  T<span style=color:#f92672>*</span> <span style=color:#66d9ef>operator</span><span style=color:#f92672>-&gt;</span>() <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>noexcept</span> { <span style=color:#66d9ef>return</span> ptr_; }
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>operator</span> <span style=color:#a6e22e>bool</span>() <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>noexcept</span> { <span style=color:#66d9ef>return</span> ptr_; }
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>  T<span style=color:#f92672>*</span> ptr_;
+</span></span><span style=display:flex><span>  shared_count<span style=color:#f92672>*</span> shared_count_;
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><p>强制类型转换 实现父类->子类的强制转换</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>// 调用时子类是T,父类是U
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> swap(smart_ptr<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;&amp;</span> lhs,
+</span></span><span style=display:flex><span>          smart_ptr<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;&amp;</span> rhs) <span style=color:#66d9ef>noexcept</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  lhs.swap(rhs);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T, <span style=color:#66d9ef>typename</span> U<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>smart_ptr<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;</span> static_pointer_cast(
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>const</span> smart_ptr<span style=color:#f92672>&lt;</span>U<span style=color:#f92672>&gt;&amp;</span> other) <span style=color:#66d9ef>noexcept</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  T<span style=color:#f92672>*</span> ptr <span style=color:#f92672>=</span> <span style=color:#66d9ef>static_cast</span><span style=color:#f92672>&lt;</span>T<span style=color:#f92672>*&gt;</span>(other.get());
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> smart_ptr<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;</span>(other, ptr);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T, <span style=color:#66d9ef>typename</span> U<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>smart_ptr<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;</span> reinterpret_pointer_cast(
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>const</span> smart_ptr<span style=color:#f92672>&lt;</span>U<span style=color:#f92672>&gt;&amp;</span> other) <span style=color:#66d9ef>noexcept</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  T<span style=color:#f92672>*</span> ptr <span style=color:#f92672>=</span> <span style=color:#66d9ef>reinterpret_cast</span><span style=color:#f92672>&lt;</span>T<span style=color:#f92672>*&gt;</span>(other.get());
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> smart_ptr<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;</span>(other, ptr);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T, <span style=color:#66d9ef>typename</span> U<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>smart_ptr<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;</span> const_pointer_cast(
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>const</span> smart_ptr<span style=color:#f92672>&lt;</span>U<span style=color:#f92672>&gt;&amp;</span> other) <span style=color:#66d9ef>noexcept</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  T<span style=color:#f92672>*</span> ptr <span style=color:#f92672>=</span> <span style=color:#66d9ef>const_cast</span><span style=color:#f92672>&lt;</span>T<span style=color:#f92672>*&gt;</span>(other.get());
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> smart_ptr<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;</span>(other, ptr);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// smart_ptr&lt;circle&gt; ptr1(new circle());
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// smart_ptr&lt;shape&gt; ptr2;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// ptr2 = ptr1;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// smart_ptr&lt;circle&gt; ptr3 = dynamic_pointer_cast&lt;circle&gt;(ptr2);//ptr2 shape-&gt;circle 父类转为子类
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 调用时circle是T,shape是U
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// printf(&#34;use count of ptr3 is %ld\n&#34;,ptr3.use_count());//use count of ptr3 is 3
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T, <span style=color:#66d9ef>typename</span> U<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>smart_ptr<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;</span> dynamic_pointer_cast(
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>const</span> smart_ptr<span style=color:#f92672>&lt;</span>U<span style=color:#f92672>&gt;&amp;</span> other) <span style=color:#66d9ef>noexcept</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  T<span style=color:#f92672>*</span> ptr <span style=color:#f92672>=</span> <span style=color:#66d9ef>dynamic_cast</span><span style=color:#f92672>&lt;</span>T<span style=color:#f92672>*&gt;</span>(other.get());<span style=color:#75715e>//将other 内部的U* shape* -&gt; T* circle
+</span></span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> smart_ptr<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;</span>(other, ptr);
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

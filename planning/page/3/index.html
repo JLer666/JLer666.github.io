@@ -1,0 +1,174 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Planning | CantBlog</title><meta name=keywords content><meta name=description content="路径规划、轨迹优化与最优控制相关笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/planning/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/planning/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/planning/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/planning/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Planning"><meta property="og:description" content="路径规划、轨迹优化与最优控制相关笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="Planning"><meta name=twitter:description content="路径规划、轨迹优化与最优控制相关笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Planning","item":"https://jler666.github.io/planning/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>Planning</h1><div class=post-description>路径规划、轨迹优化与最优控制相关笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>QP spline</h2></header><div class=entry-content><p>Apollo相关参考线平滑
+待优化目标为n段的5次多项式对应的系数，其中每一段多项式使用参数形式表达如下
+$ x_i(s)=a_{i,0}+a_{i,1}s+a_{i,2}s^2+a_{i,3}s^3+a_{i,4}s^4+a_{i,5}s^5 $
+$ y_i(s)=b_{i,0}+b_{i,1}s+b_{i,2}s^2+b_{i,3}s^3+b_{i,4}s^4+b_{i,5}s^5 $
+使用向量形式表达多项式系数
+$ a_i=[a_{i,0},a_{i,1},a_{i,2},a_{i,3},a_{i,4},a_{i,5}] $
+$ b_i=[b_{i,0},b_{i,1},b_{i,2},b_{i,3},b_{i,4},b_{i,5}] $
+$ S=[1,s,s^2,s^3,s^4,s^5] $
+$ x_i(s)=a_iS^T $
+$ y_i(s)=b_iS^T $
+x,y多项式，所处坐标系为将第一个raw点作为坐标原点的坐标系。(方向与地图坐标系一致)
+代价函数，光滑后参考线尽可能平滑
+$ cost=\sum_{i=1}^n(\int_{s_{i,0}}^{s_{i,1}}(x_{i}^{'''}(s))^2ds+\int_{s_{i,0}}^{s_{i,1}}(y_{i}^{'''}(s))^2ds) $
+求取$ x_i^{'''} $的表达式
+$ x_i^{'}(s)=[a_{i,0},a_{i,1},a_{i,2},a_{i,3},a_{i,4},a_{i,5}] \begin{bmatrix} 0 \\ 1 \\ 2s\\ 3s^2\\ 4s^3\\ 5s^4 \end{bmatrix} = a_iS^{'T} $
+$ x_i^{''}(s)=[a_{i,0},a_{i,1},a_{i,2},a_{i,3},a_{i,4},a_{i,5}] \begin{bmatrix} 0 \\ 0 \\ 2\\ 6s\\ 12s^2\\ 20s^3 \end{bmatrix} = a_iS^{''T} $
+$ x_i^{'''}(s)=[a_{i,0},a_{i,1},a_{i,2},a_{i,3},a_{i,4},a_{i,5}] \begin{bmatrix} 0 \\ 0 \\ 0\\ 6\\ 24s\\ 60s^2 \end{bmatrix} = a_iS^{'''T} $
+$ \int_{s_{i,0}}^{s_{i,1}}(x_{i}^{'''}(s))^2ds=\int_{s_{i,0}}^{s_{i,1}}a_iS^{T'''}S^{'''}a_i^{T}ds\\ =a_i\int_{s_{i,0}}^{s_{i,1}}\begin{bmatrix} 0 & 0 & 0 & 0 & 0 & 0\\ 0 & 0 & 0 & 0 & 0 & 0 \\ 0 & 0 & 0 & 0 & 0 & 0\\ 0 & 0 & 0 & 36 & 144s & 360s^2\\ 0 & 0 & 0 & 144s & 576s & 1440s^3\\ 0 & 0 & 0 & 360s^2 & 1440s^2 & 3600s^4 \end{bmatrix} dsa_i^{T} $
+...</p></div><footer class=entry-footer><span title=2023-07-21T00:00:00+00:00>创建于 2023-07-21</span>&nbsp;·&nbsp;<span title=2025-03-12T00:00:00+00:00>最后修改于 2025-03-12</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to QP spline" href=https://jler666.github.io/planning/phio2gwt66qri64p/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>MCTS 蒙特卡洛搜索树 决策规划</h2></header><div class=entry-content><p></p></div><footer class=entry-footer><span title=2023-02-24T00:00:00+00:00>创建于 2023-02-24</span>&nbsp;·&nbsp;<span title=2023-02-24T00:00:00+00:00>最后修改于 2023-02-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to MCTS 蒙特卡洛搜索树 决策规划" href=https://jler666.github.io/planning/lqfqclv56yu2a30g/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>线性化以及最优控制求解</h2></header><div class=entry-content><p>线性化车体方程
+X = (x,y,yaw,steer) u = dsteer
+对时间的导数
+$ x'=V_{const}cos(yaw)=f_1 $
+$ y'=V_{const}sin(yaw)=f_2 $
+$ yaw'=w=tan(steer)*V_{const}/L=f_3 $
+$ steer'=dsteer=f_4 $
+$ X'=\begin{bmatrix} f_1\\ f_2\\ f_3\\ f_4\\ \end{bmatrix}=f(X,u) $
+将系统在上个工作点展开线性化，希望得到下面这种线性方程的形式
+$ x'(t)=Ax(t)+Bu(t)+c $
+下面将系统方程在这个点上线性化$ (x_{last},y_{last},yaw_{last},steer_{last}) $
+$ x'\approx x'(x_{last},y_{last},yaw_{last},steer_{last})+\frac{dx'}{dX}|_{X_{last},u_{last}}(X-X_{last})+\frac{dx'}{du}|_{X_{last},u_{last}}(u-u_{last}) $
+因为x只与Vconst和yaw有关所以可以简化为下式
+$ x'\approx x'(yaw_{last})+\frac{dx'}{dyaw}|_{yaw_{last}}(yaw-yaw_{last})=V_{const}cos(yaw_{last})-V_{cosnt}sin(yaw_{last})(yaw-yaw_{last}) $
+同理得到如下
+$ y'\approx y'(yaw_{last})+\frac{dy'}{dyaw}|_{yaw_{last}}(yaw-yaw_{last})=V_{const}sin(yaw_{last})+V_{cosnt}cos(yaw_{last})(yaw-yaw_{last}) $
+$ yaw'\approx yaw'(steer_{last})+\frac{dyaw'}{dsteer}|_{steer_{last}}(steer-steer_{last})=tan(steer_{last})*V_{const}/L+\frac{V_{const}}{cos^2(steer_{last})L}(steer-steer_{last}) $
+$ \begin{gathered} steer'=steer'_{last}+\frac{dsteer'}{dX}|_{X_{last},u_{last}}(X-X_{last})+\frac{dsteer'}{d dsteer}|_{X_{last},dsteer_{last}}(dsteer-dsteer_{last})\\ =steer'_{last}+1*(dsteer-dsteer_{last})=dsteer_{last}+dsteer-dsteer_{last}=dsteer \end{gathered} $
+得到系统方程如下,没有写成误差方程的形式，误差全部都写到c向量当中了
+$ \begin{bmatrix} x'\\ y'\\ yaw'\\ steer'\\ \end{bmatrix} = \begin{bmatrix} x'_{last}\\ y'_{last}\\ yaw'_{last}\\ steer'_{last}\\ \end{bmatrix}+ \begin{bmatrix} \frac{\partial f_1}{\partial x}& \frac{\partial f_1}{\partial y}& \frac{\partial f_1}{\partial yaw}& \frac{\partial f_1}{\partial steer}\\ \frac{\partial f_2}{\partial x}& \frac{\partial f_2}{\partial y}& \frac{\partial f_2}{\partial yaw}& \frac{\partial f_2}{\partial steer} \\ \frac{\partial f_3}{\partial x}& \frac{\partial f_3}{\partial y}& \frac{\partial f_3}{\partial yaw}& \frac{\partial f_3}{\partial steer}\\ \frac{\partial f_4}{\partial x}& \frac{\partial f_4}{\partial y}& \frac{\partial f_4}{\partial yaw}& \frac{\partial f_4}{\partial steer}\ \end{bmatrix}_{X_{last},U_{last}} \begin{bmatrix} x-x_{last}\\ y-y_{last}\\ yaw-yaw_{last}\\ steer-steer_{last}\\ \end{bmatrix} + \begin{bmatrix} \frac{\partial f_1}{\partial dsteer}\\ \frac{\partial f_2}{\partial dsteer}\\ \frac{\partial f_3}{\partial dsteer}\\ \frac{\partial f_4}{\partial dsteer}\\ \end{bmatrix}_{X_{last},U_{last}} (dsteer-dsteer_{last}) $
+...</p></div><footer class=entry-footer><span title=2022-09-14T00:00:00+00:00>创建于 2022-09-14</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 线性化以及最优控制求解" href=https://jler666.github.io/planning/xouh9g/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>LQR</h2></header><div class=entry-content><p>b站老王自动驾驶控制系列
+https://www.bilibili.com/video/BV1ZA411J7pV
+3个坐标系与运动学方程
+百度apollo(左手系 右偏为正)的控制部分(PID,LQR)来自«车辆动力学及控制»(注意是及不是及其)，英文原版vechicle dynamics and control,作者是R.R.
+控制的前提是已有规划提供的路径x,y,theta,kappa,dkappa,v,a。
+3个坐标系，世界坐标系，当前车体坐标系，fernet坐标系(可以实现横纵向控制解耦，可分别单独规划)。
+左轮和右轮的转向一致，左轮和右轮的轮距相对于运动轨迹可以忽略不计，航向角就是yaw=横摆角+侧偏角(车质心速度方向与x所成角)，因为车轮的材料是橡胶，受力后的形变比较严重是不可忽略的(会发生侧偏)，前轮转角!=对应方向盘转角传动后的命令。
+横摆角和航向角都是定义在世界坐标系下，质心侧偏角和前后轮转角是定义在车体坐标系下
+建立横向微分方程 — 前轮转角delta_f是怎么影响侧向位移与航向角
+几何关系建立(轮胎不变形)–运动学模型，牛顿力学(轮胎变形)–动力学模型
+速度瞬心是前轮转角，后轮转角，质心速度 三个物理量 法方向的交点
+建立车体坐标系得到，车体坐标系下的微分方程，刚体角速度 = 刚体线速度/刚体到理论速度瞬心的距离
+需要进一步推导，得到前轮转角和这些量的关系
+根据正弦定理可以得到前轮转角和刚体到理论速度瞬心的距离R的关系
+得到了质心和刚体到理论速度瞬心的距离R的关系，但是这样还不够因为车的载重不同质心的位置也会发生改变。所以我们将两式相加得到(a+b)/R,a+b是车的轴距，车在运行过程中轴距是肯定不会变的，没有问题。
+得到运动学方程
+下面根据低速条件(运动学方程的使用条件)，开始简化。低速条件下认为车不会发生侧向滑动(飘移)，所以认为车的侧向(车速在车身法向量上的投影)vy(这里的y指的是车体坐标系的y)速度为0,同时因为vy=0可以推出车体的质心侧偏角beta也为0,即车体的速度就是沿车身方向的，没有其他分量。还有就是车体的后轮一般是不转向的,低速情况下后轮也不会发生侧滑所以后轮转向角始终为0。
+v == vx,vy=0,beta=0
+经过简化得到下面的运动学方程
+轮胎侧偏与车辆动力学方程
+运动学方程是非线性方程，同时运动学方程的速度和前轮转角是耦合的，前轮转角会影响横摆角速度，横摆角速度又会影响世界坐标系下的X,Y方向的速度
+因为w=v*tan delta/L,同时由刚体物理有w=v/R,两式结合得到前轮转角 delta = arctan L/R。这个公式严格是错的，因为w!=v/R,w指的是质心横摆角速度，而v/R实际等于的是航向角yaw的角速度，横摆角速度向量+侧偏角速度向量 = v/R是正确的，正好因为我们的简化使得横摆角=航向角才使w=v/R成立。但是delta = arctan L/R在高速情况下也是较准的！！因为在规划正确的情况下车的质心侧偏角是非常小的
+在frenet坐标系下可以得到
+tao轨迹切向量，也是车质心的速度方向
+纵向位移s只与车的切向加速度有关，而车的切向加速度只与车的油门和刹车有关。
+横向加速度(车体法向加速度)和车的速度和转角都有关，看起来横向控制还无法解耦，老王说当纵向控制稳定以后,v变化不大，an只与车转角有关。横向位移d = f(v,delta)
+现在的汽车理论很成熟了,车体坐标系下的横向位移(车体坐标系y轴)与v,delta的关系已经有准确的推导。我们推出车体坐标系的横向位移解析式，再将其转到frenet坐标系下就能得到d = f(v,delta)的关系。下面先推车体坐标系下的横向位移(车体坐标系y轴)y=f(v,delta)。
+轮胎的侧偏特性
+F为地面给轮胎的作用力的侧向分力，F’为车给轮胎的作用力的侧向分离，这两个作用力在高速情况下很大，将会导致轮胎变形为蓝线那样。圆柱变成圆台
+...</p></div><footer class=entry-footer><span title=2022-08-03T00:00:00+00:00>创建于 2022-08-03</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to LQR" href=https://jler666.github.io/planning/vewlch/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>B spline</h2></header><div class=entry-content><p>感恩
+https://www.zhihu.com/question/52199904/answer/1216384445
+计算图形
+https://pages.mtu.edu/~shene/COURSES/cs3621/NOTES/
+https://blog.csdn.net/fu_GAGA/article/details/121833145
+https://blog.csdn.net/weixin_43347376/article/details/118658820
+https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/node15.html
+Bézier曲线，这个曲线有很多用处，但是也有不少缺点：
+贝塞尔
+https://zhuanlan.zhihu.com/p/136647181
+https://zhuanlan.zhihu.com/p/109925497
+https://wenku.baidu.com/view/3bd5394acf84b9d528ea7aca.html?wkts=1688697059383
+一旦确定了特征多边形的顶点数(n+1个)，也就决定了曲线的阶次(n次)
+Bézier曲线或曲面的拼接比较复杂
+Bezier曲线或曲面不能作局部修改，移动一个控制顶点，整个曲线都会变化（因为每个Bernstein多项式在整个[0,1]区间上都有支撑（函数值不为0），并且曲线是这些函数的混合，所以每个控制项对0到1之间t值处的曲线都有影响。） 最重要的缺点，所以在cad以及图形设计软件中不使用贝塞尔曲线，移动一个点全部曲线都发生改变
+贝塞尔曲线的阶数与控制点数无关，移动控制点仅仅改变此控制点影响的区域。在规划层面用的最多的就是分段三次B spline。
+下面定义B样条的3个概念
+控制点和贝塞尔一样是空间上的点(多边形 可凸可凹)。设控制点个数为n+1个，下标从0-n，Pi为给定的第i个控制点。
+U是m+1个非递减数的集合，u0&lt;=u1&lt;=…&lt;=um，ui被称为节点(knots)，U=[u0,u1,…,um]被称为节点向量，半开区间[ui,ui+1)是第i个节点区间(knot span)。连续的ui被允许相等(clamp b spline)，如果一个节点ui出现k次，则称ui是个重复度为k的多重节点记为ui(k)。如果节点间的距离相等对任意0&lt;=i&lt;=m-1,ui+1-ui=常数称为均匀记得点向量费则就是非均匀，我们通常设定u0=0，um=1。
+节点可以认为是分隔点，所有的b样条基函数被定义在[u0,um]。
+设分段曲线的次数为p次多项式，m+1个区间点–m段区间 (再强调一下这里的p为次数，p+1为阶数)
+$ C(u)=\sum_{i=0}^{n}P_iN_{i,p}(u),u\in[u_p,u_{n+1}) $,m=n+p+1此式必须成立
+均匀样条du = T/(n-p+1) n为控制点数-1
+Cox-de Boor递归公式定义的b样条基函数，第i个p次B-样条基函数，写为Ni,p(u)，递归定义如下
+因为我们定义N下标p为次数，所以从0开始定义基函数。有的计算图形教材，定义N下标为阶数即p+1所以从1开始定义基函数。
+基函数Ni,p的递归定义如下
+$ N_{i,0}= \begin{cases} 1, & u_i \leq u \lt u_{i+1},0\leq i\leq n+p \\ 0, &amp;other \end{cases} \\ N_{i,l}(u)=\frac{u-u_i}{u_{i+l}-u_i}N_{i,l-1}(u)+\frac{u_{i+l+1}-u}{u_{i+l+1}-u_{i+1}}N_{i+1,l-1}(u),1\leq l \leq p,0\leq i \leq n+p-l $
+约定0/0=0
+p次B样条
+对n+1个控制点，曲线最终由n+1个基函数(p次)的加权函数描述
+节点向量[u0,u1,…,un+p+1]所生成的B样条曲线的定义域为[up,un+1)–
+void initUniformBsplineKnots(double startTime, double endTime, int numCP) { order_ = 3; int n = numCP - 1; int m = n + order_ + 1; knots_.clear(); knots_.resize(m + 1); // // 准均匀节点向量：首尾重复4次（p+1=4） // for (size_t i = 0; i &lt;= order_; ++i) knots_[i] = t_start_; // for (size_t i = m - order_; i &lt;= m; ++i) knots_[i] = t_end_; // // 中间均匀分布 // int interval_num = knots_.size() - 2 * order_ - 1; // dt_ = (t_end_ - t_start_) / interval_num; // for (size_t i = order_ + 1; i &lt; m - order_; ++i) { // knots_[i] = t_start_ + (i - order_) * dt_; // } int segments = n - order_ + 1;// [up,un+1] dt_ = (endTime - startTime) / segments; for (int i = 0; i &lt;= m; ++i) { if (i &lt;= order_) { knots_[i] = double(-order_ + i) * dt_; } else if (i > order_ && i &lt;= m - order_) { knots_[i] = knots_[i - 1] + dt_; } else if (i > m - order_) { knots_[i] = knots_[i - 1] + dt_; } } } 每个基函数Ni,p(u)定义在以节点向量值ui为起点的p+1个子区间内即 [ui,ui+p+1)
+...</p></div><footer class=entry-footer><span title=2022-07-15T00:00:00+00:00>创建于 2022-07-15</span>&nbsp;·&nbsp;<span title=2026-03-02T00:00:00+00:00>最后修改于 2026-03-02</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to B spline" href=https://jler666.github.io/planning/bwdxve/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>frenet</h2></header><div class=entry-content><p>感恩大佬
+https://windses.blog.csdn.net/article/details/108748016
+https://windses.blog.csdn.net/article/details/124871691
+https://windses.blog.csdn.net/article/details/124871737
+import numpy as np from math import * # https://windses.blog.csdn.net/article/details/124871691?spm=1001.2014.3001.5502 # use # https://windses.blog.csdn.net/article/details/124871737?spm=1001.2014.3001.5502 # [x,y]->s,d def cartesian_to_frenet1D(rs, rx, ry, rtheta, x, y): s_condition = np.zeros(1) d_condition = np.zeros(1) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) s_condition[0] = rs return s_condition, d_condition # [s,d]->[x,y] def frenet_to_cartesian1D(rs, rx, ry, rtheta, s_condition, d_condition): if fabs(rs - s_condition[0])>= 1.0e-6: print("The reference point s and s_condition[0] don't match") cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] return x, y # [x,y,v,theta] -> [s,ds/dt,d,d d/ds] def cartesian_to_frenet2D(rs, rx, ry, rtheta, rkappa, x, y, v, theta): s_condition = np.zeros(2) d_condition = np.zeros(2) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) delta_theta = theta - rtheta tan_delta_theta = tan(delta_theta) cos_delta_theta = cos(delta_theta) one_minus_kappa_r_d = 1 - rkappa * d_condition[0] d_condition[1] = one_minus_kappa_r_d * tan_delta_theta s_condition[0] = rs s_condition[1] = v * cos_delta_theta / one_minus_kappa_r_d return s_condition, d_condition # [s,ds/dt,d,d d/ds]->[x,y,v,theta] def frenet_to_cartesian2D(rs, rx, ry, rtheta, rkappa, s_condition, d_condition): if fabs(rs - s_condition[0])>= 1.0e-6: print("The reference point s and s_condition[0] don't match") cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] one_minus_kappa_r_d = 1 - rkappa * d_condition[0] tan_delta_theta = d_condition[1] / one_minus_kappa_r_d delta_theta = atan2(d_condition[1], one_minus_kappa_r_d) cos_delta_theta = cos(delta_theta) theta = NormalizeAngle(delta_theta + rtheta) d_dot = d_condition[1] * s_condition[1] v = sqrt(one_minus_kappa_r_d * one_minus_kappa_r_d * s_condition[1] * s_condition[1] + d_dot * d_dot) return x, y, v, theta # [x,y,v,theta,kappa,a] -> [s,ds/dt,d2s/dt^2,d,d d/ds,d2d/ds^2] def cartesian_to_frenet3D(rs, rx, ry, rtheta, rkappa, rdkappa, x, y, v, a, theta, kappa): s_condition = np.zeros(3) d_condition = np.zeros(3) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) delta_theta = theta - rtheta tan_delta_theta = tan(delta_theta) cos_delta_theta = cos(delta_theta) one_minus_kappa_r_d = 1 - rkappa * d_condition[0] d_condition[1] = one_minus_kappa_r_d * tan_delta_theta kappa_r_d_prime = rdkappa * d_condition[0] + rkappa * d_condition[1] d_condition[2] = (-kappa_r_d_prime * tan_delta_theta + one_minus_kappa_r_d / cos_delta_theta / cos_delta_theta * (kappa * one_minus_kappa_r_d / cos_delta_theta - rkappa)) s_condition[0] = rs s_condition[1] = v * cos_delta_theta / one_minus_kappa_r_d delta_theta_prime = one_minus_kappa_r_d / cos_delta_theta * kappa - rkappa s_condition[2] = ((a * cos_delta_theta - s_condition[1] * s_condition[1] * (d_condition[1] * delta_theta_prime - kappa_r_d_prime)) / one_minus_kappa_r_d) return s_condition, d_condition # [s,ds/dt,d2s/dt^2,d,d d/ds,d2d/ds^2]->[x,y,v,theta,kappa,a] def frenet_to_cartesian3D(rs, rx, ry, rtheta, rkappa, rdkappa, s_condition, d_condition): if fabs(rs - s_condition[0])>= 1.0e-6: print("The reference point s and s_condition[0] don't match") cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] one_minus_kappa_r_d = 1 - rkappa * d_condition[0] tan_delta_theta = d_condition[1] / one_minus_kappa_r_d delta_theta = atan2(d_condition[1], one_minus_kappa_r_d) cos_delta_theta = cos(delta_theta) theta = NormalizeAngle(delta_theta + rtheta) kappa_r_d_prime = rdkappa * d_condition[0] + rkappa * d_condition[1] kappa = ((((d_condition[2] + kappa_r_d_prime * tan_delta_theta) * cos_delta_theta * cos_delta_theta) / (one_minus_kappa_r_d) + rkappa) * cos_delta_theta / (one_minus_kappa_r_d)) d_dot = d_condition[1] * s_condition[1] v = sqrt(one_minus_kappa_r_d * one_minus_kappa_r_d * s_condition[1] * s_condition[1] + d_dot * d_dot) delta_theta_prime = one_minus_kappa_r_d / cos_delta_theta * (kappa) - rkappa a = (s_condition[2] * one_minus_kappa_r_d / cos_delta_theta + s_condition[1] * s_condition[1] / cos_delta_theta * (d_condition[1] * delta_theta_prime - kappa_r_d_prime)) return x, y, v, a, theta, kappa ...</p></div><footer class=entry-footer><span title=2022-06-26T00:00:00+00:00>创建于 2022-06-26</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to frenet" href=https://jler666.github.io/planning/qvfnwo/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>简单几何图形算法</h2></header><div class=entry-content><p>1计算感知得到的多边形障碍物(可能非凸)的凸包 Andrew算法求二维凸包
+https://www.cnblogs.com/lyttt/p/11826321.html
+// 传入障碍物多边形顶点，构造这个障碍物的凸包(即使是凹多边形也构造这个凹图形的凸包)，传出凸包polygon // 凹多边形的凸包顶点就是其多边形顶点本身 // Andrew算法求二维凸包 // https://www.cnblogs.com/lyttt/p/11826321.html bool Polygon2d::ComputeConvexHull(const std::vector&lt;Vec2d> &amp;points, Polygon2d *const polygon) { CHECK_NOTNULL(polygon); const int n = static_cast&lt;int>(points.size()); if (n &lt; 3) { return false; } std::vector&lt;int> sorted_indices(n); for (int i = 0; i &lt; n; ++i) { sorted_indices[i] = i; } // 将多边形顶点按x值升序排列，x值接近则按y升序排列 std::sort(sorted_indices.begin(), sorted_indices.end(), [&](const int idx1, const int idx2) { const Vec2d &amp;pt1 = points[idx1]; const Vec2d &amp;pt2 = points[idx2]; const double dx = pt1.x() - pt2.x(); if (std::abs(dx) > kMathEpsilon) { return dx &lt; 0.0; } return pt1.y() &lt; pt2.y(); }); int count = 0; std::vector&lt;int> results; results.reserve(n); int last_count = 1; // 原理也说不上什么原理，是一个成熟算法 // https://www.cnblogs.com/lyttt/p/11826321.html // 取三个点不断判断构成的三点是构成凹形状(向量叉乘&lt;0)，构成凹形状舍弃较老的一边，迭代1-n构造逆时针的半个凸型，再n-1逆时针构造半个凸型 for (int i = 0; i &lt; n + n; ++i) {// i&lt;2n 因为要两轮 一半一半构造 if (i == n) { last_count = count; } const int idx = sorted_indices[(i &lt; n) ? i : (n + n - 1 - i)]; const Vec2d &amp;pt = points[idx]; // CrossProd叉乘计算 axb = |a||b|*sin(从a向量旋转到b向量的角度 逆时针为正)*n(z轴单位向量) // 叉乘大小的正负完全由从a向量旋转到b向量的角度，这里判断 // points[results[count - 2]] 世界直角坐标系位置向量旋转到points[results[count - 1]]是否是逆时针的 // points[results[count - 2]]->points[results[count - 1]]和points[results[count - 2]]->pt两向量叉乘 //count > last_count保证了当前凸包至少有两个点(以及当从起点开始逆时针构造完一半凸包后， // 构造顺时针另一半时也保证之前构造的一半不会被pop) while (count > last_count && CrossProd(points[results[count - 2]], points[results[count - 1]], pt) &lt;= kMathEpsilon) { results.pop_back(); --count; } results.push_back(idx); ++count; } --count; if (count &lt; 3) {// 凸包小于3个点 不是封闭图形 凸包构造失败 return false; } // 将凸包点保存构造多边形 std::vector&lt;Vec2d> result_points; result_points.reserve(count); for (int i = 0; i &lt; count; ++i) { result_points.push_back(points[results[i]]); } *polygon = Polygon2d(result_points); return true; } def Graham_Andrew_Scan(points): n = len(points) if n &lt; 3: return points def cal_cross_product(p1 , p2, p3):# v1 x v2 v1 = (p2[0]-p1[0],p2[1]-p1[1]) v2 = (p3[0]-p1[0],p3[1]-p1[1]) return v1[0] * v2[1] - v1[1] * v2[0] # 按x升序排序，x接近则按y升序排序 ps = sorted(points, key=lambda x:(x[0],x[1])) count = 0 last_count = 1 res = [] for i in range(2*n): if i == n: last_count = count if i &lt; n: index = i else: index = 2*n - 1 - i pt = ps[index] while count > last_count and cal_cross_product(res[count - 2],res[count - 1],pt) &lt;= 0: res.pop() count -= 1 res.append(ps[index]) count += 1 count -= 1 if count &lt; 3: return None return res 2 分离轴定理 分离轴定理只适合凸多边形
+...</p></div><footer class=entry-footer><span title=2022-06-19T00:00:00+00:00>创建于 2022-06-19</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 简单几何图形算法" href=https://jler666.github.io/planning/rsumsk/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>曲率计算,cubic spline三次样条</h2></header><div class=entry-content><p>https://zhuanlan.zhihu.com/p/62860859
+已知一系列点序列，想要拟合或插值得到样条曲线的多项式。拟合不要求方程通过所有的已知点，讲究神似，就是整体趋势一致。插值则是形似，每个已知点都必会穿过，但是高阶会出现龙格库塔现象，所以一般采用分段插值。今天我们就来说说这个分段三次样条插值。
+传入x,y散点坐标，设共nx个点,计算dx数组h = [x1-x0,x2-x1,…,x_{nx-1}-x_{nx-2}]，设其中两个端点x0=a,x_{nx}=b。我们要求的三次样条需要满足以下要求
+S0(x) x0&lt;=x&lt;=x1
+S1(x) x1&lt;=x&lt;=x2
+S(x)=…
+S_{nx-2}(x) x_{nx-2}&lt;=x&lt;=x_{nx-1}
+1 对于每个分段区间[xi,xi+1]上，此段分段曲线Si(x)都是三次多项式
+2 在我们给定的点上满足插值条件即 S(xi) = yi
+3 曲线光滑S(x),S’(x),S’’(x)都连续
+一段yi= dix^3 + cix^2 + bix +ai有4个未知数，共nx个点，nx-1个区间，所以共4*(nx-1)个未知数要求
+为了求解4*(nx-1)个未知数，就需要找到4*(nx-1)个等式方程
+1 给定的(xi,yi)必须在曲线上即S(xi) = yi。对于起始和终止点只在一条曲线上S0(x0) = y0,S_{nx-1}(x_{nx-1}) = y_{nx-1}。对于中间点因为其既是上条的终点也是下条的起点，为了满足S(x)连续，所以每个中间点都可以提供2个等式。Si(xi+1) = yi,S_{i+1}(xi+1) = yi+1。共1+1+(nx-2)*2 = 2nx-2个方程
+2 要求S(x)‘连续，对于所有中间点都有一个约束Si’(xi+1) = Si+1’(xi+1)共nx-2个方程
+3 要求S(x)‘‘连续，对于所有中间点都有一个约束Si’’(xi+1) = Si+1’’(xi+1)共nx-2个方程
+目前共 2nx-2 + nx-2 + nx-2 = 4nx - 6个方程
+还差两个方程，由边界给定。共三种边界条件
+1 自然边界，端点的二阶导数为0. S’’(x0) = S’’(x_{nx-1}) = 0
+2 固定边界条件，给定端点的一阶导数。S0’(x0) = A,S_{nx-2}’(x_{nx-1}) = B
+...</p></div><footer class=entry-footer><span title=2022-06-17T00:00:00+00:00>创建于 2022-06-17</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 曲率计算,cubic spline三次样条" href=https://jler666.github.io/planning/ld8wev/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>6 软硬约束下的轨迹优化 补充</h2></header><div class=entry-content><p>之前讲了BVP(只考虑初末状态约束)，BIVP(初末状态约束 + 必经点约束)
+下面介绍更普遍的问题，考虑初末状态约束 +可通行区域 + 动力学范围约束
+不仅要优化z空间的轨迹z(t)，还需要求最优轨迹总时间T作为待优化变量。最小化z的某阶导数(注意这里v不是指的速度，v为z求s阶导后的结果)以及轨迹总时间 – 这两项其实是矛盾项 想速度慢 时间就长 想时间段 速度就要快，就是要优化找到那个最好的平衡点。
+严格总时间约束是个非线性很强的约束，是个非凸的约束。
+加上硬约束
+1 z的某阶导数为我们优化变量的等式约束 (注意这里v不是指的速度，v为z求s阶导后的结果)
+2 对于x,u的不等式约束映射到z域后，z的不等式约束
+3 F集合为地图中的可通行区域做映射，映射到z域后的集合。z的取值只能在可通行区域内
+4 初态和终态约束
+上面的表达是个通式，这么写出简单，单一个F集合实现就非常难。G函数的表达也很难用简单的式子直接写出来。rho(T)简单写的话可以写成一个线性表达，但是rho(T)也可以用一个不可导形式的式子表达rho(T) = T&lt;10 ?0:无穷。
+最优的参数化形式是未知的(对于BIVP问题轨迹的最佳参数化形式就是2s-1次的多项式)
+积分的同时优化被积变量–分配的时间
+G可行空间是非凸的
+这个问题本质上是一个典型的多阶段的最优控制问题(OCP)
+OCP有很多成熟的通用的数值最优控制求解器：GPOPS ACADO等。这些求解器相当于OCP领域的有限元方法，可以稳定地获得高质量轨迹，但是计算量巨大！
+目前学术界很多SOTA的多旋翼轨迹规划方法都是求解上述问题的简化版本，要么牺牲时间优化(不优化每段轨迹的时间而是人为给定)，要么牺牲约束保真度 或 采用启发式的近似解来换取在线规划的计算效率，但是轨迹求解质量和真值相去甚远。
+能否轨迹知量与计算效率兼得，能！需要利用问题结果。
+将问题进行简化
+1 虽然最优的参数化形式不是多项式，我们妥协只在多项式中找最优
+2 固定分段轨迹的时间分配
+3 动力学约束，只约束最简单的速度，加速度。不去约束角速度，推力这种较复杂动力学量
+4 构造局部凸空间
+Liu et al., Planning Dynamically Feasible Trajectories for Quadrotors Using Safe Flight Corridors in 3-D Complex Environments, RAL 2017
+...</p></div><footer class=entry-footer><span title=2022-04-26T00:00:00+00:00>创建于 2022-04-26</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 6 软硬约束下的轨迹优化 补充" href=https://jler666.github.io/planning/zicixd/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>5 基于minimum snap的轨迹优化 补充 BVP BIVP</h2></header><div class=entry-content><p>Unconstrained Case BVP(Boundary Value Problem)
+只有初末态约束
+BVP在hybrid A*中用于快速求解oneshot曲线
+最简单的问题，只做了两个约束 1 z的某阶导数为我们优化变量的等式约束 (注意这里v不是指的速度，v为z求s阶导后的结果) 2 初态和终态约束
+根据上节讲的最优条件需要保证 每段分段多项式z(t)的次数是2s-1(BVP问题没有用分段多项式，而只用了一条多项式)。 s的定义我们的代价函数中的状态量是z的s阶导。 所以如果我们要minmum v = jerk(s=3)则多项式z(t)次数是23-1=5次，如果我们要minmum v = snap(s=4)则多项式z(t)次数是24-1=7次。
+求解BVP问题得到的解后，如果我们要把这个解用到实际的真实场景中。需要再做轨迹的碰撞检测和动力学约束检测。
+以上述一维BVP为例，我们对初态和终态不止有位置约束而且还有速度和加速度约束。
+约束 x(0)=a,x(T)=b,x’(0)=0,x’(T)=0,x’’(0)=0,x’’(T)=0
+写成矩阵乘法形式$ d=A_F(T)c $,d为约束向量，c为多项式系数向量。求解多项式系数$ c=A_F^{-1}(T)d $
+上面讲的是一段轨迹的BVP问题求解，对于分段BVP问题求解流程如下
+实际求解问题时，首先得到不连续的前端路径，再将前端路径切分成多段路径(按照给定的T来分，每段的T都相等，当T很小会出现数值稳定性问题)，求每一段的BVP问题。首先定好初态和最终末尾的终态。通过BVP求解，我们倾向于将中间段的起点和终点边界值实际设计为匀速，0加速度的状态。计算第一段BVP，第一段BVP的边界值是起点状态和(规定位置,v巡航速度,0加速度)，第二段的BVP边界状态为(上段规定位置,v巡航速度,0加速度)本段起点和上段终点的状态一样是为了保证总路径的连续性和(本段规定位置,v巡航速度,0加速度)…直到最后一段。当所有分段多项式都求解完毕，就最终得到解了。
+下面讲将分段BVP问题的求解写成矩阵形式
+$ d=A_F(T)c $
+$ d=[x_1(0),x'_1(0),x''_1(0),x_1(T),x'_1(T),x''_1(T),...,x_n(0),x'_n(0),x''_n(0),x_n(T),x'_n(T),x''_n(T)]^T $第一条轨迹多项式的初态和终态(只约束导2阶导项)…第n条5次多项式的初态和终态，$ c=[c_{10},c_{11},c_{12},c_{13},c_{14},c_{15},...,c_{n0},c_{n1},c_{n2},c_{n3},c_{n4},c_{n5}]^T $第一条5次多项式的6个参数…第n条5次多项式的6个参数。
+i为行j为列(都是从1开始)
+$ c=A_F^{-1}(T)d $，在T很小的情况下对AF求逆会出现数值不稳定的情况，可不可以直接求AF的解析逆？在Wang et al., Generating Large-Scale Trajectories Efficiently using Double Descriptions of Polynomials, ICRA 2021 这批论文里提出了AF逆的解析解法。
+$ c=A_B(T)d $
+i为行j为列(都是从1开始)，在T!=0的情况下AB(t)永远存在
+...</p></div><footer class=entry-footer><span title=2022-04-25T00:00:00+00:00>创建于 2022-04-25</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 5 基于minimum snap的轨迹优化 补充  BVP BIVP" href=https://jler666.github.io/planning/tgmh0s/></a></article><footer class=page-footer><nav class=pagination><a class=prev href=https://jler666.github.io/planning/page/2/>«&nbsp;Prev&nbsp;
+</a><a class=next href=https://jler666.github.io/planning/page/4/>Next&nbsp;&nbsp;»</a></nav></footer></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

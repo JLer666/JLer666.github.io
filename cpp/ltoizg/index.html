@@ -1,0 +1,419 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux多进程开发2 父子进程间关系,exec函数族,进程控制,wait函数 | CantBlog</title><meta name=keywords content><meta name=description content="5父子进程关系及GDB多进程调试
+使用GDB调试时，GDB默认只能跟踪一个进程，可以再fork调用前，通过指令设置GDB调试工具跟踪父进程或跟踪子进程，默认跟踪父进程
+下面的这些命令都是gdb命令 不是命令行命令
+设置调试子进程 set follow-fork-mode child 这种情况下且set detach-on-fork为on则会停在子进程的断点处 父进程会一直运行直到跑完
+默认调试父进程 set follow-fork-mode parent如果在这种情况下在父进程内打断点 然后运行父进程会停在断点处 子进程不会管 只会继续运行然后跑完
+在gdb内可查看当前gdb追踪的是什么进程 show follow-fork-mode
+设置调试模式 set detach-on-fork [on|off] 默认为on,表示调试当前进程的时候其他进程继续运行，如果为off调试当前进程时，其他进程被GDB挂起(会停在fork那句话 等待我们切换调试)。
+gdb版本为8.x set detach-on-fork off会出问题 7.x  9.x可以用这个功能
+查看当前程序的所有进程 会打印出进程在gdb中的编号：info inferiors
+切换当前调试进程：inferior id(id为进程在gdb中的编号)
+使进程脱离GDB调试：detach inferiors id (执行后id号进程不再受gdb控制就一直向下执行)
+移除某进程：remove inferiors id
+gcc fork_test.c -o hello -g
+gdb hello
+父子进程之间的关系
+区别：
+1 fork()函数的返回值不同 父进程中>0：返回的子进程id 子进程=0
+2 pcb中的一些数据 比如父进程和子进程的pid ppid都是不同的
+共同点：
+某些状态下:子进程刚被创造出来，还没有执行任何写数据的操作时，用户区的数据文件描述符表两个进程是相同的 (读时共享)。只要发生写操作 那么发生写时拷贝，两个进程的这个被写对象就不同了。
+6 exec函数族
+exec函数族的作用是根据指定的文件名找到可执行文件，并用它来取代调用进程的内容。
+换句话说就是在调用进程内部执行一个可执行文件。"><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/ltoizg/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/ltoizg/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/ltoizg/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux多进程开发2 父子进程间关系,exec函数族,进程控制,wait函数"><meta property="og:description" content="5父子进程关系及GDB多进程调试
+使用GDB调试时，GDB默认只能跟踪一个进程，可以再fork调用前，通过指令设置GDB调试工具跟踪父进程或跟踪子进程，默认跟踪父进程
+下面的这些命令都是gdb命令 不是命令行命令
+设置调试子进程 set follow-fork-mode child 这种情况下且set detach-on-fork为on则会停在子进程的断点处 父进程会一直运行直到跑完
+默认调试父进程 set follow-fork-mode parent如果在这种情况下在父进程内打断点 然后运行父进程会停在断点处 子进程不会管 只会继续运行然后跑完
+在gdb内可查看当前gdb追踪的是什么进程 show follow-fork-mode
+设置调试模式 set detach-on-fork [on|off] 默认为on,表示调试当前进程的时候其他进程继续运行，如果为off调试当前进程时，其他进程被GDB挂起(会停在fork那句话 等待我们切换调试)。
+gdb版本为8.x set detach-on-fork off会出问题 7.x 9.x可以用这个功能
+查看当前程序的所有进程 会打印出进程在gdb中的编号：info inferiors
+切换当前调试进程：inferior id(id为进程在gdb中的编号)
+使进程脱离GDB调试：detach inferiors id (执行后id号进程不再受gdb控制就一直向下执行)
+移除某进程：remove inferiors id
+gcc fork_test.c -o hello -g
+gdb hello
+父子进程之间的关系
+区别：
+1 fork()函数的返回值不同 父进程中>0：返回的子进程id 子进程=0
+2 pcb中的一些数据 比如父进程和子进程的pid ppid都是不同的
+共同点：
+某些状态下:子进程刚被创造出来，还没有执行任何写数据的操作时，用户区的数据文件描述符表两个进程是相同的 (读时共享)。只要发生写操作 那么发生写时拷贝，两个进程的这个被写对象就不同了。
+6 exec函数族
+exec函数族的作用是根据指定的文件名找到可执行文件，并用它来取代调用进程的内容。
+换句话说就是在调用进程内部执行一个可执行文件。"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-14T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux多进程开发2 父子进程间关系,exec函数族,进程控制,wait函数"><meta name=twitter:description content="5父子进程关系及GDB多进程调试
+使用GDB调试时，GDB默认只能跟踪一个进程，可以再fork调用前，通过指令设置GDB调试工具跟踪父进程或跟踪子进程，默认跟踪父进程
+下面的这些命令都是gdb命令 不是命令行命令
+设置调试子进程 set follow-fork-mode child 这种情况下且set detach-on-fork为on则会停在子进程的断点处 父进程会一直运行直到跑完
+默认调试父进程 set follow-fork-mode parent如果在这种情况下在父进程内打断点 然后运行父进程会停在断点处 子进程不会管 只会继续运行然后跑完
+在gdb内可查看当前gdb追踪的是什么进程 show follow-fork-mode
+设置调试模式 set detach-on-fork [on|off] 默认为on,表示调试当前进程的时候其他进程继续运行，如果为off调试当前进程时，其他进程被GDB挂起(会停在fork那句话 等待我们切换调试)。
+gdb版本为8.x set detach-on-fork off会出问题 7.x 9.x可以用这个功能
+查看当前程序的所有进程 会打印出进程在gdb中的编号：info inferiors
+切换当前调试进程：inferior id(id为进程在gdb中的编号)
+使进程脱离GDB调试：detach inferiors id (执行后id号进程不再受gdb控制就一直向下执行)
+移除某进程：remove inferiors id
+gcc fork_test.c -o hello -g
+gdb hello
+父子进程之间的关系
+区别：
+1 fork()函数的返回值不同 父进程中>0：返回的子进程id 子进程=0
+2 pcb中的一些数据 比如父进程和子进程的pid ppid都是不同的
+共同点：
+某些状态下:子进程刚被创造出来，还没有执行任何写数据的操作时，用户区的数据文件描述符表两个进程是相同的 (读时共享)。只要发生写操作 那么发生写时拷贝，两个进程的这个被写对象就不同了。
+6 exec函数族
+exec函数族的作用是根据指定的文件名找到可执行文件，并用它来取代调用进程的内容。
+换句话说就是在调用进程内部执行一个可执行文件。"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux多进程开发2 父子进程间关系,exec函数族,进程控制,wait函数","item":"https://jler666.github.io/cpp/ltoizg/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux多进程开发2 父子进程间关系,exec函数族,进程控制,wait函数","name":"Linux多进程开发2 父子进程间关系,exec函数族,进程控制,wait函数","description":"5父子进程关系及GDB多进程调试\n使用GDB调试时，GDB默认只能跟踪一个进程，可以再fork调用前，通过指令设置GDB调试工具跟踪父进程或跟踪子进程，默认跟踪父进程\n下面的这些命令都是gdb命令 不是命令行命令\n设置调试子进程 set follow-fork-mode child 这种情况下且set detach-on-fork为on则会停在子进程的断点处 父进程会一直运行直到跑完\n默认调试父进程 set follow-fork-mode parent如果在这种情况下在父进程内打断点 然后运行父进程会停在断点处 子进程不会管 只会继续运行然后跑完\n在gdb内可查看当前gdb追踪的是什么进程 show follow-fork-mode\n设置调试模式 set detach-on-fork [on|off] 默认为on,表示调试当前进程的时候其他进程继续运行，如果为off调试当前进程时，其他进程被GDB挂起(会停在fork那句话 等待我们切换调试)。\ngdb版本为8.x set detach-on-fork off会出问题 7.x 9.x可以用这个功能\n查看当前程序的所有进程 会打印出进程在gdb中的编号：info inferiors\n切换当前调试进程：inferior id(id为进程在gdb中的编号)\n使进程脱离GDB调试：detach inferiors id (执行后id号进程不再受gdb控制就一直向下执行)\n移除某进程：remove inferiors id\ngcc fork_test.c -o hello -g\ngdb hello\n父子进程之间的关系\n区别：\n1 fork()函数的返回值不同 父进程中\u0026gt;0：返回的子进程id 子进程=0\n2 pcb中的一些数据 比如父进程和子进程的pid ppid都是不同的\n共同点：\n某些状态下:子进程刚被创造出来，还没有执行任何写数据的操作时，用户区的数据文件描述符表两个进程是相同的 (读时共享)。只要发生写操作 那么发生写时拷贝，两个进程的这个被写对象就不同了。\n6 exec函数族\nexec函数族的作用是根据指定的文件名找到可执行文件，并用它来取代调用进程的内容。\n换句话说就是在调用进程内部执行一个可执行文件。\n","keywords":[],"articleBody":"5父子进程关系及GDB多进程调试\n使用GDB调试时，GDB默认只能跟踪一个进程，可以再fork调用前，通过指令设置GDB调试工具跟踪父进程或跟踪子进程，默认跟踪父进程\n下面的这些命令都是gdb命令 不是命令行命令\n设置调试子进程 set follow-fork-mode child 这种情况下且set detach-on-fork为on则会停在子进程的断点处 父进程会一直运行直到跑完\n默认调试父进程 set follow-fork-mode parent如果在这种情况下在父进程内打断点 然后运行父进程会停在断点处 子进程不会管 只会继续运行然后跑完\n在gdb内可查看当前gdb追踪的是什么进程 show follow-fork-mode\n设置调试模式 set detach-on-fork [on|off] 默认为on,表示调试当前进程的时候其他进程继续运行，如果为off调试当前进程时，其他进程被GDB挂起(会停在fork那句话 等待我们切换调试)。\ngdb版本为8.x set detach-on-fork off会出问题 7.x 9.x可以用这个功能\n查看当前程序的所有进程 会打印出进程在gdb中的编号：info inferiors\n切换当前调试进程：inferior id(id为进程在gdb中的编号)\n使进程脱离GDB调试：detach inferiors id (执行后id号进程不再受gdb控制就一直向下执行)\n移除某进程：remove inferiors id\ngcc fork_test.c -o hello -g\ngdb hello\n父子进程之间的关系\n区别：\n1 fork()函数的返回值不同 父进程中\u003e0：返回的子进程id 子进程=0\n2 pcb中的一些数据 比如父进程和子进程的pid ppid都是不同的\n共同点：\n某些状态下:子进程刚被创造出来，还没有执行任何写数据的操作时，用户区的数据文件描述符表两个进程是相同的 (读时共享)。只要发生写操作 那么发生写时拷贝，两个进程的这个被写对象就不同了。\n6 exec函数族\nexec函数族的作用是根据指定的文件名找到可执行文件，并用它来取代调用进程的内容。\n换句话说就是在调用进程内部执行一个可执行文件。\nexec函数族的函数执行成功后不会返回，因为调用进程的实体，包括代码段数据段堆栈等(所有用户区内容)都被新的可执行文件的内容取代，只留下进程ID等一些表面上的信息(一些内核区内容)仍保持原样。(exec不会生成新进程 而是取代现有的这个进程)只有调用失败了，它们才会返回-1，从原程序的调用点接着往下执行。\nexec后从可执行文件的main开始执行\n可以这么做,fork子进程再在子进程中调用exec取代子进程 这样不会影响父进程。\n//标准C库 #include extern char **environ; int execl(const char *path, const char *arg, ... /* (char *) NULL */); int execlp(const char *file, const char *arg, ... /* (char *) NULL */); int execle(const char *path, const char *arg, ... /*, (char *) NULL, char * const envp[] */); int execv(const char *path, char *const argv[]); int execvp(const char *file, char *const argv[]); int execvpe(const char *file, char *const argv[], char *const envp[]); //unix库 #include int execve(const char *filename, char *const argv[], char *const envp[]); l(list)参数地址列表，以空指针结尾\nv(vector)存有各参数地址的指针数组地址\np(path)按PATH环境变量指定的目录搜索可执行文件\ne(environment)存有环境变量字符串地址的指针数组的地址\n/* #include extern char **environ; int execl(const char *path, const char *arg, .../ (char *) NULL /); 参数： path 可执行程序的路径(绝对相对都行) 推荐用绝对路径 arg 其实是可变参数 可以写很多 后面的。。。就是arg1 arg2 ... argn 字符串指针 指向一系列字符串参数列表 ./a.out hello fuck 12 在执行可执行文件时 后面跟着的参数会被main arg获得 这个arg其实就是exec可执行文件的main的传入参数列表 第一个arg一般没有作用 一般写的是执行的可执行文件的名称 从第二个参数往后才是可执行文件main的真正参数列表 这个参数列表一定要以NULL为结尾，这样才知道参数列表读入完毕 返回值 只有在执行可执行文件失败才会返回-1 并设置errno \\*/ #include #include int main() { //创建一个子进程 在子进程中执行exec函数 pid_t pid = fork(); if (pid \u003e 0) { //父进程 printf(\"father pid:%d\", getpid()); } else { //子进程 printf(\"child pid:%d\", getpid()); //放上面 放在execl下面不会执行 execl(\"/home/wen/lesson16/main\", \"main\", NULL); //参数列表 第一个参数一般写可执行文件的名称 参数列表以null结尾 //可以执行shell文件命令 ps aux查看进程信息 // execl(\"/bin/ps\", \"ps\", \"aux\", NULL); // execl(\"/bin/ps\", \"ps\", \"a\", \"u\", \"x\", NULL); //这两种都对 } for (int i = 0; i \u003c 3; i++) //这个for只有父进程才会执行 因为 //exec函数族的函数执行成功后不会返回，因为调用进程的实体，包括代码段数据段堆栈等(所有用户区内容)都被新的可执行文件的内容取代 // ，只留下进程ID等一些表面上的信息(一些内核区内容)仍保持原样 exec不会生成新进程 而是取代现有的这个进程 { printf(\"i:%d pid:%d\", i, getpid()); } return 0; } execlp\n/* #include extern char **environ; int execlp(const char *file, const char *arg, .../ (char *) NULL /); 会到环境变量中的路径中查找指定的同名文件 找到了就执行 找不到返回-1 参数： file 可执行文件的文件名 a.out ps 可以不用写绝对路径 直接写文件名 arg(同execl) 这个arg其实就是exec可执行文件的main的传入参数列表 第一个arg一般没有作用 一般写的是执行的可执行文件的名称 从第二个参数往后才是可执行文件main的真正参数列表 这个参数列表一定要以NULL为结尾，这样才知道参数列表读入完毕 返回值 只有在执行可执行文件失败才会返回-1 并设置errno \\*/ #include #include extern char **environ; int main() { //创建一个子进程 在子进程中执行exec函数 pid_t pid = fork(); if (pid \u003e 0) { //父进程 printf(\"father pid:%d\", getpid()); } else { //子进程 printf(\"child pid:%d\", getpid()); //放上面 放在execl下面不会执行 //在环境变量路径中需要存在main这个文件 // execlp(\"main\", \"main\", NULL); //参数列表 第一个参数一般写可执行文件的名称 参数列表以null结尾 //可以执行shell文件命令 ps aux查看进程信息 // ps是在 /bin目录下的 环境变量中是包含这个/bin目录的 命令:env 其中有个PATH 为环境变量中包含的路径 execlp(\"ps\", \"ps\", \"aux\", NULL); } for (int i = 0; i \u003c 3; i++) //这个for只有父进程才会执行 因为 //exec函数族的函数执行成功后不会返回，因为调用进程的实体，包括代码段数据段堆栈等(所有用户区内容)都被新的可执行文件的内容取代 // ，只留下进程ID等一些表面上的信息(一些内核区内容)仍保持原样 exec不会生成新进程 而是取代现有的这个进程 { printf(\"i:%d pid:%d\", i, getpid()); } return 0; } int execv(const char *path, char *const argv[]); //argv 参数字符串数组不再需要像上面 那样一个一个参数写到函数里 char * myagrv[] = {\"ps\",\"aux\",NUll}; execv(\"/bin/ps\", myagrv); int execve(const char *filename, char *const argv[],char *const envp[]); //第一个参数可执行文件名(不是路径) //第二个参数 可执行文件main的参数字符串数组 argv数组中，第一个元素一定需要把路径写对 //第三个参数envp数组参数不是用来查找可执行程序的，而是为可执行程序运行期间增加新的环境变量 //下面这个例子是通过 //args中第一个参数一定要把路径写对 char *args[] = {\"./a.out\", \"a.out\", (char *)0};//(char *)0 就是NULL //env_args为我们执行的execlp新增了环境变量，这样excelp中可以找到hello这个可执行程序 char *env_args[] = {\"PATH=/home/wen/lesson15\",(char*)0}; execve(\"execlp\", args, env_args); 7进程控制\n进程退出\n#include //标准C void exit(int status);//多做了 调用退出处理函数 刷新IO缓冲区关闭文件描述符这两件事 #include // linux系统函数 void _exit(int status); | |\n| — |\n/* #include //标准C void exit(int status);//多做了 调用退出处理函数 刷新IO缓冲区关闭文件描述符这两件事 status 进程退出时的状态信息。父进程在回收子进程资源时可以获取到这个状态信息 #include // linux系统函数 void _exit(int status); \\*/ #include //标准C #include #include int main() { printf(\"hello\\n\"); printf(\"world\"); exit(0); //在return0上调用 return不会被执行 //终端上打印结果 //hello //worldwen@wenc: 因为world没换行 所以后面紧跟着终端信息 _exit(0); //终端打印结果 //hello //wen@wenc: 并没有打印world //因为hello带上了\\n 会自动做刷新缓冲区(先将hello放入缓冲区 再接收\\n将缓冲区刷新 打印出hello) //但是world printf(\"world\")只是将world放入缓冲区中 但是并没有刷新缓冲区 //exit是会做刷IO缓冲区的 但是_exit不会做 所以用exit world能被打印出来 _exit world没有打印出来 return 0; // main返回0给shell 相当于我们的程序进程调用了exit(0) } 孤儿进程\n父进程结束 但子进程还在运行(未运行结束)，这样的子进程称为孤儿进程。\n每当出现一个孤儿进程的时候，内核就把孤儿进程的父进程设置为init(PID为1的进程),而init进程会循环地wait()孤儿进程。当一个孤儿进程结束生命周期的时候,init进程就会去处理它的善后工作(回收资源)。因此孤儿进程并不会有什么危害。\nwen@wenc:….. ./learn_orphan\nim father pid 14042 ppid 2512 (就是执行的这个终端)\n….//父进程先死亡\n//当父进程先子进程死亡，会由后台切换到执行父进程的那个终端前台(因为这个终端是父进程的父进程)，所以会先打印出终端信息wen@wenc: ，然后因为子进程还在执行所以会将子进程用了printf也会将信息输出到终端前台im child pid:1403 ppid:1，会什么子进程的信息也会输出到当前的前台内因为fork后父子进程的文件描述符表是相同的(没写之前是共享的)，文件描述符表的前三个是固定的标准输出、标准输入、标准错误，因为共享文件描述符所以其标准输出的文件fd是相同的都是指向当前终端前台的。\nwen@wenc:im child pid:1403 ppid:1(孤儿进程被init进程接管)\n僵尸进程\n每个进程结束之后，都会释放自己地址空间中的用户区数据，内核区的PCB没办法自己释放需要父进程区释放。\n子进程终止时，父进程没有做回收操作，子进程残留资源(PCB)在内核中，变成僵尸进程。\n僵尸进程无法用kill -9杀死。 需要将僵尸进程的父进程杀死，这样僵尸进程就变为孤儿进程被init线程托管处理(回收PCB)。\n这样会导致一个问题。如果父进程不调用wait()或waitpid()(这两个函数用于等待回收资源)，那么在内核中保留的PCB信息就不会释放，其进程号就会一直被占用，但是系统所能使用的进程号是有限的，如果有大量的僵尸进程，将会出现因为没有可用的进程号而导致系统不能产生新的进程，这就是僵尸进程的危害应当避免。\n8wait函数\n在每个进程退出的时候，内核释放该进程所有的资源、包括打开的文件、占用的内存等等。但是仍然为其保留一定的信息，这些信息主要指PCB的信息(进程号、退出状态、运行时间等)。\n父进程可以通过调用wait或waitpid()得到它的退出状态同时彻底清除掉这个进程。\nwait()和waitpid()函数的功能一样，区别在于,wait()函数会阻塞(只用当子进程死亡wait才不阻塞),waitpid()可以设置不阻塞，waitpid()还可以指定等待哪个子进程结束。\n注意 一次wait或waitpid调用只能清理一个子进程，清理多个子进程应使用循环。\n/* #include #include pid_t wait(int *wstatus); 子进程终止 被信号停止 被信号挂起 wait将不阻塞 子进程终止这种情况wait将会释放与子进程相关的资源(pcb) 如果父进程不调用wait或waitpid子进程将会变为僵尸进程 如果子进程已经发生了状态改变，这个系统调用将会立即返回。否则 将会阻塞(父进程挂起(阻塞))直到这个父进程的一个子进程状态改变或有信号终止这个系统调用 参数: wstatus进程退出的状态信息 由函数传出 WIFEXITED(wstatus) 非0 进程正常退出 WEXITSTATUS(wstatus)如果上宏WIFEXITED为真 则为进程的退出状态(exit的参数) WIFSIGNALED(wstatus)非0 进程异常终止 WTERMSIG(wstatus)如果上宏WIFSIGNALED为真 获取使进程终止的信号编号 WIFSTOPPED(wstatus)非0 进程处于暂停状态(挂起) WSTOPSIG(wstatus)如果上宏WIFSTOPPED为真 获取使进程暂停的信号的编号 WIFCONTINUED(wstatus)非0 进程暂停后已经继续运行 返回值：成功返回被回收的子进程的id 失败返回-1(所有子进程都结束立刻返回 没有子进程立刻返回 或调用函数失败 这三种情况都会返回-1) pid_t waitpid(pid_t pid, int *wstatus, int options); 都是用于等待子进程状态的改变(并非只用于子进程死亡回收资源) \\*/ #include #include #include #include int main() { // fork() // fork() // 执行2次 注意并不是产生两个子进程哦 // 第一次fork后的子进程在的二次fork还好产生孙子进程算上本身共有4个进程 pid_t pid; //一个父进程 创建5个子进程(5个子进程互相为兄弟) for (int i = 0; i \u003c 5; i++) { pid = fork(); if (pid == 0) //刚产生子进程分支 在子进程种这个fork的返回值是0 { break; //不让任意一个子进程分支再执行fork 假如执行fork这样会产生孙子进程而不是子进程 } //只有父进程的第一次fork的返回值不是0是子进程的pid 才能继续循环 } if (pid \u003e 0) //父进程的fork返回值才大于0 { while (1) { //父进程 printf(\"im father pid = %d\\n\", getpid()); int status; pid_t child = wait(\u0026status); printf(\"recyle one child pid:%d\", child); if (child == -1) break; //一个子进程被回收 if (WIFEXITED(status)) //为真 则是正常终止 { int subret = WEXITSTATUS(status); // 如果上宏WIFEXITED(status)为真 则为进程的退出状态(exit的参数) //subret 即子进程main return的东西 或子进程exit(参数)的参数 } else if (WIFSIGNALED(status)) //为真 则是异常终止 { int termsig = WTERMSIG(status); //如果上宏WIFSIGNALED为真 获取使子进程终止的信号编号 } sleep(1); //打印慢一些 } } else if (pid == 0) //子进程的第一次fork返回值是0 { //子进程 while (1) { printf(\"im child pid = %d\\n\", getpid()); sleep(1); //打印慢一些 } } // 实验 我们通过命令kill -9 子进程 来终止子进程使wait不阻塞 父进程调用完wait后能看到recyle语句被打印 // 当所有子进程被kill recyle语句打印的pid为-1 表示所有子进程都已经结束了 return 0; } waitpid\n/* #include #include pid_t waitpid(pid_t pid, int *wstatus, int options); 回收指定pid的子进程 可以设置此函数是否阻塞 调用wait(\u0026status) 等用于调用waitpid(-1,\u0026status,0) 函数默认阻塞 直到子进程被终止 参数: ps ajx 可以查看进程组ID 输入的pid\u003e0,等待对应PID的子进程结束 回收资源(PCB) pid = 0,等待任意与父进程 pgid(进程组ID)相同的子进程结束 回收资源(PCB) pid = -1,等待任意子进程结束 回收资源(PCB) pid \u003c -1,等待任意pgid(进程组ID)与输入的pid的绝对值(!!!) 相同的子进程结束 回收资源(PCB) 即回收pgid==|输入的pid| 的子进程资源 父进程的ID一般就为组ID,子进程的进程组一般和父进程是同一组 wstatus进程退出的状态信息 由函数传出 WIFEXITED(wstatus) 非0 进程正常退出 WEXITSTATUS(wstatus)如果上宏WIFEXITED为真 则为进程的退出状态(exit的参数) WIFSIGNALED(wstatus)非0 进程异常终止 WTERMSIG(wstatus)如果上宏WIFSIGNALED为真 获取使进程终止的信号编号 WIFSTOPPED(wstatus)非0 进程处于暂停状态(挂起) WSTOPSIG(wstatus)如果上宏WIFSTOPPED为真 获取使进程暂停的信号的编号 WIFCONTINUED(wstatus)非0 进程暂停后已经继续运行 option 用于阻塞或非阻塞 0 阻塞 WNOHANG 一个宏值，非阻塞 无子进程结束立即返回 WUNTRACED WCONTINUED 返回值 \u003e0 返回的是结束子进程的id =0 非阻塞情况下(WNOHANG) 无子进程结束返回0 -1 出错 或 没有子进程了 \\*/ #include #include #include #include int main() { // fork() // fork() // 执行2次 注意并不是产生两个子进程哦 // 第一次fork后的子进程在的二次fork还好产生孙子进程算上本身共有4个进程 pid_t pid; //一个父进程 创建5个子进程(5个子进程互相为兄弟) for (int i = 0; i \u003c 5; i++) { pid = fork(); if (pid == 0) //刚产生子进程分支 在子进程种这个fork的返回值是0 { break; //不让任意一个子进程分支再执行fork 假如执行fork这样会产生孙子进程而不是子进程 } //只有父进程的第一次fork的返回值不是0是子进程的pid 才能继续循环 } if (pid \u003e 0) //父进程的fork返回值才大于0 { while (1) { //父进程 printf(\"im father pid = %d\\n\", getpid()); sleep(1); //打印慢一些 int status; // pid_t child = wait(\u0026status); // pid_t child = waitpid(-1, \u0026status, 0); //阻塞 回收所有子进程 pid_t child = waitpid(-1, \u0026status, WNOHANG); //阻塞 回收所有子进程 printf(\"recyle one child pid:%d\", child); if (child == -1) //所有子进程都结束都已经被回收完了 或出错返回-1 break; else if (child == 0) { //非阻塞 无子进程结束返回0 continue; } else if (child \u003e 0) { //返回大于0 表示有一个子进程结束 并被waitpid回收了 //一个子进程被回收 if (WIFEXITED(status)) //为真 则是正常终止 { int subret = WEXITSTATUS(status); // 如果上宏WIFEXITED(status)为真 则为进程的退出状态(exit的参数) //subret 即子进程main return的东西 或子进程exit(参数)的参数 } else if (WIFSIGNALED(status)) //为真 则是异常终止 { int termsig = WTERMSIG(status); //如果上宏WIFSIGNALED为真 获取使子进程终止的信号编号 } } } } else if (pid == 0) //子进程的第一次fork返回值是0 { //子进程 while (1) { printf(\"im child pid = %d\\n\", getpid()); sleep(1); //打印慢一些 } } // 实验 我们通过命令kill -9 子进程 来终止子进程使wait不阻塞 父进程调用完wait后能看到recyle语句被打印 // 当所有子进程被kill recyle语句打印的pid为-1 表示所有子进程都已经结束了 return 0; } ","wordCount":"1054","inLanguage":"en","datePublished":"2022-03-14T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/ltoizg/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux多进程开发2 父子进程间关系,exec函数族,进程控制,wait函数</h1><div class=post-meta><span title=2022-03-14T00:00:00+00:00>创建于 2022-03-14</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>5父子进程关系及GDB多进程调试</strong></p><p>使用GDB调试时，GDB默认只能跟踪一个进程，可以再fork调用前，通过指令设置GDB调试工具跟踪父进程或跟踪子进程，默认跟踪父进程</p><p><strong>下面的这些命令都是gdb命令 不是命令行命令</strong></p><p>设置调试子进程 set follow-fork-mode child 这种情况下且set detach-on-fork为on则会停在子进程的断点处 父进程会一直运行直到跑完</p><p>默认调试父进程 set follow-fork-mode parent如果在这种情况下在父进程内打断点 然后运行父进程会停在断点处 子进程不会管 只会继续运行然后跑完</p><p>在gdb内可查看当前gdb追踪的是什么进程 show follow-fork-mode</p><p>设置调试模式 set detach-on-fork [on|off] <strong>默认为on,表示调试当前进程的时候其他进程继续运行</strong>，如果为off调试当前进程时，其他进程被GDB挂起(会停在fork那句话 等待我们切换调试)。</p><p>gdb版本为8.x set detach-on-fork off会出问题 7.x 9.x可以用这个功能</p><p>查看当前程序的所有进程 会打印出进程在gdb中的编号：info inferiors</p><p>切换当前调试进程：inferior id(id为进程在gdb中的编号)</p><p>使进程脱离GDB调试：detach inferiors id (执行后id号进程不再受gdb控制就一直向下执行)</p><p>移除某进程：remove inferiors id</p><p>gcc fork_test.c -o hello -g</p><p>gdb hello</p><p>父子进程之间的关系</p><p>区别：</p><p>1 fork()函数的返回值不同 父进程中>0：返回的子进程id 子进程=0</p><p>2 pcb中的一些数据 比如父进程和子进程的pid ppid都是不同的</p><p>共同点：</p><p>某些状态下:子进程刚被创造出来，还没有执行任何写数据的操作时，用户区的数据文件描述符表两个进程是相同的 (读时共享)。只要发生写操作 那么发生写时拷贝，两个进程的这个被写对象就不同了。</p><p><strong>6 exec函数族</strong></p><p>exec函数族的作用是根据指定的文件名找到可执行文件，并用它来取代调用进程的内容。</p><p>换句话说就是<strong>在调用进程内部执行一个可执行文件</strong>。</p><p><strong>exec函数族的函数执行成功后不会返回，因为调用进程的实体，包括代码段数据段堆栈等(所有用户区内容)都被新的可执行文件的内容取代，只留下进程ID等一些表面上的信息(一些内核区内容)仍保持原样</strong>。(exec不会生成新进程 而是取代现有的这个进程)只有调用失败了，它们才会返回-1，从原程序的调用点接着往下执行。</p><p>exec后从可执行文件的main开始执行</p><p>可以这么做,<strong>fork子进程再在子进程中调用exec取代子进程 这样不会影响父进程。</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>//标准C库
+</span></span></span><span style=display:flex><span>       <span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span>       <span style=color:#66d9ef>extern</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>**</span>environ;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>       <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>execl</span>(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>path, <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>arg, ...
+</span></span><span style=display:flex><span>                       <span style=color:#75715e>/* (char  *)</span> NULL <span style=color:#960050;background-color:#1e0010>*/</span>);
+</span></span><span style=display:flex><span>       <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>execlp</span>(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>file, <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>arg, ...
+</span></span><span style=display:flex><span>                       <span style=color:#75715e>/* (char  *)</span> NULL <span style=color:#960050;background-color:#1e0010>*/</span>);
+</span></span><span style=display:flex><span>       <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>execle</span>(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>path, <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>arg, ...
+</span></span><span style=display:flex><span>                       <span style=color:#75715e>/*, (char *)</span> NULL, <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span> <span style=color:#66d9ef>const</span> envp[] <span style=color:#960050;background-color:#1e0010>*/</span>);
+</span></span><span style=display:flex><span>       <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>execv</span>(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>path, <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span><span style=color:#66d9ef>const</span> argv[]);
+</span></span><span style=display:flex><span>       <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>execvp</span>(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>file, <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span><span style=color:#66d9ef>const</span> argv[]);
+</span></span><span style=display:flex><span>       <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>execvpe</span>(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>file, <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span><span style=color:#66d9ef>const</span> argv[],
+</span></span><span style=display:flex><span>                       <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span><span style=color:#66d9ef>const</span> envp[]);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>//unix库
+</span></span></span><span style=display:flex><span>       <span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>       <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>execve</span>(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>filename, <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span><span style=color:#66d9ef>const</span> argv[],
+</span></span><span style=display:flex><span>                  <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span><span style=color:#66d9ef>const</span> envp[]);
+</span></span></code></pre></div><p>l(list)参数地址列表，以空指针结尾</p><p>v(vector)存有各参数地址的指针数组地址</p><p>p(path)按PATH环境变量指定的目录搜索可执行文件</p><p>e(environment)存有环境变量字符串地址的指针数组的地址</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       extern char **environ;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int execl(const char *path, const char *arg, .../ (char  *) NULL /);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       参数：
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       path 可执行程序的路径(绝对相对都行) 推荐用绝对路径
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       arg 其实是可变参数 可以写很多 后面的。。。就是arg1 arg2 ... argn
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       字符串指针 指向一系列字符串参数列表
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       ./a.out hello fuck 12
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       在执行可执行文件时 后面跟着的参数会被main arg获得
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       这个arg其实就是exec可执行文件的main的传入参数列表
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       第一个arg一般没有作用 一般写的是执行的可执行文件的名称
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       从第二个参数往后才是可执行文件main的真正参数列表
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       这个参数列表一定要以NULL为结尾，这样才知道参数列表读入完毕
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回值
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       只有在执行可执行文件失败才会返回-1 并设置errno
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建一个子进程 在子进程中执行exec函数
+</span></span></span><span style=display:flex><span>    pid_t pid <span style=color:#f92672>=</span> fork();
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//父进程
+</span></span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;father pid:%d&#34;</span>, getpid());
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//子进程
+</span></span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;child pid:%d&#34;</span>, getpid());               <span style=color:#75715e>//放上面 放在execl下面不会执行
+</span></span></span><span style=display:flex><span>        execl(<span style=color:#e6db74>&#34;/home/wen/lesson16/main&#34;</span>, <span style=color:#e6db74>&#34;main&#34;</span>, NULL); <span style=color:#75715e>//参数列表 第一个参数一般写可执行文件的名称 参数列表以null结尾
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//可以执行shell文件命令 ps aux查看进程信息
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// execl(&#34;/bin/ps&#34;, &#34;ps&#34;, &#34;aux&#34;, NULL);
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// execl(&#34;/bin/ps&#34;, &#34;ps&#34;, &#34;a&#34;, &#34;u&#34;, &#34;x&#34;, NULL);
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//这两种都对
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>3</span>; i<span style=color:#f92672>++</span>) <span style=color:#75715e>//这个for只有父进程才会执行 因为
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//exec函数族的函数执行成功后不会返回，因为调用进程的实体，包括代码段数据段堆栈等(所有用户区内容)都被新的可执行文件的内容取代
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// ，只留下进程ID等一些表面上的信息(一些内核区内容)仍保持原样 exec不会生成新进程 而是取代现有的这个进程
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;i:%d pid:%d&#34;</span>, i, getpid());
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>execlp</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       extern char **environ;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int execlp(const char *file, const char *arg, .../ (char  *) NULL /);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       会到环境变量中的路径中查找指定的同名文件 找到了就执行 找不到返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       参数：
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       file 可执行文件的文件名 a.out ps 可以不用写绝对路径 直接写文件名
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       arg(同execl)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       这个arg其实就是exec可执行文件的main的传入参数列表
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       第一个arg一般没有作用 一般写的是执行的可执行文件的名称
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       从第二个参数往后才是可执行文件main的真正参数列表
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       这个参数列表一定要以NULL为结尾，这样才知道参数列表读入完毕
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回值
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       只有在执行可执行文件失败才会返回-1 并设置errno
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>extern</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>**</span>environ;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建一个子进程 在子进程中执行exec函数
+</span></span></span><span style=display:flex><span>    pid_t pid <span style=color:#f92672>=</span> fork();
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//父进程
+</span></span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;father pid:%d&#34;</span>, getpid());
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//子进程
+</span></span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;child pid:%d&#34;</span>, getpid()); <span style=color:#75715e>//放上面 放在execl下面不会执行
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//在环境变量路径中需要存在main这个文件
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// execlp(&#34;main&#34;, &#34;main&#34;, NULL); //参数列表 第一个参数一般写可执行文件的名称 参数列表以null结尾
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//可以执行shell文件命令 ps aux查看进程信息
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// ps是在 /bin目录下的 环境变量中是包含这个/bin目录的 命令:env 其中有个PATH 为环境变量中包含的路径
+</span></span></span><span style=display:flex><span>        execlp(<span style=color:#e6db74>&#34;ps&#34;</span>, <span style=color:#e6db74>&#34;ps&#34;</span>, <span style=color:#e6db74>&#34;aux&#34;</span>, NULL);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>3</span>; i<span style=color:#f92672>++</span>) <span style=color:#75715e>//这个for只有父进程才会执行 因为
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//exec函数族的函数执行成功后不会返回，因为调用进程的实体，包括代码段数据段堆栈等(所有用户区内容)都被新的可执行文件的内容取代
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// ，只留下进程ID等一些表面上的信息(一些内核区内容)仍保持原样 exec不会生成新进程 而是取代现有的这个进程
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;i:%d pid:%d&#34;</span>, i, getpid());
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span>       <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>execv</span>(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>path, <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span><span style=color:#66d9ef>const</span> argv[]);
+</span></span><span style=display:flex><span>       <span style=color:#75715e>//argv 参数字符串数组不再需要像上面 那样一个一个参数写到函数里
+</span></span></span><span style=display:flex><span>       <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span> myagrv[] <span style=color:#f92672>=</span> {<span style=color:#e6db74>&#34;ps&#34;</span>,<span style=color:#e6db74>&#34;aux&#34;</span>,NUll};
+</span></span><span style=display:flex><span>       execv(<span style=color:#e6db74>&#34;/bin/ps&#34;</span>, myagrv);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>       <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>execve</span>(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>filename, <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span><span style=color:#66d9ef>const</span> argv[],<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span><span style=color:#66d9ef>const</span> envp[]);
+</span></span><span style=display:flex><span>       <span style=color:#75715e>//第一个参数可执行文件名(不是路径)
+</span></span></span><span style=display:flex><span>       <span style=color:#75715e>//第二个参数 可执行文件main的参数字符串数组 argv数组中，第一个元素一定需要把路径写对
+</span></span></span><span style=display:flex><span>       <span style=color:#75715e>//第三个参数envp数组参数不是用来查找可执行程序的，而是为可执行程序运行期间增加新的环境变量
+</span></span></span><span style=display:flex><span>       <span style=color:#75715e>//下面这个例子是通过
+</span></span></span><span style=display:flex><span>       <span style=color:#75715e>//args中第一个参数一定要把路径写对
+</span></span></span><span style=display:flex><span>       <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>args[] <span style=color:#f92672>=</span> {<span style=color:#e6db74>&#34;./a.out&#34;</span>, <span style=color:#e6db74>&#34;a.out&#34;</span>, (<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>)<span style=color:#ae81ff>0</span>};<span style=color:#75715e>//(char *)0 就是NULL
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>       <span style=color:#75715e>//env_args为我们执行的execlp新增了环境变量，这样excelp中可以找到hello这个可执行程序
+</span></span></span><span style=display:flex><span>       <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>env_args[] <span style=color:#f92672>=</span> {<span style=color:#e6db74>&#34;PATH=/home/wen/lesson15&#34;</span>,(<span style=color:#66d9ef>char</span><span style=color:#f92672>*</span>)<span style=color:#ae81ff>0</span>};
+</span></span><span style=display:flex><span>       execve(<span style=color:#e6db74>&#34;execlp&#34;</span>, args, env_args);
+</span></span></code></pre></div><p><strong>7进程控制</strong></p><p>进程退出</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//标准C
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>exit</span>(<span style=color:#66d9ef>int</span> status);<span style=color:#75715e>//多做了 调用退出处理函数 刷新IO缓冲区关闭文件描述符这两件事
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>// linux系统函数
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>_exit</span>(<span style=color:#66d9ef>int</span> status);
+</span></span></code></pre></div><p>| <img alt=1647226851262-bedb84bf-724f-4c3b-9cab-ea86689d3937.png loading=lazy src=/images/3dtRQR2BCDU3BwY3/1647226851262-bedb84bf-724f-4c3b-9cab-ea86689d3937-500103.png><img alt=1647226852355-f6e609d8-b40d-4868-93cd-b2361faf92c3.png loading=lazy src=/images/3dtRQR2BCDU3BwY3/1647226852355-f6e609d8-b40d-4868-93cd-b2361faf92c3-799108.png> |</p><p>| &mdash; |</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include &lt;stdlib.h&gt; //标准C
+</span></span></span><span style=display:flex><span><span style=color:#75715e>void exit(int status);//多做了 调用退出处理函数 刷新IO缓冲区关闭文件描述符这两件事
+</span></span></span><span style=display:flex><span><span style=color:#75715e>status 进程退出时的状态信息。父进程在回收子进程资源时可以获取到这个状态信息
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include &lt;unistd.h&gt;// linux系统函数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>void _exit(int status);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//标准C
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;hello</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;world&#34;</span>);
+</span></span><span style=display:flex><span>    exit(<span style=color:#ae81ff>0</span>); <span style=color:#75715e>//在return0上调用 return不会被执行
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//终端上打印结果
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//hello
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//worldwen@wenc:  因为world没换行 所以后面紧跟着终端信息
+</span></span></span><span style=display:flex><span>    _exit(<span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//终端打印结果
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//hello
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//wen@wenc:  并没有打印world
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//因为hello带上了\n 会自动做刷新缓冲区(先将hello放入缓冲区 再接收\n将缓冲区刷新 打印出hello)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//但是world  printf(&#34;world&#34;)只是将world放入缓冲区中 但是并没有刷新缓冲区
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//exit是会做刷IO缓冲区的 但是_exit不会做 所以用exit world能被打印出来 _exit world没有打印出来
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>// main返回0给shell 相当于我们的程序进程调用了exit(0)
+</span></span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>孤儿进程</p><p><strong>父进程结束 但子进程还在运行(未运行结束)</strong>，这样的子进程称为孤儿进程。</p><p>每当出现一个孤儿进程的时候，内核就把孤儿进程的父进程设置为<strong>init(PID为1的进程)</strong>,而init进程会循环地wait()孤儿进程。当一个孤儿进程结束生命周期的时候,init进程就会去处理它的善后工作(回收资源)。因此孤儿进程并不会有什么危害。</p><p>wen@wenc:&mldr;.. ./learn_orphan</p><p>im father pid 14042 ppid 2512 (就是执行的这个终端)</p><p>&mldr;.//父进程先死亡</p><p>//当父进程先子进程死亡，会由后台切换到执行父进程的那个终端前台(因为这个终端是父进程的父进程)，所以会先打印出终端信息wen@wenc: ，然后因为子进程还在执行所以会将子进程用了printf也会将信息输出到终端前台im child pid:1403 ppid:1，会什么子进程的信息也会输出到当前的前台内因为fork后父子进程的文件描述符表是相同的(没写之前是共享的)，文件描述符表的前三个是固定的标准输出、标准输入、标准错误，因为共享文件描述符所以其标准输出的文件fd是相同的都是指向当前终端前台的。</p><p>wen@wenc:im child pid:1403 ppid:1(孤儿进程被init进程接管)</p><p>僵尸进程</p><p>每个进程结束之后，<strong>都会释放自己地址空间中的用户区数据</strong>，内核区的PCB没办法自己释放需要父进程区释放。</p><p><strong>子进程终止时，父进程没有做回收操作，子进程残留资源(PCB)在内核中，变成僵尸进程。</strong></p><p>僵尸进程无法用kill -9杀死。 需要将僵尸进程的父进程杀死，这样僵尸进程就变为孤儿进程被init线程托管处理(回收PCB)。</p><p>这样会导致一个问题。<strong>如果父进程不调用wait()或waitpid()(这两个函数用于等待回收资源)，那么在内核中保留的PCB信息就不会释放，其进程号就会一直被占用，但是系统所能使用的进程号是有限的，如果有大量的僵尸进程，将会出现因为没有可用的进程号而导致系统不能产生新的进程，这就是僵尸进程的危害应当避免。</strong></p><p><strong>8wait函数</strong></p><p>在每个进程退出的时候，内核释放该进程所有的资源、包括打开的文件、占用的内存等等。但是仍然为其保留一定的信息，这些信息主要指PCB的信息(进程号、退出状态、运行时间等)。</p><p>父进程可以通过调用wait或waitpid()得到它的退出状态同时<strong>彻底清除掉</strong>这个进程。</p><p>wait()和waitpid()函数的功能一样，区别在于,wait()函数会阻塞(只用当子进程死亡wait才不阻塞),waitpid()可以设置不阻塞，waitpid()还可以指定等待哪个子进程结束。</p><p>注意 <strong>一次wait或waitpid调用只能清理一个子进程</strong>，清理多个子进程应使用循环。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/types.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/wait.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       pid_t wait(int *wstatus);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       子进程终止 被信号停止 被信号挂起 wait将不阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       子进程终止这种情况wait将会释放与子进程相关的资源(pcb)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       如果父进程不调用wait或waitpid子进程将会变为僵尸进程
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       如果子进程已经发生了状态改变，这个系统调用将会立即返回。否则
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       将会阻塞(父进程挂起(阻塞))直到这个父进程的一个子进程状态改变或有信号终止这个系统调用
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       参数: wstatus进程退出的状态信息 由函数传出
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WIFEXITED(wstatus) 非0 进程正常退出
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WEXITSTATUS(wstatus)如果上宏WIFEXITED为真 则为进程的退出状态(exit的参数)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WIFSIGNALED(wstatus)非0 进程异常终止
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WTERMSIG(wstatus)如果上宏WIFSIGNALED为真 获取使进程终止的信号编号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WIFSTOPPED(wstatus)非0 进程处于暂停状态(挂起)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WSTOPSIG(wstatus)如果上宏WIFSTOPPED为真 获取使进程暂停的信号的编号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WIFCONTINUED(wstatus)非0 进程暂停后已经继续运行
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回值：成功返回被回收的子进程的id
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       失败返回-1(所有子进程都结束立刻返回 没有子进程立刻返回  或调用函数失败 这三种情况都会返回-1)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       pid_t waitpid(pid_t pid, int *wstatus, int options);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       都是用于等待子进程状态的改变(并非只用于子进程死亡回收资源)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/wait.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// fork()
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// fork()
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 执行2次 注意并不是产生两个子进程哦
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 第一次fork后的子进程在的二次fork还好产生孙子进程算上本身共有4个进程
+</span></span></span><span style=display:flex><span>    pid_t pid;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//一个父进程 创建5个子进程(5个子进程互相为兄弟)
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>5</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        pid <span style=color:#f92672>=</span> fork();
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//刚产生子进程分支 在子进程种这个fork的返回值是0
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>break</span>; <span style=color:#75715e>//不让任意一个子进程分支再执行fork 假如执行fork这样会产生孙子进程而不是子进程
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//只有父进程的第一次fork的返回值不是0是子进程的pid 才能继续循环
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//父进程的fork返回值才大于0
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//父进程
+</span></span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;im father pid = %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, getpid());
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>int</span> status;
+</span></span><span style=display:flex><span>            pid_t child <span style=color:#f92672>=</span> wait(<span style=color:#f92672>&amp;</span>status);
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;recyle one child pid:%d&#34;</span>, child);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (child <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//一个子进程被回收
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (WIFEXITED(status)) <span style=color:#75715e>//为真 则是正常终止
+</span></span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>int</span> subret <span style=color:#f92672>=</span> WEXITSTATUS(status); <span style=color:#75715e>// 如果上宏WIFEXITED(status)为真 则为进程的退出状态(exit的参数)
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//subret 即子进程main return的东西 或子进程exit(参数)的参数
+</span></span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (WIFSIGNALED(status)) <span style=color:#75715e>//为真 则是异常终止
+</span></span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>int</span> termsig <span style=color:#f92672>=</span> WTERMSIG(status); <span style=color:#75715e>//如果上宏WIFSIGNALED为真 获取使子进程终止的信号编号
+</span></span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            sleep(<span style=color:#ae81ff>1</span>); <span style=color:#75715e>//打印慢一些
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//子进程的第一次fork返回值是0
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//子进程
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;im child pid = %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, getpid());
+</span></span><span style=display:flex><span>            sleep(<span style=color:#ae81ff>1</span>); <span style=color:#75715e>//打印慢一些
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 实验 我们通过命令kill -9 子进程 来终止子进程使wait不阻塞 父进程调用完wait后能看到recyle语句被打印
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 当所有子进程被kill recyle语句打印的pid为-1 表示所有子进程都已经结束了
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>waitpid</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/types.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/wait.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       pid_t waitpid(pid_t pid, int *wstatus, int options);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       回收指定pid的子进程 可以设置此函数是否阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       调用wait(&amp;status) 等用于调用waitpid(-1,&amp;status,0)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       函数默认阻塞 直到子进程被终止
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    参数:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       ps ajx 可以查看进程组ID
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       输入的pid&gt;0,等待对应PID的子进程结束 回收资源(PCB)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       pid = 0,等待任意与父进程 pgid(进程组ID)相同的子进程结束 回收资源(PCB)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       pid = -1,等待任意子进程结束 回收资源(PCB)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       pid &lt; -1,等待任意pgid(进程组ID)与输入的pid的绝对值(!!!)  相同的子进程结束 回收资源(PCB)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       即回收pgid==|输入的pid| 的子进程资源
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       父进程的ID一般就为组ID,子进程的进程组一般和父进程是同一组
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       wstatus进程退出的状态信息 由函数传出
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WIFEXITED(wstatus) 非0 进程正常退出
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WEXITSTATUS(wstatus)如果上宏WIFEXITED为真 则为进程的退出状态(exit的参数)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WIFSIGNALED(wstatus)非0 进程异常终止
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WTERMSIG(wstatus)如果上宏WIFSIGNALED为真 获取使进程终止的信号编号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WIFSTOPPED(wstatus)非0 进程处于暂停状态(挂起)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WSTOPSIG(wstatus)如果上宏WIFSTOPPED为真 获取使进程暂停的信号的编号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WIFCONTINUED(wstatus)非0 进程暂停后已经继续运行
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       option 用于阻塞或非阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       0 阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WNOHANG  一个宏值，非阻塞 无子进程结束立即返回
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WUNTRACED
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       WCONTINUED
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回值
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       &gt;0 返回的是结束子进程的id
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       =0 非阻塞情况下(WNOHANG) 无子进程结束返回0
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       -1 出错 或 没有子进程了
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/wait.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// fork()
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// fork()
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 执行2次 注意并不是产生两个子进程哦
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 第一次fork后的子进程在的二次fork还好产生孙子进程算上本身共有4个进程
+</span></span></span><span style=display:flex><span>    pid_t pid;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//一个父进程 创建5个子进程(5个子进程互相为兄弟)
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>5</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        pid <span style=color:#f92672>=</span> fork();
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//刚产生子进程分支 在子进程种这个fork的返回值是0
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>break</span>; <span style=color:#75715e>//不让任意一个子进程分支再执行fork 假如执行fork这样会产生孙子进程而不是子进程
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//只有父进程的第一次fork的返回值不是0是子进程的pid 才能继续循环
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//父进程的fork返回值才大于0
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//父进程
+</span></span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;im father pid = %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, getpid());
+</span></span><span style=display:flex><span>            sleep(<span style=color:#ae81ff>1</span>); <span style=color:#75715e>//打印慢一些
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>int</span> status;
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// pid_t child = wait(&amp;status);
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// pid_t child = waitpid(-1, &amp;status, 0); //阻塞 回收所有子进程
+</span></span></span><span style=display:flex><span>            pid_t child <span style=color:#f92672>=</span> waitpid(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>, <span style=color:#f92672>&amp;</span>status, WNOHANG); <span style=color:#75715e>//阻塞 回收所有子进程
+</span></span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;recyle one child pid:%d&#34;</span>, child);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (child <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>) <span style=color:#75715e>//所有子进程都结束都已经被回收完了 或出错返回-1
+</span></span></span><span style=display:flex><span>                <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (child <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//非阻塞 无子进程结束返回0
+</span></span></span><span style=display:flex><span>                <span style=color:#66d9ef>continue</span>;
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (child <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//返回大于0 表示有一个子进程结束 并被waitpid回收了
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//一个子进程被回收
+</span></span></span><span style=display:flex><span>                <span style=color:#66d9ef>if</span> (WIFEXITED(status)) <span style=color:#75715e>//为真 则是正常终止
+</span></span></span><span style=display:flex><span>                {
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>int</span> subret <span style=color:#f92672>=</span> WEXITSTATUS(status); <span style=color:#75715e>// 如果上宏WIFEXITED(status)为真 则为进程的退出状态(exit的参数)
+</span></span></span><span style=display:flex><span>                    <span style=color:#75715e>//subret 即子进程main return的东西 或子进程exit(参数)的参数
+</span></span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (WIFSIGNALED(status)) <span style=color:#75715e>//为真 则是异常终止
+</span></span></span><span style=display:flex><span>                {
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>int</span> termsig <span style=color:#f92672>=</span> WTERMSIG(status); <span style=color:#75715e>//如果上宏WIFSIGNALED为真 获取使子进程终止的信号编号
+</span></span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//子进程的第一次fork返回值是0
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//子进程
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;im child pid = %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, getpid());
+</span></span><span style=display:flex><span>            sleep(<span style=color:#ae81ff>1</span>); <span style=color:#75715e>//打印慢一些
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 实验 我们通过命令kill -9 子进程 来终止子进程使wait不阻塞 父进程调用完wait后能看到recyle语句被打印
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 当所有子进程被kill recyle语句打印的pid为-1 表示所有子进程都已经结束了
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

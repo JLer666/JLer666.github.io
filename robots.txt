@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jler666.github.io/sitemap.xml

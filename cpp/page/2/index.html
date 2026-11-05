@@ -1,0 +1,211 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>C++ | CantBlog</title><meta name=keywords content><meta name=description content="C++ 语言、STL 与工程实践笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/cpp/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/cpp/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="C++"><meta property="og:description" content="C++ 语言、STL 与工程实践笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="C++"><meta name=twitter:description content="C++ 语言、STL 与工程实践笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>C++</h1><div class=post-description>C++ 语言、STL 与工程实践笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux网络编程6 IO多路复用简介,select</h2></header><div class=entry-content><p>IO多路复用简介
+IO多路复用(IO多路转接)**使得程序能同时监听多个文件描述符(多个缓冲区)，**提高程序性能，Linux下实现IO多路复用的系统调用主要有select,poll和epoll
+I 文件中内容写入内存 O 内存中内容输出到文件
+socket(fd文件描述符 对应于内核当中的一块读写缓冲区 )
+这里的IO其实就是指对这块缓冲区的操作
+a向写缓冲区中写数据 内核将写缓冲区的数据发到b底层 从底层中复制数据到 b的读缓冲区(内核中) b再从读缓冲区中读数据到应用程序(用户区中)
+几种常见的IO模型
+同步IO
+1阻塞等待 阻塞IO模型(Blocking IO)
+使用系统调用并一直阻塞到内核将数据准备好，之后再将数据从内核缓冲区复制到用户区中，在内核将数据准备好之前什么也干不了
+下图函数调用期间 一直被阻塞 直到数据准备好 且从内核复制到用户程序时系统调用才解除阻塞 函数返回
+| |
+| — |
+阻塞期间用户线程挂起 不会占用CPU资源。但只能一个线程维护一个IO，如果要用于并发需要开启大量线程用来维护网络连接(我们之前写的就是这种) 就是Linux中阻塞的read
+2 非阻塞IO (Non-blocking IO)
+内核在没准备好数据的时候会直接返回错误码，不会阻塞。调用程序不会挂起，而是不断轮询内核数据是否准备好。 非阻塞式IO的轮询会耗费大量cpu**，通过将调节字描述符属性设置为非阻塞可使用该功能。 Linux中非阻塞read**
+如果服务器连接了成千上万个客户端，每一次调用recv都需要去遍历这成千上万的fd看是否有数据到达，非常低效
+每次发起IO调用，在内核等待数据的过程中可以立即返回，用户线程不会阻塞，实时性较好。 但是在并发时多个线程不断轮询内核是否有数据，会占用大量CPU时间，效率不高。一般web服务器不采用此模式。
+| |
+| — |
+3多路复用IO(IO Multiplexing)
+类似于非阻塞，但是轮询不由用户线程执行而是由内核线程去轮询，内核监听程序听到数据准备好后，调用内核函数复制数据到用户态。
+比如下图中的select 这个系统调用充当代理的角色，不断轮询select注册的所有需要IO的文件描述符，当多个套接字的任意一个的数据准备好了，用户线程再调用read将数据从内核区复制到用户区(复制的过程中 进程阻塞)。
+| |
+| — |
+select 线性扫描所有监听的为念描述符，不管它们是否活跃(监听数量有上限 32位机1024 64位机 2048)
+poll 同select但是数据结构不同，需要分配一个pollfd数据结构数组在内核中，没有大小限制(无监听上限) 不过需要很多复制操作
+slect和poll。只会告诉你有几个fd接收到消息了，但是不会告诉你是哪几个fd还是需要后续自己去遍历
+epoll 无大小限制(无监听上限)。使用一个文件描述符管理多个文件描述符，使用红黑树存储。同时用事件驱动代替轮询。epoll_ctl中注册的文件描述符在事件触发的时候会通过回调机制激活该文件描述符，epoll_wait函数返回。并且采用mmap虚拟内存映射技术减少用户态和内核态数据传输的开销。
+epoll会告诉你有几个fd接收到消息了，也会告诉你是哪几个fd消息到了
+系统不必维护大量线程 只需要一个线程就能处理大量的连接监听。本质上select/epoll系统调用是阻塞式的，属于同步IO，需要在读写事件就绪后，再有系统读写系统调用进行阻塞的读写。
+4 信号驱动式IO
+当内核数据准备就绪时通过信号来通知，当数据准备好内核会发送SIGIO信号，收到信号后再进行io操作。
+...</p></div><footer class=entry-footer><span title=2022-03-22T00:00:00+00:00>创建于 2022-03-22</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux网络编程6 IO多路复用简介,select" href=https://jler666.github.io/cpp/vf2uhp/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux网络编程4 TCP三次挥手四次握手,多进程TCP并发</h2></header><div class=entry-content><p>TCP三次握手
+TCP面向连接单播，通过三次握手建立连接，四次挥手关闭一个连接。通信双方必须建立一条连接(所谓连接其实就是 内存内存一份关于对方的IP 端口信息)。TCP可视为字节流，会处理IP层或以下层的丢包重复以及错误，在连接建立过程中，双方需要交换一些连接的参数 这些参数可以放在TCP头部。
+tcp头部结构
+0 15 16 31
+|16位源端口号 | 16位目的端口号.|
+32 63
+| 32位序号 |
+64 95
+| 32位确认号 |
+96 99 100 105 106 107 108 109 110 111 112 127
+|四位头部长度|6位保留|URG|ACK|PSH|RST|SYN|FIN|16位窗口大小|
+128 143 159
+| 16位校验和 | 16位紧急指针|
+160
+| 选项最多40字节 |
+序列号(SN)：标识当前TCP报文中的第一个字节在对应方向的传输中对于的字节序号。一次TCP通信(从TCP连接建立到断开)过程中会对某一个传输方向上的字节流中的每一个字节编号，例如A要向B发送一个包含500000字节的文件，并且规定最大报文段长度MSS为1000字节，数据流首字节编号为0，该TCP将为数据流构建500个报文段，给第一个报文段分配序列号0(0-999)，第二个报文段分配序列号1000(1000-1999)，第3个报文段分配序列号2000…。通过序列号TCP接收端可以识别出重复接受到的TCP包，从而丢弃重复包，同时对于乱序数据包也可以依靠序列号进行重排序组合。
+当SYN标志位有效时此次报文的序列号也叫做ISN(initial sequence number) ISN会用一种随机算法来计算 不一定是0， 如果AB之间的新旧连接使用了相同的端口号，如果用0这种顺序ISN可能会出现 已终止的连接(上次连接)的报文 对当前连接产生影响 如果用时间产生随机数来做ISN 这种情况就可以避免。
+确认序号(ACK)：期望收到对方下一个报文段的第一个字节的序号,举个例子 假设A已经收到了来自B编号为0-535的所有字节，之后A打算发一个报文给B，则A会在其确认序号字段填上536。再举一个例子，A已经收到了来自B包含字节0-535的报文段，以及另一个包含字节900-1000的报文段。A为了重构B的字节流，A需要含536-899的B报文，所以在A向B发报文段的确认序号会填536(TCP只确认流中到第一个丢失的字节为止之前的字节 即只会确认到535)。900-1000这个报文段又叫失序报文段，如何处理这种报文段，程序员可以自己规定，可以丢弃这个报文段，也可以保留并等待缺失的报文(536-899)(实际中一般采用后面这种)。
+首部长度(数据偏移)：以4字节位单位，最大1111– TCP首部最长15*4字节60字节
+保留：6位 保留为今后使用 目前置为0
+确认ACK: 为1 ，表示确认号字段有效，TCP规定在建立连接(三次握手后)后所传达的所有报文段都必须把ACK置为1
+RST：置1 复位相应的TCP连接,标识要求对方重新建立连接
+同步SYN:仅在三次握手建立TCP连接时有效，当SYN=1 ACK=0时表示这是一个连接请求报文段，对方若同意建立连接，则应在响应报文中令SYN=1 ACK=1表示同意建立连接。即SYN=1表示这是一个连接请求或连接接受报文。
+...</p></div><footer class=entry-footer><span title=2022-03-21T00:00:00+00:00>创建于 2022-03-21</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux网络编程4 TCP三次挥手四次握手,多进程TCP并发" href=https://jler666.github.io/cpp/gh7z0e/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux网络编程5 TCP多线程并发,TCP状态转换,半关闭端口复用</h2></header><div class=entry-content><p>多线程实现并发服务器
+#include &lt;arpa/inet.h> #include &lt;stdio.h> #include &lt;unistd.h> //read write #include &lt;string.h> // strlen #include &lt;stdlib.h> #include &lt;signal.h> #include &lt;sys/wait.h> #include &lt;errno.h> #include &lt;pthread.h> void sig_handler(int num); void *working(void *arg); struct thread_input_param //线程的传入参数 用一个结构体封装起来 { //需要传入与客户端通信用的sock_com 已经客户端信息client_addr 以及当前线程的线程号 int sock_com; struct sockaddr_in client_addr; pthread_t tid; }; struct thread_input_param input_param_list[128]; //规定最多只有128个客户端可以连接这个服务器 int main() { //1 创建用于监听的套接字 int sock_listen = socket(PF_INET, SOCK_STREAM, 0); //ipv4 AF_INET SOCK_STREAM, 0tcp协议 //socket fd 并非真实文件 而是内核中的一块读写缓冲区 if (sock_listen == -1) { perror("socket:"); exit(-1); } //2 绑定 socket 绑定 服务器ip和端口 struct sockaddr_in sa_sever; sa_sever.sin_family = AF_INET; //ipv4协议族 用AF_INET也一样 inet_pton(AF_INET, "192.168.91.0", &amp;sa_sever.sin_addr.s_addr); //网络字节序整型ip // sa_sever.sin_addr.s_addr = 0;//INADDR_ANY = 0代表 0.0.0.0代表任意地址 其实是代表服务器上的多个网卡的ip地址 通过这多个网卡地址 都能访问服务器 sa_sever.sin_port = htons(9999); //网络字节序整型端口 主机字节序转网络字节序 int ret = bind(sock_listen, (struct sockaddr *)&amp;sa_sever, sizeof(sa_sever)); if (ret == -1) { perror("bind:"); exit(-1); } //3 监听 // cat / proc / sys / net / core / somaxconn 一个端口的最大监听队列的长度 // 一个端口最多可以监听多少个可能连接的客户端 4096 将传入的socket变为被动的socket(socket函数创建的都是主动型的) // 这个socket将被accept函数用于监听是否有对应的连接请求(listen不阻塞 accept阻塞) // sockfd socket函数得到的文件描述符 // backlog sockfd对应的等待连接队列的最大长度 // 如果客户端请求时，服务器的等待连接队列满了，客户端的connect将会得到一个ECONNERFUSED错误。 // 这个最大队列长度一般设定为 未连接(未完成三次握手队列) + 已连接队列(以完成三次握手队列) // 的最大长度 未连接队列最大长度 cat / proc / sys / net / ipv4 / tcp_max_syn_backlog // 成功返回0 失败返回 - 1 ret = listen(sock_listen, 128); if (ret == -1) { perror("listen:"); exit(-1); } //信号回调来实现子进程资源回收！！！ sigset_t set; sigemptyset(&amp;set); sigaddset(&amp;set, SIGCHLD); //为了防止 回调函数还没注册成功 就已经有子进程死亡了 先阻塞SIGCHLD信号 sigprocmask(SIG_BLOCK, &amp;set, NULL); //捕捉子进程死亡时发送的SIGCHILD信号 //注册SIGCHLD的信号的回调函数 struct sigaction act; act.sa_flags = 0; //表示使用sa_handler来进行函数回调 act.sa_handler = sig_handler; sigaction(SIGCHLD, &amp;act, NULL); sigemptyset(&amp;act.sa_mask); //清空临时阻塞信号集表示 在执行回调函数时不阻塞任何信号 //注册完回调函数后 解除SG的阻塞 sigprocmask(SIG_UNBLOCK, &amp;set, NULL); // 初始化子线程传入参数数组 for (int i = 0; i &lt; sizeof(input_param_list) / sizeof(struct thread_input_param); i++) { bzero(&amp;input_param_list[i], sizeof(input_param_list[i])); //清0 input_param_list[i].sock_com = -1; //fd初始化为-1 input_param_list[i].tid = -1; //tid初始化为-1 } //4 多个等待客户端连接 阻塞 一个客户端连接进来 就创建一个子线程 while (1) //主线程就用来等待和连接客户端 以及回收子进程资源 { struct sockaddr_in client_addr; //用于接收客户端的socket地址信息 socklen_t len = (socklen_t)sizeof(client_addr); int sock_com = accept(sock_listen, (struct sockaddr *)&amp;client_addr, &amp;len); //返回用于和客户端通信的 sockfd //注意 等待连接的过程中 如果有信号中断了系统调用(accept) 将会产生错误accept将不再阻塞 return EINTR错误！！！ if (sock_com == -1) { if (errno == EINTR) //accept被信号中断才产生的错误 不用管继续等待连接 continue; perror("accept:"); exit(-1); } //为新的客户端连接 创造子线程 专用于与那个客户端通信 pthread_t tid; struct thread_input_param *input_param; // input_param.client_addr = client_addr; //不是c++ 结构体不能这么赋值没有重载=号 需要将每个成员.出来一个一个赋值 // input_param.sock_com = sock_com; // input_param.tid = tid; //tid只在线程创建出来之后才有值这里tid赋值没有任何意义 可以直接将input_param.tid作为tid参数传入 //线程的传入参数 用一个结构体封装起来 //需要传入与客户端通信用的sock_com 已经客户端信息client_addr 以及当前线程的线程号 //这个参数在这里传了指针给 子线程但是在当create结束后 本次循环结束 这个传入参数的临时变量就释放了 //子线程中取传输参数内容 将会得到无意义内容(传入参数变为野指针了) //解决1 用malloc来创建这个input_param变量 在子线程working结束后free这块空间 //解决2 创建input_param数组 规定能开子线程的数量上限 每创建一个子线程就用一个input_param[i] //寻找数组中第一个还未被使用的thread_input_param for (int i = 0; i &lt; sizeof(input_param_list) / sizeof(struct thread_input_param); i++) { if (input_param_list[i].sock_com == -1) //=-1说明还未被使用 { input_param = &amp;input_param_list[i]; break; } if (i == sizeof(input_param_list) / sizeof(struct thread_input_param) - 1) //当前已有规定上限的128个客户端连接这个服务器找不到新的输入参数给 这个新连入的客户端用 { i = -1; //重新从头找 直到有空余位置给这个客户端 但是这样会导致 其他的客户端连入请求被忽略 //但这样也是合理的 } } input_param->sock_com = sock_com; memcpy(&amp;input_param->client_addr, &amp;client_addr, len); //目的 源 // pthread_create(&amp;tid, NULL, working, (void *)&amp;input_param); pthread_create(&amp;input_param->tid, NULL, working, (void *)input_param); pthread_detach(input_param->tid); //直接线程分离 自动回收资源 } //6 关闭文件sock描述符 // close(sock_com); close(sock_listen); return 0; } void *working(void *arg) { //需要传入与客户端通信用的sock_com 已经客户端信息client_addr 以及当前线程的线程号 //服务器与客户端的通信逻辑 //5 通信 //获取客户端数据 struct thread_input_param *param = (struct thread_input_param *)arg; //强制转换得到输入的参数 char recvbuf[1024] = {0}; //accept得到的客户端信息 char client_ip[16]; inet_ntop(AF_INET, &amp;param->client_addr.sin_addr.s_addr, client_ip, sizeof(client_ip)); //网络字节序的整型 需要先转成主机字节序的字符串 unsigned short client_port = ntohs(param->client_addr.sin_port); //网络字节序整型 转为主机字节序整型 printf("client ip:%s port:%d\n", client_ip, client_port); //客户端因为不需要bind所以客户端的os会随机为客户端分配一个端口 通信双方不需要端口相同 端口号只是标识了是那个ip主机的哪个进程在通信 while (1) { int len_read = read(param->sock_com, recvbuf, sizeof(recvbuf)); //无数据 阻塞 if (len_read == -1) { //客户端退出 但是客户端退出时并未关闭该连接 服务器从该连接中读数据将会出现 //read:Connection reset by peer 异常 perror("read:"); // 如果一端的Socket被关闭（或主动关闭，或因为异常退出而 引起的关闭）， // 另一端仍发送数据，发送的第一个数据包引发该异常(Connect reset by peer)。 //简单的说就是在连接断开后的读和写操作引起的。 //为了避免这种错误 服务器需要检测客户端的 socket close操作 在客户端关闭连接后 服务器也立即关闭这个连接 //这里还没写怎么检测客户端socket关闭 exit(-1); } else if (len_read == 0) { //客户端断开连接 写端关闭 则读端读返回0 printf("client closed\n"); break; //客户端主动断开连接 则break 关闭这个连接 } else if (len_read > 0) printf("recv from client %s\n", recvbuf); //向客户端发送数据 回射数据 write(param->sock_com, recvbuf, strlen(recvbuf) + 1); //+1将/0也发送过去 } //子线程结束释放(恢复)资源 bzero(param, sizeof(struct thread_input_param)); //清0 param->sock_com = -1; //fd初始化为-1 param->tid = -1; //tid初始化为-1 } void sig_handler(int num) { printf("捕获到的信号编号为：%d\n", num); //num=14 SIGALRM //回收子进程资源 if (num == SIGCHLD) { //wait(NULL); //回收子进程资源 //20个信号这样 并不能完全回收 //当多个信号连续到来会造成后面来的信号被忽略 //在执行相依信号的回调函数体时 那个信号是被阻塞的 //,所以当子进程死亡 发出多个SG信号 SG信号都是未决的 只有第一个信号 //(1-31)信号集无法记录目前有多少个xxx信号未决或阻塞， //只能知道目前有xxx信号未决或阻塞。---不支持排队 // 从开始注册信号到注册成功这段时间里，有n个SIGCHID信号产生的话， // 那么第一个产生的SIGCHID会抢先将未决位置为1，余下的n-1个SIGCHID被丢弃， // 然后当阻塞解除之后，信号处理函数发现这时候对应信号的未决位为1，继而执行函数处理该信号， // 处理函数中的while循环顺带将其他n-1子进程也一网打尽了，在这期间未决位的状态只经历了两次变化，即0->1->0 while (1) // 一次信号触发为了防止 有连续的SG信号到来 有的信号没看到 //这里用个循环回收连续(很快)死亡的子进程的资源 { //死循环 快速地检查是否有子进程死亡 快速地回收 //回调函数 占用的是父进程的资源 相当于暂时中断 去处理这个信号 处理完回到父进程 //waitpid 和 SIGCHLD 没关系，即使是某个子进程对应的 SIGCHLD 丢失了， //只要父进程在任何一个时刻调用了 waitpid，那么这个进程还是可以被回收的 int ret = waitpid(-1, NULL, WNOHANG); //回收所有子进程资源 不阻塞 一次调用回收一个子进程资源 if (ret > 0) //回收到了一个子进程 printf("child %d die\n", ret); else if (ret == 0) //还有子进程 在运行 break; //中断结束 回到父进程 else if (ret == -1) //无子进程在运行 break; //中断结束 回到父进程 } } } TCP状态转换
+...</p></div><footer class=entry-footer><span title=2022-03-21T00:00:00+00:00>创建于 2022-03-21</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux网络编程5 TCP多线程并发,TCP状态转换,半关闭端口复用" href=https://jler666.github.io/cpp/tl9kna/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux网络编程3 字节序转换函数,IP地址转换函数,UDP和TCP的区别</h2></header><div class=entry-content><p>字节序转换函数
+为了解决数据在不同字节序主机之间传播，一般规定发送端总是要把发送的数据转换成大端字节序数据后再发送 这个字节序叫网络字节序。接收端则根据自身字节序来选择转或不转。
+网络字节顺序是TCP/IP中规定好的数据表示格式，采用大端排序的方式
+BSD socket 提供了封装好转换接口
+h - host 主机 主机字节序 to - 2 n - network 网络字节序 s - short短整型 uint16 l - long 长整型 uint32
+short 16位 用于转换端口(一个socket最多能提供65535个连接) long 32位 用于转ip的(ip是4字节的)
+从主机字节序到网络字节序的转换函数 htons,htonl
+从网络字节序到主机字节序的转换函数 ntohs,ntohl
+#include &lt;arpa/inet.h> //16位用于转端口 uint16_t htons(uint16 hostshort);//主机字节序转网络字节序 uint16_t ntohs(uint16 netshort);//网络字节序转主机字节序 //32位用于转IP uint32_t htonl(uint16 hostlong);//主机字节序转网络字节序 uint32_t ntohl(uint32 netlong);//网络字节序转主机字节序 #include &lt;arpa/inet.h> int main() { unsigned short port = 0x0102; unsigned char ip_host[4] = {192, 168, 1, 100}; //先将指针变为4字节的类型 再取内容(这样就是直接取unsigned int这么大的内容) //主机字节序转网络字节序 unsigned int ipint_host = *(unsigned int *)ip_host; //unsigned int就是long unsigned int ipint_net = htonl(ipint_host); unsigned char *ip_net = (unsigned char *)&amp;ipint_net; printf("%d %d %d %d \n", *ip_net, *(ip_net + 1), *(ip_net + 2), *(ip_net + 3)); //打印网络字节序(大端字节序)的ip //网络字节序转主机字节序 ipint_net = *(unsigned int *)ip_net; //unsigned int就是long ipint_host = ntohl(ipint_net); // ip_host = (unsigned char *)&amp;ipint_host;//出错 数组名不能做左值 数组名不能act like pointer unsigned char *ip_host_ = (unsigned char *)&amp;ipint_host; // 数组名仅仅是“相当于”指针。而并不是真的是指针，数组名是仅仅是个常量（一个值为数组首元素地址的常量）， // 所以不能进行++ 或者–运算。而常量更是无法取地址的， // 而之所以有 &amp;a，事实上这里的a的意义早已经不是当初那个数组名了，它此时代表了整个数组。 //数组名做右值时 比如有个数组 in a[] , a == &amp;a == &amp;a[0] 都是指向数组首元素的首地址 //但是a+1表示 首地址+sizeof(元素类型) 即就是指向a[1] //&amp;a+1表示 首地址+sizeof(a) 这种一般用于二维数组 如果a是二维数组 就是指向a[1][0] printf("%d %d %d %d \n", *ip_host_, *(ip_host_ + 1), *(ip_host_ + 2), *(ip_host_ + 3)); //打印网络字节序(大端字节序)的ip return 0; } socket地址
+...</p></div><footer class=entry-footer><span title=2022-03-20T00:00:00+00:00>创建于 2022-03-20</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux网络编程3 字节序转换函数,IP地址转换函数,UDP和TCP的区别" href=https://jler666.github.io/cpp/ymx6zh/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux网络编程2 常见协议及其格式,协议封装,字节序</h2></header><div class=entry-content><p>协议
+常见协议
+应用层FTP(File Transfer Protocol 文件传输协议) 、HTTP协议(Hyper Text Transfer Protocol 超文本传输协议)、NFS(NetWork File System 网络文件系统)、SSH –sshd其对应的守护进程
+传输层 TCP(Transmission Control Protocol传输控制协议)、UDP(User Datagram Protocol用户数据报协议)
+网络层 IP(Internet Protocol因特网互联协议)、ICMP(Internet Control Message Protocol因特网控制报文协议)、IGMP(Internet Group Management Protocol因特网组管理协议)
+网络接口层
+ARP(Address Resolution Protocol地址解析协议)，RARP(Reverse Address Resolution Protocol反向地址解析协议) 其实这两个协议是介于接口和网络层之间的.5层ARP协议是介于链路层和网络层之间的一个协议，你可以说它属于链路层，也可以说它属于网络层
+UDP协议
+0 15 16 31
+|16位源端口号 | 16位目的端口号.|
+32 47 48 63
+|16位UDP长度.| 16位UDP校验和| 协议头共64位 8字节
+| 传输的数据 | UDP长度为用户数据报长度 (首部8字节+传输大小)
+TCP协议
+tcp头部结构
+0 15 16 31
+|16位源端口号 | 16位目的端口号.|
+32 63
+...</p></div><footer class=entry-footer><span title=2022-03-20T00:00:00+00:00>创建于 2022-03-20</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux网络编程2 常见协议及其格式,协议封装,字节序" href=https://jler666.github.io/cpp/ihvfd0/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux多线程开发3 生产者消费者,条件量,信号量</h2></header><div class=entry-content><p>生产者和消费者模型 和 条件变量
+生产者
+容器装满后不再生产阻塞 并通知消费者去消费
+容器
+消费者
+容器无内容后不再消费阻塞 并通知生产者去生产
+/* 生产者消费者模型 也叫有限缓冲模型 生产者向容器中添加节点 消费者从容器中删除节点 条件变量 不是锁 但是可以在某个条件满足后阻塞线程或解阻塞线程 pthread_cond_t int pthread_cond_init(pthread_cond_t *restrict cond, pthread_condattr_t *restrict cond_attr); 初始化条件变量 int pthread_cond_destroy(pthread_cond_t *cond); 销毁条件变量 int pthread_cond_wait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex); 阻塞函数 等待被唤醒(在信号或广播唤醒前一直等待) pthread_cond_wait的线程在等待期间会将锁给让出去 当前线程在等待时是不拿锁的 在被唤醒等待结束不阻塞时 锁又会还给这个在等待的线程 int pthread_cond_timedwait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex, const struct timespec *restrict abstime); 阻塞函数 等待被唤醒(在信号或广播唤醒或阻塞的实际还没有超过设定的abstime前 一直等待) 等待期间会将锁给让出去 当前线程在等待时是不拿锁的 在被唤醒等待结束不阻塞时 锁又会还给这个在等待的线 int pthread_cond_signal(pthread_cond_t *cond); 唤醒1个或多个在等待的线程 int pthread_cond_broadcast(pthread_cond_t *cond); 唤醒所有在等待的线程 \*/ #include &lt;stdio.h> #include &lt;pthread.h> #include &lt;string.h> #include &lt;unistd.h> #include &lt;stdlib.h> //malloc pthread_rwlock_t rwlock; //全局读写锁量 void *produce(void *arg); void *custom(void *arg); //使用链表作为容器 假设这个容器不会满 但是会空 typedef struct Node { int data; struct Node *next; } Node; Node *head = NULL; //头节点 //创建条件变量 pthread_cond_t cond; int main() { //初始化互斥量 pthread_rwlock_init(&amp;rwlock, NULL); //初始化条件变量 pthread_cond_init(&amp;cond, NULL); // 创建3个子线程 主线程只用于管理系统资源 pthread_t ptids[5], ctids[5]; //线程数组 5个生产者 5个消费者 for (int i = 0; i &lt; 5; i++) { int ret = pthread_create(&amp;ptids[i], NULL, produce, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } //不join了 直接将10个线程都分离 由系统回收 pthread_detach(ptids[i]); } for (int i = 0; i &lt; 5; i++) { int ret = pthread_create(&amp;ctids[i], NULL, custom, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } //不join了 直接将10个线程都分离 由系统回收 pthread_detach(ctids[i]); } while (1) { sleep(10); break; } pthread_cond_destroy(&amp;cond); //子线程执行10秒后就将锁销毁 pthread_rwlock_destroy(&amp;rwlock); //pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程 return 0; //不会执行 } // 这整个链表就像栈 生产和消费的过程就是出栈和入栈 生产出来加在队首 消费也优先消费队首的节点 // 生产和消费都是写操作 void *produce(void *arg) //生产线程 向容器添加内容 不断创建节点添加到链表中--新节点直接作为新的头节点 { while (1) { pthread_rwlock_wrlock(&amp;rwlock); Node *new_node = (Node *)malloc(sizeof(Node)); new_node->data = rand() % 1000; new_node->next = head; head = new_node; printf("%ld produce node %d\n ", pthread_self(), new_node->data); //只要生产了一个就通知消费者消费 唤醒在等待的消费者 pthread_cond_signal(&amp;cond); pthread_rwlock_unlock(&amp;rwlock); usleep(1000); //每个线程在产生一个新节点后至少1ms不生产新节点 } return NULL; } void *custom(void *arg) { while (1) { pthread_rwlock_wrlock(&amp;rwlock); if (head == NULL) { //1head此时为null说明生产线程还没有生产节点 容器为空 需要将锁给生产线程，让生产线程先生产节点先 // pthread_rwlock_unlock(&amp;rwlock); // usleep(1000); //每个线程在消费一个节点后至少1ms不争夺锁 // continue; //2 没有数据阻塞等待 当生产者生产了一个节点会发信号通知 这里就会解除阻塞 pthread_cond_wait(&amp;cond, &amp;rwlock); //当前消费者拿着锁在等待 生产者拿不到锁怎么生产？ //并不会这样 pthread_cond_wait在等待期间会将锁给让出去 当前线程在等待时是不拿锁的 //当唤醒后不再等待 锁又归还给当前线程 pthread_rwlock_unlock(&amp;rwlock); continue; } Node *temp = head; head = head->next; printf("%ld custom node %d\n ", pthread_self(), temp->data); free(temp); //释放头节点 pthread_rwlock_unlock(&amp;rwlock); usleep(1000); //每个线程在消费一个节点后至少1ms不消费新节点 } return NULL; } 信号量
+...</p></div><footer class=entry-footer><span title=2022-03-19T00:00:00+00:00>创建于 2022-03-19</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux多线程开发3 生产者消费者,条件量,信号量" href=https://jler666.github.io/cpp/cwx9z0/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux网络编程1 网络结构,tcp_ip四层模型</h2></header><div class=entry-content><p>网络结构模式
+C/S结构即Client-Server结构，服务器负责数据的管理(提供信息供人访问) 客户机负责完成与用户的交互任务(访问别人的信息)。
+应用程序分为两部分：服务器部分和客户机部分。服务器部分是为多个用户提供服务如客户机要对数据库进行操作，服务器需要控制这个共享的数据库，将数据进行计算，并将最终的数据提供给客户机，并且还需要提供对数据库的完善的安全保护。客户机部分为用户专有，负责执行前台功能，提供出错提示在线帮助。
+优点
+为了充分发挥客户端PC的处理能力，很多工作可以在客户端处理后再交给服务器，所以C/S结构客户端响应速度快。
+能够满足客户自身的个性化定制需求
+C/S结构有较强的事务处理能力，能实现负责的业务流程。
+安全性较高，C/S一般是面向相对固定的用户群，程序更注重流程，它可以对权限进行多层次校验，提供了安全的存取模式，一般高度机密的信息采用C/S结构合适。
+缺点
+客户端需要安装专用的客户端软件。系统软件升级时，每一台客户机都需要重新安装，维护和升级成本高。
+客户端对OS也会有限制不能跨平台。
+B/S结构 Browser-Server浏览器 服务器结构，时在WEB兴起后的一种网络结构模式，WEB浏览器是客户端主要的应用软件，这种模式统一了客户端。将系统核心功能集中到服务器上，简化了系统的开发、维护和使用。客户机上只需要安装一个浏览器如火狐 谷歌。服务器安装mysql服务器端。浏览器通过web服务器同数据库进行交互。
+优点
+成本低、维护方便、分布性强、开发简单，可以不用安装任何专门的软件就能实现在任何地方进行操作。不需要维护客户端(浏览器由 浏览器开发者维护)。系统的扩展非常容易，只要有一台能上网的电脑就行。
+缺点
+通信开销大、系统和数据安全性不高
+个性化程度不高
+协议固定 http https 无法传输大数据量的文件
+客户浏览器端和服务器端的交互是请求-响应模式， 当我们动态刷新页面 响应速度明显降低。
+MAC地址
+OSI模型第二层数据链路层，唯一48位(6字节 前3字节位网络硬件制造商编号 后3字节产品序列号)二进制号标记网卡设备。物理地址、硬件地址
+IP地址
+OSI模型第三层网络层，32位二进制通常被分割为4个8位二进制数(就是4个字节)。通常用点分十进制表示0255.0255.0255.0255。统一IP数据报(帧)格式使信息能在因特网上传播。IP地址有5种编址方式提供不同容量的网络
+| |
+| — |
+D类：是多播地址。该类IP地址的最前面为“1110”，所以地址的网络号取值于224~239之间。一般用于多路广播用户。
+E类：是保留地址。该类IP地址的最前面为“1111”，所以地址的网络号取值于240~255之间。
+网络IP(网段) 主机IP
+A类，第一个字节(前8位)为网段号，剩下三个字节主机号。并且网段号最高位必须是0(导致A类网的网段号为1-126),子网掩码255.0.0.0。
+B类，前两个字节为网络号，后两个字节为主机号，网络号的最高两位必须是10(B类网络号128.0-191.255)，子网掩码255.255.0.0。
+C类，前三个字节为网络号，余一个字节为主机号，网络号最高位必须是110(C类网络号192.0.0-223.255.255)。
+特殊地址0.0.0.0就是表示当前主机。255.255.255.255为广播地址。E类IP保留用于将来和实验用。IP 127.0.0.1-127.255.255.255用于本地回环测试,127.0.0.1也可以代表本地计算机。
+子网掩码
+不局限于ABCDE类网络，前面为1的就表示为网络号，比如127.0.0.0的子网掩码表示
+1000 0000.0.0.0 当前网络中只有第一位为网络号其他都是主机号。
+子网掩码也可以这么表示 192.168.100.10/1 表示只有第一位为网络号其他的为主机号,192.168.100.10/24表示当前IP中前24位为网络号后8位为主机号。
+端口
+这里特指TCP/IP协议中的端口，是逻辑上的端口。如果把IP比作房子那么端口就是出入房子的门，一个IP地址的端口号可以是0-65535。IP可以找到当前网络中的计算机，但是消息是发给当前计算机的哪个应用程序(进程)的，需要用这个端口来确定。这个端口本质上就是个读写缓冲区
+一个进程可以绑定多个端口号因为一个进程可以打开多个文件描述符，而每个文件描述符都对应一个端口号，所以一个进程可以绑定多个端口号。Linux内核会给每一个socket分配一个唯一的文件描述符，进程通过该文件描述符来区分对应的套接字。
+**一个端口号一般不能被使用同种协议的多个进程绑定，**只有一种情况可以进程先绑定一个端口号，然后在fork一个子进程，这样的话就可以是实现多个进程绑定一个端口号，但是两个不同的进程绑定同一个端口号是不可以的。
+1 周知端口(Well know Ports)
+是一些公认的常用端口，范围从0-1023，它们于一些特定服务紧密联系。例如80端口分给WWW服务，21端口分给FTP服务，23端口分给Telnet服务等等。我们在用浏览器访问网址时是不需要指定端口号的，因为WWW服务的默认端口就是80。如果访问的不是默认端口需要:端口号来访问，比如用8080作为WWW服务的端口则输入 网址:8080 来访问。有些系统协议使用的端口是固定的无法改变比如139端口专用于NetBIOS与TCP/IP之间的通信无法更改。
+2注册端口
+1024-49151，松散地绑定于一些服务，分配给用户进程或应用程序。
+3动态端口
+49152-65535，不固定分配哪种服务而是动态分配的。客户端访问服务器需要知道服务器的ip以及相应进程的端口号，当服务器传消息回客户端，客户端ip固定但是接受消息进程的端口号是动态的不固定的。
+...</p></div><footer class=entry-footer><span title=2022-03-19T00:00:00+00:00>创建于 2022-03-19</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux网络编程1 网络结构,tcp_ip四层模型" href=https://jler666.github.io/cpp/wgcg6g/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux多线程开发2 线程同步,互斥量,死锁,读写锁</h2></header><div class=entry-content><p>线程同步
+线程的主要优势在于，能够通过全局变量来共享信息。不过这种便捷的共享是有代价的：
+必须确保多个线程不会修改统一变量，或者某一线程不会读取正在被其他线程修改的变量。
+(某个线程在修改某个全局变量时 不允许其他线程修改或访问这个全局变量 确保修改或访问操作的原子性)
+临界区是指访问某一共享资源的代码片段，并且这段代码的操作执行应为原子操作，也就是同时访问同一共享资源的情况(临界区代码段必须一口气执行完–原子性 其他线程不能中断这一执行 在执行完之前不允许其他线程运行相同的代码段)，其他线程不允许中断该代码片段的执行(则这段代码就是临界区) 临界资源就是票 临界区就是对票访问和修改的代码段
+线程同步：即当有一个线程在对共享资源的内存进行操作时，其他线程都不允许对这个内存地址进行操作(读和写都不允许) 都处于等待状态，直到该线程完成操作，其他线程才能对该内存地址进行操作。 A执行临界区代码时B,C线程都不能执行这段代码，当A执行这段代码时，B或C正好运行到这段代码，B或C只能等着，等A运行完后B或C才能运行这段代码， 多线程对于临界区代码的执行不再是并发的而是串行(一个执行完另个再执行)的。
+多线程卖票，票的仓库是同一个但是有三个窗口买票，不能出现多个窗口卖的为同一张票。
+互斥量(互斥锁)
+为避免线程更新共享变量时出现问题，可以使用互斥量(mutex — mutual exclusion)来确保同一时刻仅有一个线程可以访问某项共享资源。可已使用互斥量来保证对任意共享资源的原子访问。
+互斥量有两种状态：已锁定(locked)和未锁定(unlocked)。**任何时刻至多只有一个线程可以锁定该互斥量。**试图对已经锁定的某一互斥量再次加锁将可能阻塞线程或报错失败这取决于加锁时使用的方法。
+**一旦线程锁定互斥量，随即成为该互斥量的所有者，只有所有者才能给互斥量解锁。**一般情况下，对每一共享资源(可能由多个相关变量组成) 会使用不同的互斥量，每一线程在访问同一资源时将采用如下协议：
+针对共享资源锁定互斥量
+访问共享资源
+对互斥量解锁
+多个线程试图执行临界区代码，只有一个线程能够持有该互斥量(其他线程将遭到阻塞)，即同一时刻只有一个线程能执行临界区代码
+互斥量类型 pthread_mutex_t
+/* 多线程卖票，票的仓库是同一个总共有100张票 但是有三个窗口(子线程)买票，不能出现多个窗口卖的为同一张票， int pthread_mutex_init(pthread_mutex_t *restrict mutex ,const pthread_mutexattr_t *restrict attr) 初始化互斥量 mutex 需要初始化的互斥量变量 attr 要设置的互斥量属性 restrict 为C语言关键字 是个修饰符 被修饰的指针 不允许别的的指针变量得到此指针地址后 对那块内存(数据)进行操作 比如 int *restrict a = xxx; int *b=a; b++ or *b = 1 or b--都不行都会报错 保证了只有的被restrict修饰的指针能对其指向的数据进行操作！！！！ int pthread_mutex_destroy(pthread_mutex_t *mutex) 释放互斥量资源 int pthread_mutex_lock(pthread_mutex_t *mutex) 加锁 哪个线程调用了这个函数 那么这个线程就是传入的mutex这个互斥量的所有者 如果这个锁已经被别的线程获得了 那么会导致阻塞，直到锁被另外的进程释放 获得这个锁后才能继续执行 int pthread_mutex_trylock(pthread_mutex_t *mutex) 尝试加锁 锁已经被别的线程获得了 也没关系是非阻塞的直接返回 int pthread_mutex_unlock(pthread_mutex_t *mutex) 解锁 man手册中找不到pthread_mutex_init, pthread_mutex_destroy等API sudo apt-get install glibc-doc sudo apt-get install manpages-posix-dev \*/ #include &lt;stdio.h> #include &lt;pthread.h> #include &lt;string.h> #include &lt;unistd.h> int tickets = 1000; //仓库里的票是三个线程共有的资源 三个线程都要修改和访问 所以肯定要设置为全局变量 pthread_mutex_t mutex; //全局互斥量 void *sell_tick(void *arg); int main() { //初始化互斥量 pthread_mutex_init(&amp;mutex, NULL); // 创建3个子线程 主线程只用于管理系统资源 pthread_t tid1, tid2, tid3; int ret = pthread_create(&amp;tid1, NULL, sell_tick, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } ret = pthread_create(&amp;tid2, NULL, sell_tick, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } ret = pthread_create(&amp;tid3, NULL, sell_tick, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } //主线程等待子线程结束 回收子线程资源 int *t_return; //返回值是二级指针 是因为callback的返回值类型被规定为一级指针void* pthread_join(tid1, (void **)&amp;t_return); //阻塞回收子线程资源 pthread_join(tid2, (void **)&amp;t_return); //阻塞回收子线程资源 pthread_join(tid3, (void **)&amp;t_return); //阻塞回收子线程资源 //也可以直接讲子线程状态设置为分离 当子线程结束系统回收子线程资源 不需要主线程来回收 join后无法分离 // pthread_detach(tid1); // pthread_detach(tid2); // pthread_detach(tid3); //子线程的返回值保存在 t_return中 printf("son thread return %d\n", *t_return); pthread_mutex_destroy(&amp;mutex); //释放互斥量资源 pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程 //主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit printf("main thread exsit\n"); //不会执行 //当主线程return 相当于进程exit所有子线程全部结束！！！ return 0; //不会执行 } void *sell_tick(void *arg) { //卖票 //多线程对于共享的资源(tickets)的访问和修改 一定要做线程同步 //当某个线程在对共享资源进行访问或修改时 都不允许其他线程对共享资源做访问或修改 保证操作的原子性 //临界区 三个线程同时在此代码段对tickets修改或访问 while (1) //标准C中没有布尔 也就没有true { pthread_mutex_lock(&amp;mutex); //加锁 if (tickets > 0) { printf("%ld 号线程 卖出了第%d张票\n", pthread_self(), tickets); tickets--; } else { pthread_mutex_unlock(&amp;mutex); break; } pthread_mutex_unlock(&amp;mutex); //解锁 //加锁 买完一张票后 解锁 三个线程再重新争夺锁 } //临界区 return NULL; } 死锁
+...</p></div><footer class=entry-footer><span title=2022-03-18T00:00:00+00:00>创建于 2022-03-18</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux多线程开发2 线程同步,互斥量,死锁,读写锁" href=https://jler666.github.io/cpp/vgm685/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux多线程开发1 线程概述,线程相关函数</h2></header><div class=entry-content><p>线程概述
+与进程(process)类似，线程(thread)是允许应用程序并发执行多个任务的一种机制。
+一个进程可以包含多个线程。同一个程序中的所有线程均会独立执行相同的程序，且共享同一份全局内存区域，其中包括初始化数据段、未初始化数据段，以及堆内存段。
+(传统意义上的unix进程只是多线程的一个特例 该进程只包含一个线程)
+进程是cpu分配资源的最小单位，线程是OS调度执行的最小单位。
+线程是轻量级的进程LWP(light weight process)在linux环境下线程的本质仍是进程。
+查看指定进程的LWP号 ps -Lf 指定进程的pid (PID都一样 但每个线程都有自己的LWP号)
+为什么有了进程后还有有线程
+进程间的信息难以共享。对于父子进程来说除去只读代码区外，父子进程并未共享内存，因此必须采用一些进程间通信方式，在进程间进行信息交换。
+调用fork()来创建进程的代价相对较高，即使利用写时拷贝技术，仍需要复制诸如内存页表和文件描述符表之类的多种进程属性，这意味着fork()调用在时间上的开销依然不菲。
+线程之间能够方便、快速地共享信息。只需将数据复制到共享(全局或堆malloc)变量中即可。
+创建线程比创建进程通常要快10倍甚至更多。线程间是共享虚拟地址空间的，无需采用写时拷贝来复制内存也无需复制页表。
+所有线程共用同一块虚拟地址空间，但是会给不同线程划分栈空间和.text代码段的空间(将栈空间和.text分成小块分给这些线程)，main线程(主线程)的栈、线程1的栈… main线程的代码，线程1的代码…，其他部分都是共享相同的。
+线程间共享的资源
+进程PID 父进程ID PPID
+进程组ID 会话ID
+用户ID 用户组ID
+文件描述符表
+信号处置 (信号处理)
+文件系统相关信息：文件权限掩码(mask)、当前工作目录
+虚拟地址空间(除栈和.text段)
+非共享资源
+线程ID
+信号掩码 (阻塞信号集)
+线程特有数据
+error变量
+实时调度策略和优先级
+栈、本地变量和函数的调用链接信息
+查看当前pthread库(NPTL)版本 getconf GNU_LIBPTHREAD_VERSION
+创建线程
+man pthread_加tab可以查看基本上所有线程相关的函数
+#include &lt;pthread.h>
+int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+void *(*start_routine) (void *), void *arg);
+pthread_t pthread_self(void);
+int pthread_equal(pthread_t t1, pthread_t t2);
+...</p></div><footer class=entry-footer><span title=2022-03-18T00:00:00+00:00>创建于 2022-03-18</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux多线程开发1 线程概述,线程相关函数" href=https://jler666.github.io/cpp/tfmena/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux多进程开发8 共享内存</h2></header><div class=entry-content><p>共享内存
+效率最高的进程间通信的方式，内存映射虽然也可以在内存中通信但是依旧需要文件作为载体 在映射的内存中(映射后的内存是在用户区的)操作后依旧要将改动同步到文件中 所以效率不是最高的。
+共享内存允许两个或者多个进程(需要考虑互斥和同步的问题)共享物理内存的同一块区域(通常被称为段)。由于一个共享内存段会成为一个进程用户空间的一部分，因此这种IPC(进程通信)机制无需内核介入。所有需要做的就是让一个进程将数据复制进共享内存中，并且这部分数据会对其他所有共享同一个段的进程可用。
+与管道 等要求 发送进程数据 从用户空间的缓冲区复制进内核内存(将进程中用户区的数据拷贝到内核区的管道) 和接收进程将数据从内核复制进用户空间的缓冲区(从内核区的管道拷贝到用户区的变量里) 相比共享内存的速度更快
+使用步骤
+调用shmget()创建一个新共享内存段或者取得一个既有共享内存段的标识符(由其他进程创建的共享内存段)。这个调用将返回后续调用中需要用到的共享内存标识符。(得到一块内存和id 但这款内存还未与当前进程产生关系) 这块内存的存在位置 为共享库和内存映射的那块空间(用户区)
+使用shmat()来附上共享内存段，即 使该段成为调用进程的虚拟内存的一部分。(将创建出来的共享内存 附加到当前进程中 即使共享内存成为当前进程的虚拟内存的一部分)
+此刻在程序中可以像对待其他可用内存那样对待这个共享内存段，为引用这块共享内存，程序需要使用由shmat()调用返回的addr值，它是一个指向进程的虚拟地址空间中该共享内存段起点的指针。
+调用shamt()来分离共享内存段，在这个调用后进程就无法再引用这块共享内存了，这一步可选，进程终止时会自动完成这一步。
+调用shmctl()来删除共享内存段，只有当前所有附加内存段的进程都与之分离之后内存段才会销毁，所以只需要最后一个与内存段相连的进程来执行这一步就行。
+共享内存写进程
+/* #include &lt;sys/ipc.h> #include &lt;sys/shm.h> int shmget(key_t key, size_t size, int shmflg); 创建一个新的共享内存段，或获取一个已有的共享内存段的标识 新创建的内存段中的数据被初始化为全0，这款内存在用户区的共享空间中(share库，内存映射的那块区域) key_t整型 通过key找到或创建一个共享内存 16进制非0 size 共享内存的大小 不是指定多大就为多大 实际为页大小的整数倍 shmflg 共享内存的属性 访问权限|创建共享内存|判断共享内存是否存在 IPC_CREAT 创建共享内存标识 IPC_EXCL 与 IPC_CREAT 一起使用(IPC_CREAT|IPC_EXCL) 确保共享内存段(segment)创建成功 如果内存段已存在函数调用失败 shmflg 也可直接在后面填加 这块共享内存权限的八进制数 比如IPC_CREAT|0664 SHM_HUGETLB SHM_HUGE_2MB, SHM_HUGE_1GB (since Linux 3.8) SHM_NORESERVE 返回值 成功返回共享内存的标识ID 失败返回-1 int shmctl(int shmid, int cmd, struct shmid_ds *buf); 对共享内存做操作，共享内存要手动删除，创建共享内存的进程被销毁了对共享内存是没有任何影响的 shmid 共享内存的id cmd 要做的操作 IPC_STAT 获取共享内存的信息 IPC_SET 设置共享内存 设置的信息通过buf传入 IPC_RMID 标记共享内存需要被删除 并不是一标记就能删除 只有在没有任何线程与这块内存有关联后 才能通过这里的标记删除来达到删除成功 buf 被设置或读取的属性信息 共享内存对应所有者的权限(组、用户 读写可执行).... shm_nattach当前与此块共享内存关联的进程数... 太多了自己去man2看 IPC_STAT buf传出信息 IPC_SET buf中需要初始化为你想要设置的信息 IPC_RMID buf无用可传null #include &lt;sys/types.h> #include &lt;sys/shm.h> void *shmat(int shmid, const void *shmaddr, int shmflg); 将共享内存块与当前进程进行关联 shmid 共享内存块的ID 由shmget返回得到 shmaddr 指定的共享内存的起始地址，一般不特别指定传NULL 由内核指定 shmflg 对共享内存的操作权限 SHM_EXEC 当前线程可执行共享内存 SHM_RDONLY 当前线程只能读共享内存 进程对共享段的读权限是必须的，如果没有指定这个只读则默认是读写权限(传0就是读写权限) SHM_REMAP (Linux-specific) 返回值 成功返回共享内存的起始地址(虚拟地址空间) 失败返回(void*)-1 int shmdt(const void *shmaddr); 解除当前进程和共享内存的关联 shmaddr 共享内存的首地址 返回值 成功返回0 失败返回-1 #include &lt;sys/types.h> #include &lt;sys/ipc.h> key_t ftok(const char *pathname, int proj_id); \*/ #include &lt;stdio.h> #include &lt;sys/types.h> #include &lt;sys/ipc.h> #include &lt;sys/shm.h> #include &lt;string.h> int main() { //创建一个共享内存 int shmid = shmget(0x1234, 4096, IPC_CREAT | 0664); //id号16进制0x1234 大小4096个字节 创建一块共享内存 //和当前进程进行关联 void *addr = shmat(shmid, NULL, 0); //写数据 char *str = "hello world"; memcpy(addr, str, strlen(str) + 1); printf("按任意键 写进程解除关联"); getchar(); //解除关联 shmdt(addr); //删除共享内存块 shmctl(shmid, IPC_RMID, NULL); return 0; } 共享内存读进程
+...</p></div><footer class=entry-footer><span title=2022-03-17T00:00:00+00:00>创建于 2022-03-17</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux多进程开发8 共享内存" href=https://jler666.github.io/cpp/xr337b/></a></article><footer class=page-footer><nav class=pagination><a class=prev href=https://jler666.github.io/cpp/>«&nbsp;Prev&nbsp;
+</a><a class=next href=https://jler666.github.io/cpp/page/3/>Next&nbsp;&nbsp;»</a></nav></footer></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

@@ -1,0 +1,201 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Planning | CantBlog</title><meta name=keywords content><meta name=description content="路径规划、轨迹优化与最优控制相关笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/planning/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/planning/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/planning/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/planning/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Planning"><meta property="og:description" content="路径规划、轨迹优化与最优控制相关笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="Planning"><meta name=twitter:description content="路径规划、轨迹优化与最优控制相关笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Planning","item":"https://jler666.github.io/planning/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>Planning</h1><div class=post-description>路径规划、轨迹优化与最优控制相关笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Piecewise Jerk</h2></header><div class=entry-content><p>https://zhuanlan.zhihu.com/p/404088222
+https://mp.weixin.qq.com/s/uB67QBw-epHBGkBEtj8mEw
+Piecewise Jerk Path Optimizer
+规划l(s)多项式，采用规划离散点的方式将s离散，我们的规划目标是找到n个(si,li)离散坐标点满足我们的约束前提下尽可能使cost function小。
+cost function
+定义$ l'=\frac{dl}{ds},l''=\frac{d^{2}l}{ds^2} $,li为与参考线上si处轨迹的点横向偏差
+$ J=w_l\sum_{i=0}^{n-1}l_i^2 + w_{l'}\sum_{i=0}^{n-1}l{'}_i^2+ w_{l''}\sum_{i=0}^{n-1}l{''}_i^2+ w_{l'''}\sum_{i=0}^{n-2}l{'''}_i^2 $
+车辆尽量贴近参考线，规划离散轨迹点的轨迹的各阶导数尽量小(轨迹光滑)
+约束1 在设置的可通行区域离散点的(si,li)[l_lower(si),l_upper(si)]内 约束2 dl/ds,d2l/ds^2,d3l/ds^3约束在我们的规定范围内 约束3 两个离散轨迹点(si,li)通过3次l(s)曲线连接 4 初态约束
+接下来需要将代价函数和约束写为标准的形式，接下来就可以通过osqp很方便地求解了
+$ \begin{gathered} min\,x^TPx/2+qx\\ lower\leqslant Ax \leqslant upper \end{gathered} $
+首先将我们待求的向量x写出来，si是以某一固定ds离散的，所以li,l’i,l’‘i的数量也是固定,我们直接优化离散点的li,l’i,l’‘i。$ x=[l_0,l_1,...,l_{n-1},l'_0,l'_1,...,l'_{n-1},l''_0,l''_1,...,l''_{n-1}]^T $ 3n x 1
+将约束3等式约束写出来，两个离散轨迹点(si,li)通过3次l(s)曲线连接，说明两点以及两点间的连线的三阶导数全部相等。我们设两个离散点间以及其中轨迹点的三阶导数为$ l'''_i=\frac{l''_{i+1}-l''_{i}}{\Delta s} $，即假设这一小段分段轨迹的二阶导数线性增长或下降–三阶导为常数。带回代价函数
+像apollo一样将各项的权重加上
+$ J=\sum_{i=0}^{n-2}(w_l+w_{ref}[i])l_i^2 +(wl+w_{ref}[n-1]+w_{endl})l^2_{n-1}+ w_{l'}\sum_{i=0}^{n-2}l{'}_i^2+(wl'+w_{endl'})l'^2_{n-1}+ (w_{l''}+\frac{w_{l'''}}{\Delta s^2})l''^2_{0}+(w_{l''}+\frac{2w_{l'''}}{\Delta s^2})\sum_{i=1}^{n-2}l{''}_i^2+(w_{l''}+\frac{w_{l'''}}{\Delta s^2}+w_{endl''})l''^2_{n-1}- \frac{2w_{l'''}}{\Delta s^2}\sum_{i=0}^{n-2}l{''}_{i+1}l{''}_i-2\sum_{i=0}^{n-1} w_{ref}[i]l_{ref}[i]l_i-2w_{endl}l_{ref_{end}}[0]l_{n-1}-2w_{endl'}l_{ref_{end}}[1]l'_{n-1}-2w_{endl''}l_{ref_{end}}[2]l''_{n-1} $
+如果有给定参考横向偏差$ l_{ref}[i] $(每次一定都有给定)则我们加上参考横向偏差代价(使规划出的轨迹的横向偏差与规定的横向偏差$ l_{ref}[i] $尽量靠近)，这里的参考偏差在lattice中是可通行区域的上下界l相加/2即可通行区域中间位置对应的l横向偏差!!!!!!。
+$ -2\sum_{i=0}^{n-1} w_{ref}[i]l_{ref}[i]l_i $此项的来源就是$ \sum_{i=0}^{n-1}w_{ref}[i] (l_i-l_{ref}[i])^2 $,给每个不同位置的与参考横向偏差的偏离程度给了不同权值$ w_{ref}[i] $，因为$ l_{ref}[i] $是我们规定的常数，所以不需要优化，所以没在代价函数中写出来。
+...</p></div><footer class=entry-footer><span title=2022-04-21T00:00:00+00:00>创建于 2022-04-21</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Piecewise Jerk" href=https://jler666.github.io/planning/odubvu/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>apollo 6.0 lattice planner</h2></header><div class=entry-content><p>lattice对规划起点的选取
+在上次规划轨迹中找时间戳为T(T_last)+dt(T_relative)的轨迹点(大于，小于再插值),视为基于相对时间确定的轨迹上的匹配点(下图绿点)。根据车体位置，找车体位置在上帧规划轨迹的投影点(下图蓝点)，如果车位置与基于相对时间确定的轨迹上的匹配点的距离相差很多，说明车的纵向控制很差速度过快超过了或过慢没赶上；或者投影点和车距离超过一定范围，说明车的横向控制很差对轨迹的跟踪很差，需要replan(在上帧基础上规划轨迹 进行轨迹拼接没有意义)，选择min{时间匹配点，里程匹配点}作为当前车辆在上一帧映射的匹配点。
+以上述得到的匹配点(min中更小的那个)，开始在上帧规划好的轨迹中向前dt找(100ms)到，匹配点往后dt的轨迹点作为本次规划的起点(如果是replan的情况，则以车当前位置，用车辆动力学推算dt后的车辆状态作为规划起点)。这个规划起点就是lattice plan中的planning_init_point。同时从此点往前(索引小方向)选取20个点作为stitching trajectory(我们之前讲的拼接轨迹是说的对参考线进行平滑时用的轨迹拼接，这里的轨迹拼接讲的是我们在T+dt为起点规划出的本周期轨迹，还需要拼接上这上段的20个点，作为本周期轨迹的输出)。
+1 取一条参考线作为规划参考，首先将参考线上的点进行数据格式转换并计算每个参考线上点的s值。参考线的起点为s=0的点(注意车在frenet上的投影s不是s=0)
+2 计算车初态在参考线上的投影点(1 首先找初态在参考线上的匹配点(与车状态最近的参考线上点)
+根据传入的planning_init_point(世界坐标系下状态x,y,theta,kappa,v,a)和投影点(s,x,y,theta,kappa,dkappa)计算初态frenet坐标系下表达s,ds/dt,d2s/dt^2,l,dl/ds,d2l/ds^2。具体计算推导看老王和https://blog.csdn.net/u013468614/article/details/108748016
+4 计算所有障碍物的ST图，以及静态障碍物的SL图
+(1计算感知得到的多边形障碍物(可能非凸)的凸包 Andrew算法求二维凸包
+https://www.cnblogs.com/lyttt/p/11826321.html
+(2 将障碍物凸包顶点(世界坐标)在frenet坐标系下的坐标(s,l)
+具体做法是先像2一样找到顶点在参考线上的投影点坐标，投影点所在的s就是其s坐标。投影点和顶点的直线距离就是l坐标的绝对值，还需要计算 投影点指向顶点向量 与 投影点法向量的乘积(大于0则,l>0,小于0则l&lt;0,l轴的正方向是s增大方向切向量再逆时针转90度)。
+静态障碍物：
+(3 计算静态障碍物所有顶点构成的AABBbox(记录一个障碍物的start_s,start_l,end_s,end_l)。就得到这个静态障碍物的SL图,如果此静态障碍物的S范围不在我们的考虑范围内或者障碍物的l在左/右车道范围外，则忽略这个障碍物(考虑范围是 从车初态s(注意2中计算出来的车初态s不一定是0哦，s=0的点是此参考线的起点)，开始沿s轴向前200m)
+(4 因为静态障碍物不会动所以其ST图就是一个t从0-8s(规定的规划出的轨迹时长)，s保持从start_s到end_s的矩形
+动态障碍物:
+将我们规划轨迹的相对时间0-8s以0.1s为分辨率离散。我们从感知部分能够得到动态障碍物在未来时刻的轨迹。接下来我们对于每一个离散时刻都像下面那样做
+根据动态障碍物轨迹在这个离散时刻的状态，计算动态障碍物在这个离散时刻的OBBbox(世界坐标下),和上面一样计算OBBbox每个顶点的(s,l)坐标记录顶点start_s,start_l,end_s,end_l构成动态障碍物在此离散时刻的AABBbox,SL图。,如果此静态障碍物的S范围不在我们的考虑范围内或者障碍物的l在左/右车道范围外，则跳过这个离散时刻直接查看下个离散时刻。
+记录下这个t时刻,动态障碍物的(start_s,end_s)
+5)不断迭代向上面讲述的一样记录每个离散时刻动态障碍物的(start_s,end_s)
+这张图说明动态障碍物1->2先沿s增大方向运动并且由于动态障碍物的姿态改变
+导致OBB box在S轴的投影变短。!!!!
+2->3后又沿s减小方向运动并且由于动态障碍物的姿态改变
+导致OBB box在S轴的投影变长。!!!!
+但是！！我们的行为预测没那么NB可以预测出像上面这样的变速变姿态运动！！！所以没法得到像上面一样的ST图。我们的感知能得到的动态障碍运动模型就是沿s轴做匀速运动其ds/dt是常数，并且我们的程序里也限制了ST图只能有左右两条竖线，所以我们的动态障碍物ST图只能像下图一样是个平行四边形。
+静态障碍物SL图计算完，所有障碍物的ST图计算完。接下来根据初态在高精地图中所在的位置，获得当前道路的限制速度。再将我们车的巡航速度设置为这个限制速度。
+5 横纵向轨迹采样
+先进行纵向轨迹采样。分3种纵向轨迹，巡航轨迹，考虑障碍物的轨迹，考虑停止点的轨迹。其中巡航轨迹是s(t)的四次多项式，障碍轨迹和停止点轨迹都是s(t)的5次多项式。先对3种情况进行终态采样。
+其中巡航轨迹的终态是time=[0.01,0,1,2,3,4,5,6,7,8];(s(time)–无指定,指定ds/dt|t=time,d2s/d^2=0|t=time)在加上初态状态(s(0),s’(0),0)正好指定s(t)5个条件，正好可以求解出巡航四次多项式轨迹s(t)。 巡航轨迹最多有9*6=54条
+障碍轨迹和停止点轨迹的终态是time=[0.01,0,1,2,3,4,5,6,7,8];(指定s(time),指定ds/dt|t=time,d2s/d^2=0|t=time)在加上初态状态(s(0),s’(0),0)正好指定s(t)6个条件，正好可以求解出巡航5次多项式轨迹s(t)。 其中因为参考线上只有一个停止点所以最多只有一条停止点轨迹。障碍轨迹又分超车轨迹和跟车轨迹，总的轨迹数和动静态障碍物的分布有关。
+先讲巡航轨迹的终采样，巡航终态的s值是不指定的，只指定终态的速度ds/dt，我们要采样的终态的离散时间已经确定就是time=[0.01,0,1,2,3,4,5,6,7,8]这9个时刻。首先计算这9个时间点的,VUp(t) 从初态开始在t内可能达到的最大速度(以最大加速度加速)最大速度到我们规定的巡航速度， VLow(t) 从初态开始在t内可能达到的最小速度(以最大减速度减速) 最低速度到0。 将VLow(t)~VUp(t)以1m/s为间隔，最多平均分为4分(最多分为4份时，速度刻度肯定大于1m/s了)每个time最多可以得到6个速度采样点，结果如下图。
+障碍轨迹中的跟车轨迹终态采样方法如下，指定终态的s值以及终态的ds/dt。跟车模式s位置采样，先取出障碍物的ST图以1s为单位离散取离散时间的s_lower。遍历每一离散时刻的s_lower(time),取s_lower(time)-车长/2,s_lower(time)-车长/2-5m/2,s_lower(time)-车长/2-5m。这3个s作为终态s(注意是每个障碍的每个s_lower(time)(1s为单位离散)都有3个对应被采样的终态s)。如下图(图中的黑线是规划出来的5次s(t)多项式)
+对于这3个终态s对应的终态速度,首先找到s_lower(time)在参考线上对应的投影点，得到这个投影点的切向向量，在从障碍物状态轨迹中得到t=time时障碍物的速度(世界坐标下)和姿态，计算障碍物姿态到投影点切向量 的单位投影向量。再将速度乘上这个投影向量得到障碍物在t=time时在frenet坐标系下的速度即ds/dt。我们将t=time对应的3个终态速度全部设置为这个ds/dt(即障碍物在t=time时的frenet坐标系下的速度)。因为我们的采样位置为障碍物s_lower再往下一段距离，所以我们将车的终态速度设置为障碍物的速度一致，能够保证后续车辆和障碍物做速度一样的匀速运动是绝对不会发生碰撞的。
+障碍轨迹中的超车轨迹终态采样方法如下，指定终态的s值以及终态的ds/dt。超车模式s位置采样，先取出障碍物的ST图以1s为单位离散取离散时间的s_upper。遍历每一离散时刻的s_upper(time),取s_upper(time)+5m。这1个s作为终态s(注意是每个障碍的每个s_upper(time)(1s为单位离散)都有1个对应被采样的终态s)。如下图(图中的黑线是规划出来的5次s(t)多项式)
+...</p></div><footer class=entry-footer><span title=2022-04-12T00:00:00+00:00>创建于 2022-04-12</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to apollo 6.0 lattice planner" href=https://jler666.github.io/planning/bigt3u/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>6 软硬约束下的轨迹优化3 补充,Fast Planner简单介绍</h2></header><div class=entry-content><p>首先全局 前段找到path,由于感知范围有限 只会在局部的一个准确感知障碍物的范围内去进行规划。
+ψ p : planning horizon 蓝色 ψ e : execution horizon 红色
+机器人的感知范围是小于蓝色 planning horizon的
+对蓝色范围内优化得到一条轨迹，如果在机器人的感知范围内没有障碍，则可以直接用这条优化过的蓝色轨迹
+如果有障碍物则重新进行前端规划，再在后端优化得到蓝色轨迹
+无人机只有将execution horizon区域内的轨迹执行完，才会进行下一次planning horizon那么大的轨迹规划
+高频的轨迹重规划，前后两次的轨迹一致性是比较差的
+困境脱离，因为传感器噪声导致规划失败，让无人机在一定范围内运动探索摆脱困境
+软优化参数初值选择
+1 使用前端path轨迹作为多项式初值，好处是前端path绝对不会发生碰撞。坏处是不光滑(直线轨迹的初态和终态 v,a强制给0)，并且也不符合动力学
+2 求解一次minmum snap得到轨迹参数，可以计算的非常快 但因为minmum snap没有用bounding box所以优化后的轨迹会产生overshot撞到障碍，其初始碰撞代价较大
+实际使用时 安全性最重要，老师用的是前端path作为多项式初值
+优化策略
+老师用的方法是两次优化
+第一次代价函数中只有Jc,第一次只最小化Jc。 因为前端作为初值，虽然不会发生碰撞，但是前端不会考虑与障碍物的距离，会存在一些碰撞代价很大的点，先优化碰撞代价，将这些点移动。 蓝线是前端路径 绿线是第一次优化jc得到的path光滑性很差
+第二次优化将js jc jd 全部考虑优化，得到红线轨迹
+收敛的速度和效果都比一次优化好
+Gradient-Based Online Safe Trajectory Generation for Quadrotor Flight in Complex Environments, Fei Gao et al.
+代码也开源了
+Source code released at:
+...</p></div><footer class=entry-footer><span title=2022-03-11T00:00:00+00:00>创建于 2022-03-11</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 6 软硬约束下的轨迹优化3 补充,Fast Planner简单介绍" href=https://jler666.github.io/planning/vg9aqq/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>6 软硬约束下的轨迹优化2 其他硬约束方法,软约束优化</h2></header><div class=entry-content><p>除了贝塞尔曲线，其他可以事先bounding box硬约束的方法(我感觉贝塞尔曲线已经是一个极好的解决这个问题的方法)
+A hybrid method for online trajectory planning of mobile robots in cluttered environments , L Campos-Macías et. al
+1前端找path (注意这里的地图是膨胀了的，以后序的box硬约束的box长度/2来膨胀地图，以确保可以快速检查box是否会发生碰撞)
+2 按一定的规则离散前段path
+3 以2步的离散点为中心构造方形bounding box
+4 因为分的box很小，论文里假设从一个box中心到另一个box中心，无人机做的是匀加速运动(每一个分段轨迹上的加速恒定) 系统为1阶系统，加速度作为输入
+优化a,约束无人机不会飞出方块区域
+Mixed interger optimization(混合整数优化)
+Mixed-integer quadratic program trajectory generation for heterogeneous quadrotor teams , D. Mellinger et al.
+无人机和障碍物保持距离d, 那不就是 (fx-obs_x)^2 + (fy-obs_y)^2>=d^2这是一个圆的外部，很遗憾圆的内部是凸集合(集合内任意两点的连线,连线上的任意点依旧在集合内)，但是圆的外部不是凸集合！！这个约束无法作为凸优化的约束
+上面这篇论文用于无人机编队，队形变化时保证无人机之间不会发生碰撞
+不懂感觉这个约束这么写还是非凸约束
+主要是讲了一种 或逻辑约束的数学表达
+x1-x2&lt;d||x2-x1&lt;d||y1-y2&lt;d||y2-y1&lt;d||z1-z2&lt;d||z2-z1&lt;d
+在某一时刻tk只需要一个约束成立 (老师说是在某一时刻第二架无人机只有可能在第一架无人机的上 或 下 或 左 或 右方向，我们只需要约束两架无人机在这个方向上保持d以上的距离)
+...</p></div><footer class=entry-footer><span title=2022-03-11T00:00:00+00:00>创建于 2022-03-11</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 6 软硬约束下的轨迹优化2 其他硬约束方法,软约束优化" href=https://jler666.github.io/planning/vcsztx/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>6 软硬约束下的轨迹优化1 介绍,基于可通行走廊的硬约束优化,贝塞尔曲线的凸包特性</h2></header><div class=entry-content><p>介绍
+上节基于Minimum snap的轨迹生成，我们只约束了前段路径上的必经点位置，而不是前端路径点的位置在优化过后会出现overshot的部分(不可避免的)，后端优化出现超调的部分可能会产生碰撞(如下图)。Minimum snap没有考虑障碍
+同时Minimum snap每段轨迹的运行周期T需要另外给定，T对这条轨迹是否能在动力学约束下完成跟踪有很大的影响。
+障碍物(环境中的不可通行区域) 左图 人工势场法(软约束)
+从障碍物角度出发，让障碍物产生斥力(图中的斥力方向画反了)，将轨迹”推”离障碍物区域。
+除障碍物外的区域(环境中的可通行区域) 右图
+让可通行区域产生吸引力，将轨迹”吸引”到可通行区域。人工势场法
+在障碍物周围的可通行区域加bounding box硬约束，保证轨迹一定通过bounding box中的这段轨迹来连接。
+一般的带约束的优化问题描述为下面的形式
+min f(x) s.t. gi(x) = ci i = 1,..,n等式约束 hj(x) >= di j = 1,..,n不等式约束
+上面写的等式约束以及不等式约束都是硬约束是一定要被满足的。
+min f(x) +/\1g(x) +/\2h(x)
+将等式约束和不等式约束改写，添加到待优化函数J中。这样g,h都算作软约束–以代价函数中的惩罚项形式存在，变为最小化loss function的形式。不是一定要满足的条件，变为了一种在优化时的倾向性
+软约束中经常用Barrier function作为惩罚项的形式
+当被约束的变量在约束范围内，Barrier function的值都很小，当不在约束范围内Barrier function迅速增大。注意Barrier function是连续可导的的函数
+Hard constrained optimization(硬约束优化)
+corridor-based trajectory optimization(基于可通行走廊的轨迹优化)
+Online generation of collision-free trajectories for quadrotor flight in unknown cluttered environments , Jing Chen et al.
+...</p></div><footer class=entry-footer><span title=2022-03-10T00:00:00+00:00>创建于 2022-03-10</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 6 软硬约束下的轨迹优化1 介绍,基于可通行走廊的硬约束优化,贝塞尔曲线的凸包特性" href=https://jler666.github.io/planning/csxwsg/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>5 基于minimum snap的轨迹优化3 minimum snap闭式求解,如何解决碰撞问题</h2></header><div class=entry-content><p>closed-form solution to minimum snap(闭式解析解)
+matlab中有凸优化问题的求解器，直接求解问题的数值解。下面讲解如何求解minimum snap QP的解析闭式解。
+decisinon variable mapping(待优化变量的映射)
+我们问题中待优化的是分段多项式，每一段多项式的系数p1-pM。这些系数是没有物理含义的，直接解算得解后的值有可能出现非常小或非常大的奇异值，会造成规划轨迹的数值不稳定(numerically unstable)。
+解决办法是将待优化参数从多段多项公式系数，变为优化轨迹必经点(每段多项式的首尾点–除第一和最后一段)的各阶导数(必经点只有位置p是硬约束是必须要达到的,加在凸优化问题的等式约束中 但是必经点的v,a是自己规划的，和多项式参数一样是是待优化变量，我们优化计算必经点v,a其实有优化每段参数是一个道理)的约束问题 — 问题从优化没有实际物理意义的多项式系数变为优化有实际物理意义的轨迹必经点的各阶导数值。有实际物理含义的参数数值稳定性会好很多，且隐形地让问题可以闭式求解 不需要通过数值计算的方法其优化系数。
+通过映射矩阵M将轨迹多项式系数p映射成轨迹端点(轨迹必经点)的各阶导数d
+Mjpj=dj
+这个映射矩阵怎么求呢？
+d1-dm 是第一个必经点-第m个必经点的各阶导数组成的列向量，
+下面以一段轨迹的两个必经点为例 — 一个d与两个必经点相关
+这段轨迹的一阶和二阶导 (v,a)如下
+M[p5 p4 .. p0]T = [d0 d1 d2 d3 d4 d5]
+d参数意义 d0必经点位置硬约束t=0位置–此参数不能优化我们直接给一个常数 d1t=0速度 d2t=0加速度
+d3必经点位置硬约束t=T位置–此参数不能优化我们直接给一个常数
+d4t=T速度 d5t=T加速度
+得到M阵如下
+我们的待优化变量变为 d1 d2 d4 d5
+Polynomial Trajectory Planning for Aggressive Quadrotor Flight in Dense Indoor Environments , Charles Richter, Adam Bry, and Nicholas Roy
+...</p></div><footer class=entry-footer><span title=2022-03-10T00:00:00+00:00>创建于 2022-03-10</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 5 基于minimum snap的轨迹优化3 minimum snap闭式求解,如何解决碰撞问题" href=https://jler666.github.io/planning/bzn3vr/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>5 基于minimum snap的轨迹优化1 介绍，无人机微分平坦证明,Minimum-snap引入</h2></header><div class=entry-content><p>5 minimum snap trajectory generation基于minimum snap的轨迹优化(生成)
+之前讲的RRT* A* JPS都是全局方法在状态空间维度较低的情况下可在能接受时间内找到全局最优解
+但是在高维的状态空间做轨迹规划 需要用实时性更高的更局部方法
+多关节机械臂 CHOMP: https://github.com/ros-planning/moveit 自动驾驶 DDP 微分动态规划/iLQR 迭代LQR: https://github.com/anassinator/ilqr MPC/NMPC: https://www.embotech.com/products/forcespro/overview/ 无人机 Flatness: https://github.com/ZJU-FAST-Lab/GCOPTER 轨迹的一个简单定义是 轨迹是时间参数化的路径，我们要的光滑性是动力学光滑+最小化能量泛函的结果(时间参数化后的轨迹满足动力学微分方程)而非几何光滑(比如倒车轨迹会出现尖点，这点是一定几何不连续的)
+介绍
+生成的一定要是光滑轨迹(smooth trajectory)，因为真车的速度和加速度是不能突变的！！我们前端规划的路径不一定光滑(考虑动力学约束的hybridA上次的轨迹也不光滑 是coarse粗糙解 因为hybridA轨迹本质上是多段在control空间上采样的轨迹+RS曲线，在分段的地方轨迹是不连续的！！！ 如下图红线)
+光滑轨迹的速度加速度变化也是比较平缓的能耗相对较小
+轨迹优化问题可以描述为下面这个形式
+边界条件(Boundary condition):起点终点状态
+必经点条件(Intermediate condition): 可人为规定一些必经点，其实我们前端规划(A,RRT,或者说lattice planner中道路规定的参考线)出来的全局路径的所有点都是必经点**，都算作约束。
+光滑评价函数(Smoothness criteria):对于规划经过必经点的轨迹，必须保证必经点在这条轨迹上是连续的(左右极限相等)，可导的。
+微分平坦(Differential Flatness)
+我们在高维x(状态空间)规划的问题可以转化成在一个低维平坦 精心挑选的输出空间sigma空间(flat output)来进行规划。条件：状态空间和输入空间的变量可以被 平坦输出空间中的变量及其各阶导数的代数方程的形式表达。
+对于无人机系统(欠驱动系统)来说，早已被证明，精心设计一个SE(3)上的几何跟踪控制器，可以跟踪任何 sigma空间里的轨迹(前提轨迹的导数被设置了合理的边界)。 微分平坦意味着存在一个量z，z的微分方程可以表达x和u,x = phi_x(z,z’,..,z(n-1)),u = phi_u(z,z’,..,z(n-1))。形象地讲系统微分方程x’=f(x,u)是一个在x,x’,u构成的状态空间上的超曲面。构造z空间，在无约束z空间上自由移动的曲线，是一定在x’=f(x,u)这个超曲面上滑动的不会有任何偏离，所谓微分平坦其实就是讲超曲面(微分约束)变平变成一个平坦的坐标系，优化z就可以做到在满足微分约束的条件下优化轨迹(不管动力学微分方程，优化z的轨迹，只要z的0-s-1阶导数全部存在，将z映射回x,u得到的轨迹是一定满足动力学微分方程约束的)。
+微分平坦的使用是由前提的，对于无人机来说无人机动力学需要考虑风阻，并且尽量减少无人机姿态和控制上的奇点。
+对于无人机系统来说选择的sigma=[x,y,z,yaw]T
+无人机轨迹生成在这样的sigma空间中
+sigma(t) = [T0,Tf] -> R^3 3维欧式位置空间–x,y,z x SO(2)二维平面旋转群–只有一个yaw角 在[T0,Tf]规划[x(t),y(t),z(t),yaw(t)]
+定义无人机状态空间 X = [x,y,z,r,p,y,vx,vy,vz,wx,wy,wz]T 12维状态空间
+...</p></div><footer class=entry-footer><span title=2022-03-09T00:00:00+00:00>创建于 2022-03-09</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 5 基于minimum snap的轨迹优化1 介绍，无人机微分平坦证明,Minimum-snap引入" href=https://jler666.github.io/planning/oyh9ct/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>5 基于minimum snap的轨迹优化2 分段轨迹表达,约束形式,凸优化简介</h2></header><div class=entry-content><p>下面重新描述一下我们的任务，我们的前端轨迹是简单的由较少的必经点之间直线组成的前端路径(JPS)。 计算每两个必经点之间的轨迹，轨迹用参数化的5阶多项式表达，优化多项式参数使，1总体的轨迹(将分段轨迹全部相连后的轨迹)满足首末姿态约束，2并且轨迹一定经过我们规定的必经点，3并且轨迹上的必经点位置的左右极限，以及必经点位置的高阶导数的左右极限都相等(必经点状态光滑)，4同时最小化整体轨迹的snap。
+总的轨迹多项式，是分段轨迹多项式的组合。 每段时间区间内的子轨迹多项式组成总的轨迹多项式
+我们不需要保证每段多项式的系数一致，但是如果能保持一致那是最好的可以让问题更简单。
+每段轨迹的运行时间是已知固定的。(不像前面的OBVP问题，可以求最佳运行时间T*)
+下面讲下对于轨迹的约束：
+红框中写的有问题，红框中的约束其实就是初态终态约束。
+f0(k)(T0) = x(k)(T0) 第一段多项式的T0起始时刻状态的0k阶导数，要和我们规定的初态的0k阶导数全部相等
+fN(k)(TM) = x(k)(TM) 最后一段多项式的TM终止时刻状态的0k阶导数，要和我们规定的末态的0k阶导数全部相等
+蓝框中的约束，是对连接两段轨迹的必经点的状态约束。
+fj(k)(Tj) = fj+1(k)(Tj) 第j段多项式的Tj终止时刻状态的0k阶导数，要和其连接的下一段(j+1段)多项式的Tj起始时刻状态的0k阶导数 全部相等。 保证多项式在这个必经点的0-k阶导数全部连续(此点k阶连续–k-1阶光滑)
+这里再强调一下光滑!=连续，k阶光滑=k+1阶连续(k阶再求一次导数)
+确保轨迹在某个阶数上光滑 确保轨迹在某个阶数上连续 最小化轨迹的某一阶导数(最小化snap)
+这三个要求是彼此独立的互不相关的。
+工程上 如果我们要
+最小化一段轨迹的jerk,要求轨迹是 2*3(jerk)-1=5 是时间的5次多项式 使轨迹上每点的 p,v,a连续 当然如果你想jerk也连续，那也完全没问题
+要最小化一段轨迹的snap,要求轨迹是 2*4(sanp)-1=7 是时间的7次多项式 使轨迹上每点的 p,v,a,j连续 当然如果你想snap也连续，那也完全没问题
+我们现在是将轨迹分段了，所以如果总轨迹由k段轨迹组成
+要minimum jerk:
+必经点约束就有 3(初态p0,v0,a0约束) + 3(末态pf,vf,af约束) + k-1(k段轨迹共k-1个中间必经点 位置约束) = k+5 个约束
+假设每段轨迹的阶数是N,N阶轨迹的参数是N+1个(比如5次多项式的参数是a5~a0是6个)，总共有k段轨迹，那么总的未知数量为 (N+1)*k
+我们只有k+5个约束最多只能解出k+5个未知量，所以如果我们要将轨迹完全求解要求
+自由度>=变量数 (N+1)*k >= k + 5 得N >= 5/k
+...</p></div><footer class=entry-footer><span title=2022-03-09T00:00:00+00:00>创建于 2022-03-09</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 5 基于minimum snap的轨迹优化2 分段轨迹表达,约束形式,凸优化简介" href=https://jler666.github.io/planning/ghxwz6/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>3 基于采样的路径规划2 KDtree代码注释,BBF介绍</h2></header><div class=entry-content><p>struct KdTreeNode{ geometry_msgs::Point point; // 节点坐标 KdTreeNode* parent_node; // Used for plan planning 父节点 double distance; // Used for plan planning KdTreeNode* left_node; // Used for kd tree 左孩子 KdTreeNode* right_node; // used for kd tree 右孩子 int trajectory_id; // used for submaps int submap_index; // used for submaps KdTreeNode(); KdTreeNode(geometry_msgs::Point p); KdTreeNode(geometry_msgs::Point p, int trajectory_idx, int submap_idx); }; // 节点构造 依次赋值 KdTreeNode::KdTreeNode() : parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(0), submap_index(0){ point.x = 0.0; point.y = 0.0; point.z = 0.0; } KdTreeNode::KdTreeNode(geometry_msgs::Point p) : point(p), parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(0), submap_index(0){} KdTreeNode::KdTreeNode(geometry_msgs::Point p, int trajectory_idx, int submap_idx) : point(p), parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(trajectory_idx), submap_index(submap_idx){} // 树的构造 // Constructor KdTree::KdTree() : root_(new KdTreeNode ()){} KdTree::KdTree(geometry_msgs::Point start_point) : root_(new KdTreeNode (start_point)){} // 递归析构kd tree Destroy RRT void KdTree::DestroyRRT(KdTreeNode* root){ if(root!=nullptr){ DestroyRRT(root->left_node);// 递归析构左子树 DestroyRRT(root->right_node);// 递归析构右子树 delete(root); } } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point& point){ return AddPointToKdTree(point, root_, 0); } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point& point, int trajectory_idx, int submap_idx){ auto added_node = AddPointToKdTree(point, root_, 0); added_node->trajectory_id = trajectory_idx; added_node->submap_index = submap_idx; return added_node; } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point& point, KdTreeNode* parent, int depth){ //向kd 树中添加节点，这里kd树每层的划分标准依然是依次划分选择维度 --- 先划分x维度再y维度 //-- depth从0开始， depth%2==0的层次 其右子树的x都大于此层，左子树的x都小于此层。 // depth%2==1的层次 其右子树的y都大于此层，左子树的y都小于此层。 //而非选择最大方差维度划分 //就是二分添加 依照每层的划分规则 不断下探 新节点一定作为叶子节点！！！！ if(parent->point == point) return nullptr;// 节点已经存在于树中 bool turn_left = (depth%2)? point.y &lt;= parent->point.y: point.x &lt;= parent->point.x;//==算在左树里 // 叶子节点的情况下面 已经考虑到了不需要单独再写了 // if(!parent->left_node && !parent->right_node) // { // //当前节点parent是叶子节点 // KdTreeNode* new_node = new KdTreeNode(point); // if(turn_left) // { // parent->left_node =new_node; // parent->left_node->parent_node = parent; // } // else // { // parent->right_node = new_node; // parent->right_node->parent_node = parent; // } // return new_node; // } if(turn_left) { if(parent->left_node) return AddPointToKdTree(point,parent->left_node,depth+1); else // 父节点没有左子树 则新节点就正好插在那个地方 { parent->left_node =new KdTreeNode(point); parent->left_node->parent_node = parent; return parent->left_node; } } else { if(parent->right_node) return AddPointToKdTree(point,parent->right_node,depth+1); else { parent->right_node =new KdTreeNode(point); parent->right_node->parent_node = parent; return parent->right_node; } } } // 查找target的接口 KdTreeNode* KdTree::NearestKdTreeNode(const geometry_msgs::Point& target) const { KdTreeNode* nearest_node = nullptr; double closest_distance2 = DBL_MAX;//DBL_MAX为double最大值的宏 SearchKdTreeNode(target, root_, nearest_node, closest_distance2,0); return nearest_node; } // 半径内查找target的接口 std::vector&lt;KdTreeNode*> KdTree::NearKdTreeNode(const geometry_msgs::Point& target, double radius) const { std::vector&lt;KdTreeNode*> near_nodes; SearchKdTreeNode(target,root_,near_nodes,radius * radius,0); return near_nodes; } void KdTree::SearchKdTreeNode(const geometry_msgs::Point& target, KdTreeNode* current_node, // 当前递归深度的节点 KdTreeNode*& current_nearest_node,// 指针的引用 此指针可修改 并做传出参数 double& current_cloest_distance2,// 当前的最近欧式距离^2 int depth) const{ // 搜索target节点的 最近邻居节点 // | // 右子树根节点 是半个子空间的中心 x划分 // | // ----------父节点 y划分是左右子空间的中心----------- // | target // 左子树根节点 是半个子空间的中心 x划分 // | // 可能出现target在 左或右某个子空间中 但是 它离另外一个子空间更近 所以需要检查是否离另一子空间中新更近 // 如果没有离另一子空间更近 则那个子空间中不存在离target更近的节点? // 不太靠谱，还是有可能存在的，如果另一子空间中方差较大，就是可能存在 dis(子空间根节点,target) > dis(某一子节点,target) // 那根据dis(子空间根节点,target) > current_cloest_distance2 直接不看这个子空间 就可能错过最近节点 // 之前没理解到位 对于这个是否要检查另一分支的条件没有搞清楚 // 以target为圆心 以当前最近距离current_cloest_distance2为半径画圆 // 如果圆与节点所代表的轴！！！相交 (则轴线两边的空间都需要检查 因为一边在向下递归中检查过了 所以) // 则需要将轴的另外一边需要检查 // 判断相交 如果圆心target和轴线的垂直距离 小于最近距离 则就是发生相交 // 在笔记中有图 // 先一路到最底叶子节点 (根据那层的比较维度 二分地选择分支递归向下) 中间不断计算到节点距离 更新最近节点指针 // 在向下的同时记录 以current_node节点为圆心 target到current_node节点的距离为半径， // 如果current_node的子节点 和 target之间的距离大于这个半径 则那个分支可以完全不看 // 并且在之后回溯检查的时候也可以完全不管那些分支 if(!current_node) return;//到底开始回溯 //向下深入 查询与target处于同一子空间的节点 很快能找到最近邻的近似！！！点 bool turn_left = (depth%2)? target.y &lt;= current_node->point.y: target.x &lt;= current_node->point.x; if(turn_left) SearchKdTreeNode(target,current_node->left_node,current_nearest_node,current_cloest_distance2,depth+1); else SearchKdTreeNode(target,current_node->right_node,current_nearest_node,current_cloest_distance2,depth+1); //回溯检查 另一分支 用turn_left就可直到上次哪个分支没被检查 // 为什么不在向下深入的时候判断最近距离 而在回溯的时候计算最近距离 // 并且因为下面 是否要查看另一分支时需要用到current_cloest_distance2， // 在回溯的时候检查 越接近根节点current_cloest_distance2越接近正确值的那个最小距离 // 回溯到根节点时current_cloest_distance2越小，越有机会不去查看分支 可以减去大量的分支 double r = (target.x - current_node->point.x) * (target.x - current_node->point.x) + (target.y - current_node->point.y) * (target.y- current_node->point.y); if( r &lt; current_cloest_distance2) { current_cloest_distance2 = r; current_nearest_node = current_node; } // 检查另一分支 的距离是否比当前最近距离current_cloest_distance2还近 如果更近才有检查的价值 // 理解错误 之前没理解到位 对于这个是否要检查另一分支的条件没有搞清楚 // https://blog.csdn.net/silangquan/article/details/41483689 这个帖子 或者笔记有解释 // if(turn_left) // if(current_node->right_node) // out_r = (target.x - current_node->right_node->point.x) * (target.x - current_node->right_node->point.x) + // (target.y - current_node->right_node->point.y) * (target.y- current_node->right_node->point.y) > current_cloest_distance2? true:false; // else // if(current_node->left_node) // out_r = (target.x - current_node->left_node->point.x) * (target.x - current_node->left_node->point.x) + // (target.y - current_node->left_node->point.y) * (target.y- current_node->left_node->point.y) > current_cloest_distance2? true:false; // if(!out_r) // 另一分支子空间超出范围则没有检查的必要 (超球面和子空间矩形完全不相交) // { // if(turn_left)// 之前检查左 则这次检查右 // SearchKdTreeNode(target,current_node->right_node,current_nearest_node,current_cloest_distance2,depth+1); // else // 之前检查右 则这次检查左 // SearchKdTreeNode(target,current_node->left_node,current_nearest_node,current_cloest_distance2,depth+1); // } // 什么情况下，kd tree在回溯时需要检查另一空间 // 如上图，以target为圆心，以当前最近距离为半径，如果这个圆与中位数轴线相交，则这走线的两边空间内的节点都需要检查， // 因为在递归向下时已经检查过了一个分支，所以回溯时只需要检查另外一个分支即可,判断是否相交 -- 圆心到轴线距离 &lt; 最近邻距离(半径) 那就是相交了。 // 为什么和轴线相交了就需要查看轴线两边的空间点? // 因为只要与轴线相交了，轴线两边的空间就一定都会有一部分在圆内！ 在圆内的空间中如果有节点就会出现比当前最近邻还近的节点。 double tar2axis_dis2 = !(depth%2) ? (target.x - current_node->point.x) * (target.x - current_node->point.x) : (target.y - current_node->point.y) * (target.y - current_node->point.y); //圆心到current_node轴线的距离 //如果圆(tar为圆心 最近邻距离current_cloest_distance2为半径)与轴线相交 则需要检查另一分支 if(current_cloest_distance2 > tar2axis_dis2)//相交 { //检查另外一分支 if(!turn_left) SearchKdTreeNode(target,current_node->left_node,current_nearest_node,current_cloest_distance2,depth+1); else SearchKdTreeNode(target,current_node->right_node,current_nearest_node,current_cloest_distance2,depth+1); } } // 搜索target radius半径内的节点 结果存在near_nodes中传出 void KdTree::SearchKdTreeNode(const geometry_msgs::Point& target, KdTreeNode* current_node,// 当前递归深度的节点 std::vector&lt;KdTreeNode*>& near_nodes, double radius, int depth) const{ // 搜索target radius半径内的节点 结果存在near_nodes中传出 if(!current_node) return;//到底开始回溯 //向下深入 查询与target处于同一子空间的节点 很快能找到最近邻的近似！！！点 bool turn_left = (depth%2)? target.y &lt;= current_node->point.y: target.x &lt;= current_node->point.x; if(turn_left) SearchKdTreeNode(target,current_node->left_node,near_nodes,radius,depth+1); else SearchKdTreeNode(target,current_node->right_node,near_nodes,radius,depth+1); // 这里的距离计算在 回溯时或递归深入时计算都可以 double r = (target.x - current_node->point.x) * (target.x - current_node->point.x) + (target.y - current_node->point.y) * (target.y- current_node->point.y); if(r &lt; radius) near_nodes.push_back(current_node);// 满足半径内要求 double tar2axis_dis2 = !(depth%2) ? (target.x - current_node->point.x) * (target.x - current_node->point.x) : (target.y - current_node->point.y) * (target.y - current_node->point.y); //圆心到current_node轴线的距离 // 在target圆心radius半径 的圆是否与轴线相交 // 只要与轴线相交了，轴线两边的空间就一定都会有一部分在圆内！ 则那部分圆内空间就可能包含节点 // 只要有节点 这些节点都是满足与target距离小于radius 的满足要求的节点 if(radius > tar2axis_dis2)//相交 { //检查另外一分支 if(!turn_left) SearchKdTreeNode(target,current_node->left_node,near_nodes,radius,depth+1); else SearchKdTreeNode(target,current_node->right_node,near_nodes,radius,depth+1); } } // 非kd tree BFS直接遍历整棵树得到解 可以拿这个解和kd tree的解比较 看kd tree的解是否正确 // BFS直接遍历整棵树 得到离target最近的节点 KdTreeNode* KdTree::BruceNearestKdTreeNode(const geometry_msgs::Point& target){ KdTreeNode* nearest_node = nullptr; double min_distance2 = DBL_MAX; std::queue&lt;KdTreeNode*> q; q.push(root_); while(!q.empty()){ double distance2 = (target.x - q.front()->point.x)*(target.x - q.front()->point.x) + (target.y - q.front()->point.y)*(target.y - q.front()->point.y); if(distance2&lt;min_distance2){ min_distance2 = distance2; nearest_node = q.front(); } if(q.front()->left_node) q.push(q.front()->left_node); if(q.front()->right_node) q.push(q.front()->right_node); q.pop(); } return nearest_node; } // BFS直接遍历整棵树 得到离target radius范围内的节点 std::vector&lt;KdTreeNode*> KdTree::BruceNearKdTreeNode(const geometry_msgs::Point& target, double radius){ std::vector&lt;KdTreeNode*> bruce_near_nodes; std::queue&lt;KdTreeNode*> q; q.push(root_); while(!q.empty()){ double distance2 = (target.x - q.front()->point.x)*(target.x - q.front()->point.x) + (target.y - q.front()->point.y)*(target.y - q.front()->point.y); if(distance2 &lt; radius){ bruce_near_nodes.push_back(q.front()); } if(q.front()->left_node) q.push(q.front()->left_node); if(q.front()->right_node) q.push(q.front()->right_node); q.pop(); } return bruce_near_nodes; } 下面补充一下kd tree在高维度的改进 BBF
+...</p></div><footer class=entry-footer><span title=2022-03-05T00:00:00+00:00>创建于 2022-03-05</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 3 基于采样的路径规划2 KDtree代码注释,BBF介绍" href=https://jler666.github.io/planning/rce8k8/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>4 考虑动力学约束的路径规划5 kinodynamic RRT star</h2></header><div class=entry-content><p>kinodynamic RRT*
+先回顾一下RRT*的算法流程
+下面的是kinodynamic rrt*的算法流程
+1 如何采样
+现在我们的系统可以用一个线性系统的微分系统方程来描述
+以二阶积分系统为例
+之前的RRT是只在x,y空间采样，现在是在state空间[x,y,v]采样–采样状态空间要求的每一个状态量
+2 如何定义near
+在不考虑动力学约束的RRT中是判断节点的欧式距离是否在规定的范围内，在则认为它是接近的是near的。
+在K RRT*中，要在考虑动力学约束的状态空间中判断是否near, 需要计算传入的x rand与搜索树中的其他节点(作为终态)的一个最优控制问题，将最优控制解计算出的代价作为判断是否near的标准。
+下面以耗时+能耗作为cost function为例子 下面的R矩阵是权重平衡时间和能耗
+写错了不是pi是tao 计算tao和u使cost最小 这是一个典型的最优控制问题(OBVP)
+1固定终态x1和执行周期tao anyway 最优控制 得到最优控制率的形式
+其中G(t)是weighted controllability Gramian
+通过求解李雅普诺夫方程得解
+其中x~(t) 是零输入响应(无控制输入下在t时刻的状态)
+可通过求解下面的微分方程得解
+这个u*解的形式还是非常可怕的，好在无人机系统的A是密邻矩阵
+2固定终态x1不固定执行周期tao
+接下来求tao*
+将最优控制率u*带入代价函数积分式中并将这个积分完整求出来
+写错了不是G(t)是G(tao)
+通过dc(tao)/dtao=0来求解tao*
+对于二阶积分系统来说c(tao)是一个四次方程，dc/dtao=0是三次方程可能存在极值点需要将解都求出来来判断那个c[tao]最小才是tao*
+u*,tao*,x1树上状态节点已知 最终计算出两个节点之间的cost
+3 如何在x rand邻居中选择parent
+我们之前计算了树中和x rand节点的代价在一定范围内的节点，并且通过求解最优控制问题得到了这些节点和x rand节点的最优代价，我们从中选择出代价最小的节点 并且检查当前节点到这个节点的最优轨迹和最优控制x*(t),u*(t)是否在我们规定的范围内。如果不满足则，换代价次小的状态判断。如果没有状态节点满x,u约束则终止执行，重新回到去采样一个新的状态。
+4 如何有效地去找2中所说的x near集合
+在RRT中是通过kd tree划分各个空间维度从而能快速地找到在规定距离中的节点，但是在K rrt*中是要找cost在规定范围内的节点，并且这些cost事先都还没求，并且求cost的计算量也挺大的，如果要找x near集合需要计算x rand节点和树上所有节点的最优控制问题来得到最优cost在和我们规定的搜索cost半径比较是否在我们要求的范围，那也太慢了。
+我们设定的cost搜索半径为r(cost空间中的超球半径)，计算x rand在代价小于r的前提下前向可以到达的所有状态—前向可达集合(forward reachable set) 以及所有可以在代价小于r的情况下到达x rand的所有状态—后向可达集(backward reachable set)
+...</p></div><footer class=entry-footer><span title=2022-03-08T00:00:00+00:00>创建于 2022-03-08</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 4 考虑动力学约束的路径规划5 kinodynamic RRT star" href=https://jler666.github.io/planning/loslrc/></a></article><footer class=page-footer><nav class=pagination><a class=prev href=https://jler666.github.io/planning/page/3/>«&nbsp;Prev&nbsp;
+</a><a class=next href=https://jler666.github.io/planning/page/5/>Next&nbsp;&nbsp;»</a></nav></footer></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

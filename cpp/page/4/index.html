@@ -1,0 +1,149 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>C++ | CantBlog</title><meta name=keywords content><meta name=description content="C++ 语言、STL 与工程实践笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/cpp/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/cpp/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="C++"><meta property="og:description" content="C++ 语言、STL 与工程实践笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="C++"><meta name=twitter:description content="C++ 语言、STL 与工程实践笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>C++</h1><div class=post-description>C++ 语言、STL 与工程实践笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux系统编程入门2 IO,虚拟地址空间,文件描述符,IO函数</h2></header><div class=entry-content><p>Linux 文件IO
+1标准C库IO库和LINUX/ IO函数的对比
+站在内存的角度考虑IO 文件输入:读取文件到内存中 文件输出:将内存中数据写到文件中
+标准C IO函数是跨平台的(qt也是跨平台的) 跨平台的方式
+1类似JAVA虚拟机 程序都是跑在虚拟机中，VM自动调用对应OS的系统调用
+2 标准C调用了不同平台的系统API 标准C在封装时就考虑了不同平台
+标准C调用了LINUX/ IO的API
+man 3 fopen可以在linux中查看标准C库的函数 比如这条命令就直接找到fopen函数的声明位置
+C库 fopen打开txt 返回FILE* fp文件指针 FILE是个结构体其中有3个部分比较重要
+1文件描述符(文件句柄)(整形值):指向当前打开的文件
+2文件读写指针:维护两个指针 读指针和写指针
+3 IO缓存区(所有标准C IO都是带缓冲区的) 写是写入缓冲区中,当缓冲区慢调用一次Linux IO函数(系统调用函数)将数据写入磁盘 缓冲区就是为了提高程序的执行效率(写入磁盘是对硬件操作很慢，将缓冲区内的数据一次性写入降低了写磁盘的频率 效率更高)
+将缓冲区数据(内存)写入磁盘的3种情况 1手动调用fflush 强制将缓冲区数据写入磁盘2缓冲区满了3正常关闭文件(a fclose b return(main) c exit(main) 这3种情况算正常关闭)
+缓冲区默认(8192字节 约为8k 可以调整大小 但不建议调整)
+| 1CIO库 |
+| — |
+在网络通信是因为时效性，我们希望写入就马上发出不要有缓冲，所以在网络通信时我们采用Linux IO来实现发送
+CIO与LinuxIO的关系
+CIO调用系统调用(Linux IO) CIO先将缓冲区写满(或手动flush) 再调用一次LinuxIO(内核)write写磁盘
+CIO调用一次LinuxIO read先将缓冲区读满(一次读1k) 供用户多次读取(用户一次读1个字节) buf1 和buf2是用户缓冲区和C标准库的I/O缓冲区不同 读写缓冲区是同一块(libio.h)
+| 2CIO与系统调用 |
+...</p></div><footer class=entry-footer><span title=2022-03-12T00:00:00+00:00>创建于 2022-03-12</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux系统编程入门2 IO,虚拟地址空间,文件描述符,IO函数" href=https://jler666.github.io/cpp/xbt1ud/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux系统编程入门1 gcc编译,gdb简单调试</h2></header><div class=entry-content><p>XSHELL 远程连接ssh客户端
+XFTP 与远程服务器传输文件
+虚拟机内存 2G
+NAT模式
+apt-get和pip太慢 可以在命令后面加
+-i http://pypi.douban.com/simple
+-i http://mirrors.aliyun.com/pypi/simple/
+-i https://pypi.mirrors.ustc.edu.cn/simple/
+-i http://pypi.douban.com/simple/
+-i https://pypi.tuna.tsinghua.edu.cn/simple/
+-i http://pypi.mirrors.ustc.edu.cn/simple/
+使用Xshell远程连接
+ubuntu 需要先安装openssh-server
+Xshell新建会话 主机填ubuntu的ip地址 ifconfig查看 enss inet:192.168.246.128
+VScode要安装的插件 Remote Development
+SSH Targets config 选第一个目录
+Host 主机名称
+HostName ubuntu ip 192.168.246.128
+User 远程登陆的用户名(ubuntu 用户名)
+通过connect就能在新的窗口连接远程 打开文件夹 输入一次密码后就能在vscode上远程给ubuntu新建文件夹或其他文件操作
+vscode配置免密登录 ssh-keygen -t rsa生成本机私钥(id_rsa)和公钥(id_rsa.pub)到用户目录下的wzl89/.ssh 我们需要将本机公钥发给Ubuntu
+ssh-copy-id 或 ubuntu内cd .ssh(没有就也ssh-keygen -t rsa) vim创建一个vim authorized_keys
+内容是本机id_rsa.pub右键复制到那 按i即可编辑 按ESC+shift+:+输wq回车
+无密码配置暂时没用 没配置好
+使用Xftp6传输文件
+名称 随便 主机为ubuntu的ip 用户名和密码不要忘记填
+左边为本机目录右边为linux目录 两边的文件可以互相拖动
+sudo apt install gcc g++ (版本>4.8.5 c++11) 查看版本 gcc/g++ -v/–version
+...</p></div><footer class=entry-footer><span title=2022-03-12T00:00:00+00:00>创建于 2022-03-12</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux系统编程入门1 gcc编译,gdb简单调试" href=https://jler666.github.io/cpp/zof5ii/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>13 编译期能做些什么？2 编译期类型推导</h2></header><div class=entry-content><p>特性、策略与标签
+利用迭代器，我们可以实现很多通用算法，迭代器在容器与算法之间搭建了一座桥梁。适用所有类型的求和函数模板如下：
+#include &lt;iostream> #include &lt;vector> template&lt;typename iter> //要求我们输入的模板类型iter是个迭代器类型 //用迭代器实现所有类型的求和 typename iter::value_type mysum(iter begin, iter end) { typename iter::value_type sum(0); for(iter i=begin; i!=end; ++i) sum += *i; return sum; } int main() { std::vector&lt;int> v; for(int i = 0; i&lt;100; ++i) v.push_back(i);v.push_back(i); std::cout &lt;&lt; mysum(v.begin(), v.end()) &lt;&lt; '\n'; } 程序编译输出：4950。
+我们想让 mysum() 对指针参数也能工作，毕竟迭代器就是模拟指针，但指针没有嵌套类型 value_type，可以定义 mysum() 对指针类型的特例，但更好的办法是在函数参数和 value_type 之间多加一层特性（traits）。
+template&lt;typename iter> class mytraits //标准容器通过这里获取容器元素的类型 { public: typedef typename iter::value_type value_type; }; template&lt;typename T> // mytraits的指针偏特化版本 class mytraits&lt;T*> //数组类型的容器，通过这里获取数组元素的类型 { public: typedef T value_type; }; template&lt;typename iter>//iter可以是个迭代器 也可以是个指针类型 typename mytraits&lt;iter>::value_type mysum(iter begin, iter end) { typename mytraits&lt;iter>::value_type sum(0);//如果iter是指针类型，则其中value_type就是iter去掉*后的类型 for(iter i=begin; i!=end; ++i) sum += *i; return sum; } int main() { int v[4] = {1,2,3,4}; //传入v,自动推导出iter的类型为int*,因为是iter是指针类型，所以调用mytraits的指针特化版本在这个特化版本中 value_type被定义为int类型 std::cout &lt;&lt; mysum(v, v+4) &lt;&lt; '\n'; return 0; } 程序输出：10
+...</p></div><footer class=entry-footer><span title=2022-03-02T00:00:00+00:00>创建于 2022-03-02</span>&nbsp;·&nbsp;<span title=2022-05-22T00:00:00+00:00>最后修改于 2022-05-22</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 13 编译期能做些什么？2 编译期类型推导" href=https://jler666.github.io/cpp/vtg9sh/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>13 编译期能做些什么？1 if模板 循环模板 switch case模板</h2></header><div class=entry-content><p>编译期计算
+模板的另外一种重要用途——编译期计算，也称作“模板元编程”。
+理论上使用c++模板，可以在编译期完成任何的计算任务，现实中绝对不会有人会这么做，针对编译期的编程基本没人看的懂，但即使这样我们依旧还是要了解一下模板元编程的基本概念：它仍然有一些实用的场景，并且在实际的工程中你也可能会遇到这样的代码。
+编译期计算基本就是借助模板参数递归计算来得到结果
+//先定义模板函数
+template &lt;int n> struct factorial { //可以用静态常量或者enum hack定义编译期计算变量value static const int value = n * factorial&lt;n - 1>::value; }; //在特化 n = 0时的情况 template &lt;> struct factorial&lt;0> { static const int value = 1; }; 上面定义了一个递归形式的 阶乘函数 (0!=1,n!=nx(n-1)!)
+直接看编译输出。下面直接贴出对上面这样的代码加输出（printf("%d\n", factorial&lt;10>::value);）在 x86-64 下的编译结果：
+.LC0:
+.string “%d\n”
+main:
+push rbp
+mov rbp, rsp
+mov esi, 3628800 //编译结果里明明白白直接出现了常量 10!=3628800。上面那些递归什么的，完全都没有了踪影
+mov edi, OFFSET FLAT:.LC0
+mov eax, 0
+call printf
+mov eax, 0
+pop rbp
+ret
+如果我们传递一个负数给 factorial 呢？这时的结果就应该是编译期间的递归溢出(递归次数超过编译器规定的最大递归次数)。如 GCC 会报告：fatal error: template instantiation depth exceeds maximum of 900 (use -ftemplate-depth= to increase the maximum)
+...</p></div><footer class=entry-footer><span title=2022-03-02T00:00:00+00:00>创建于 2022-03-02</span>&nbsp;·&nbsp;<span title=2023-02-02T00:00:00+00:00>最后修改于 2023-02-02</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 13 编译期能做些什么？1 if模板 循环模板 switch case模板" href=https://jler666.github.io/cpp/rce1y9/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>12 编译期多态：泛型编程和模板入门</h2></header><div class=entry-content><p>面向对象和多态
+面向对象最基本的特性就是多态，用相同的代码得到不同的结果。
+以前面讲过的shape为例
+class shape { public: … virtual void draw(const position&) = 0;//纯虚函数 }; virtual =0,是纯虚函数的定义，定义了纯虚函数就意味着所有继承shape的子类都必须实现纯虚函数draw。我们可以认为纯虚函数是一个接口(接口是java中的定义)，在面向对象的设计中，接口抽象了一些基本的行为，其子类(实现类)则必须去具体实现接口类(父类)定义的接口。
+可以通过接口类的指针或引用去调用具体的实现类里的逻辑代码。(就是多态 父类指针指向子类对象，调用子类成员函数)
+以shape为例，在一个绘图程序里，我们可以把用户选择的具体形状(子类)赋值给一个shape(父类)的智能指针，在用户点击画板时调用shape的draw函数(实现了多态调用)。
+这种面向对象的方式(父类指针指向子类对象)并不是实现多态的唯一方式，
+如果**一只鸟走起来像鸭子、游起泳来像鸭子、叫起来也像鸭子，那么这只鸟就可以被当作鸭子。**在java中可以使用反射，不继承shape去实现具体的子类，而是直接调用对象的draw方法，如果对象没有draw就得到异常。
+鸭子类型使得开发者可以不使用继承体系从而灵活地实现一些“约定”，尤其是使得混合不同来源、使用不同对象继承体系的代码成为可能。唯一的要求只是，这些不同的对象有“共通”的成员函数。这些成员函数应当有相同的名字和相同结构的参数（并不要求参数类型相同）。
+容器的共性
+容器最普遍的共性是有begin和end成员函数，这使得用通用的方式遍历容器成为可能。容器不必继承同一个共同的container父类，但我们依旧可以写出通用的遍历容器的代码。(这就是前面说的鸟像鸭子，鸟就可以被当作鸭子)。大部分容器都有size成员，在泛型编程中，我们同样可以用通用的方式得到容器的size而不需要继承同一个szieable_container父类(这就是前面说的鸟像鸭子，鸟就可以被当作鸭子)。很多容器都有push_back成员函数，可以在尾部插入数据，在泛型编程中，我们同样可以用通用的方式push_back元素而不需要继承同一个backpushable_container父类(这就是前面说的鸟像鸭子，鸟就可以被当作鸭子)。
+c++标准容器没有对象继承关系，但彼此之间有很多的同构性。这些同构性很难用继承体系表达，c++的模板就已经足够表达这些鸭子类型。
+c++模板
+1定义模板
+下面是一个求最大公约数的算法
+int my_gcd(int a, int b) { while (b != 0) { int r = a % b; a = b; b = r; } return a; } //因为类型不止一种所以可以用模板表示类型 template &lt;typename E> E my_gcd(E a, E b) { while (b != E(0)) { E r = a % b; a = b; b = r; } return a; } 代码中就是把int替换为模板参数E，并在函数开头添加了模板的声明
+...</p></div><footer class=entry-footer><span title=2022-03-01T00:00:00+00:00>创建于 2022-03-01</span>&nbsp;·&nbsp;<span title=2022-08-03T00:00:00+00:00>最后修改于 2022-08-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 12 编译期多态：泛型编程和模板入门" href=https://jler666.github.io/cpp/kik904/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>11 Unicode进入多文字支持的世界</h2></header><div class=entry-content><p>c++中对中文和多语言的支持。ASCII是一种创立于 1963 年的 7 位编码，用 0 到 127 之间的数值来代表最常用的字符，包含了控制字符（很多在今天已不再使用）、数字、大小写拉丁字母、空格和基本标点。
+ASCII 里只有基本的拉丁字母，它既没有带变音符的拉丁字母（如 é 和 ä ），也不支持像希腊字母（如 α、β、γ）、西里尔字母（如 Пушкин）这样的其他欧洲文字，包括肯定也不支持中文。所以很多其他编码方式纷纷应运而生，包括 ISO 646 系列、ISO/IEC 8859 系列等等；大部分编码方式都是头 128 个字符与 ASCII 兼容，后 128 个字符是自己的扩展，总共最多是 256 个字符。每次只有一套方式可以生效，称之为一个代码页（code page）。
+这种做法，只能适用于文字相近、且字符数不多的国家。
+最早的中文字符集标准是 1980 年的国标 GB2312，其中收录了 6763 个常用汉字和 682 个其他符号。我们平时会用到编码 GB2312，其实更正确的名字是 EUC-CN，它是一种与 ASCII 兼容的编码方式。GB2312它用单字节表示 ASCII 字符而用双字节表示 GB2312 中的字符；由于 GB2312 中本身也含有 ASCII 中包含的字符，在使用中逐渐就形成了“半角”和“全角”的区别(半角ASCII 字符(ASCII标准中的ASCII) 全角ASCII 字符(GB2312标准中的ASCII) )。
+微软中的unicode实际指的是utf-16编码方式，用16比特来表示一个字符(wchar_t – 16位)。
+微软外的世界unicode是一种标准，最主流的编码方式是与ASCII全兼容的utf-8。
+Unicode 字符是根据含义来区分的，而非根据字形。除了中日韩 中的汉字没有分开，像斜体（italics）、小大写字母（small caps）等排版效果在 Unicode 里也没有独立的对应。不过，因为 Unicode 里包含了很多数学、物理等自然科学中使用的特殊符号，并且还有一些表情符号。
+Unicode简介
+Unicode编码点是从0x0到0x10FFFF,一共1114112个位置，一般用U+(16进制字符) 来表示一个Unicode字符，如U+0020表示空格，U+6C49表示”汉”,U+1F600表示笑脸表情。
+...</p></div><footer class=entry-footer><span title=2022-03-01T00:00:00+00:00>创建于 2022-03-01</span>&nbsp;·&nbsp;<span title=2022-06-20T00:00:00+00:00>最后修改于 2022-06-20</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 11 Unicode进入多文字支持的世界" href=https://jler666.github.io/cpp/syfkw9/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>10 到底应不应该返回对象</h2></header><div class=entry-content><p>c++核心指南 F.20 函数尽量使用返回值传出结果，而不是用函数参数传出结果
+这一点应该会让c++老手感到惊讶(opencv的所有函数几乎都是参数传出结果)，在以前几乎都是用函数参数传出结果
+下面先讲下以前的这种函数参数传出结果的方法
+1调用者负责管理内存，接口(函数)负责生成或修改内存 (函数参数传出结果)
+函数(接口)的调用者负责管理内存 分配一个对象所需的内存，并负责这个对象的声明周期。
+函数则负责生成或修改对象。
+这种做法意味着对象可以默认构造，代码一般使用错误码而非异常
+这种做法其实就是C中的函数做法，c++程序员沿用了这种做法
+在C中使用指针
+MyObj obj; ec = initialize(&amp;obj); … 而在c++中使用引用，虽然语法上不同但是本质完全相同
+MyObj obj; ec = initialize(obj); … 这种做法的主要问题是啰嗦难以组合，需要写更多的代码和更多的中间变量，也就更容易犯错。
+举一个例子，对于一个矩阵乘法和加法的操作
+error_code_t add( matrix* result, const matrix& lhs, const matrix& rhs);//矩阵加法声明 返回错误码 error_code_t multiply( matrix* result, const matrix& lhs, const matrix& rhs);//矩阵乘法声明 返回错误码 … error_code_t ec;//声明错误码返回对象 用于返回 … matrix temp; ec = multiply(&amp;temp, a, b);//调用乘法 计算a*b 结果由变量temp传出 函数返回错误码ec if (ec != SUCCESS) { goto end;//由函数返回错误码 如果出错直接goto(goto C语言里就有了,直接跳转函数流程到end符的代码那里)到错误处理代码 } matrix r; ec = add(&amp;r, temp, c);//调用加法 计算temp+c 结果由变量r传出 函数返回错误码ec if (ec != SUCCESS) { goto end; } … end: // 返回 ec 或类似错误处理 错误码和参数传出结果 这两种方式的结合是比较常见的，参数传出结果+异常处理 这种组合实际系统中不会采用这种组合。
+...</p></div><footer class=entry-footer><span title=2022-02-28T00:00:00+00:00>创建于 2022-02-28</span>&nbsp;·&nbsp;<span title=2025-06-29T00:00:00+00:00>最后修改于 2025-06-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 10 到底应不应该返回对象" href=https://jler666.github.io/cpp/tcbzg6/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>9 易用性改进2：字面量、静态断言和成员函数说明符</h2></header><div class=entry-content><p>自定义字面量
+字面量(literal)指在源代码中写出的固定常量，在c++98中只能是原生类型如
+“hello”字符串字面量 类型是cosnt char[6], 1整型字面量类型是int, 0.0 双精度浮点字面量double, 3.14f单精度浮点数字面量 float,123456789ul 无符号长整型字面量 usigned long
+c++11引用自定义字面量，使用operator”” 后缀来将用户提供的字面量转换成实际的类型对象，在c++14的标准库中就用这种方法定义了许多标准字面量
+#include &lt;chrono> #include &lt;complex> #include &lt;iostream> #include &lt;string> #include &lt;thread> using namespace std; int main() { cout &lt;&lt; "i * i = " &lt;&lt; 1i * 1i // complex 虚数字面量 operator""i 后缀i &lt;&lt; endl; cout &lt;&lt; "Waiting for 500ms" &lt;&lt; endl; this_thread::sleep_for(500ms); //chrono 时间字面量 operator""ms 后缀ms cout &lt;&lt; "Hello world"s.substr(0, 5)// basic_string字面量operator""s 后缀s &lt;&lt; endl; } 输出是：i * i = (-1,0)
+Waiting for 500ms
+Hello
+上面使用了using namespace std; ,这同时会引入std名空间和里面的内联名空间(inline namespace),包括了上面的字面量运算符所在的三个命名空间
+...</p></div><footer class=entry-footer><span title=2022-02-28T00:00:00+00:00>创建于 2022-02-28</span>&nbsp;·&nbsp;<span title=2023-02-02T00:00:00+00:00>最后修改于 2023-02-02</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 9 易用性改进2：字面量、静态断言和成员函数说明符" href=https://jler666.github.io/cpp/hqkpf1/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>8 易用性改进1：自动类型推断和初始化 2 类模板的参数推导 结构化绑定 列表初始化 统一初始化 数据成员的默认初始化</h2></header><div class=entry-content><p>3 类模板的模板参数推导
+注意是类模板不是我们之前一直说的函数模板，
+如果对pair了解一般不会使用
+pair&lt;int, int> pr{1, 42}; 这种方式来创建一个pair
+而是使用
+auto pr = make_pair(1, 42); 更方便简洁
+这是因为函数make_pair是个模板函数，可以进行我们之前一直说的函数模板自动参数推导，使用者不需要实例化模板参数。
+在C++17以前类模板一直是无法进行参数自动推导的
+在C++17以后就Ok了，可以直接写为
+pair pr{1, 42}; 我们在之前讲array时讲过它的主要缺点是不能像C数组一样自动从初始化列表来推断数组的大小
+int a1[] = {1, 2, 3};//C数组根据初始化列表自动推导数组的大小 // array&lt;int> a3{1, 2, 3}; 不行 array&lt;int, 3> a2{1, 2, 3}; // 啰嗦 c++17中不存在这个问题，根据类模板参数自动推导。
+array a{1, 2, 3}; // 得到 array&lt;int, 3>
+//array a{1, 2, 3};还是不行，因为array的构造就是需要两个参数，不能只实例化一个模板参数，要么两个参数都实例化，要么都不实例化
+这种自动推导机制，可以是编译器根据构造函数来自动生成
+template &lt;typename T> struct MyObj { MyObj(T value); … }; MyObj obj1{string("hello")}; // 得到 MyObj&lt;string> MyObj obj2{"hello"}; // 得到 MyObj&lt;const char*> //也可以手工提供一个推导向导 template &lt;typename T> struct MyObj { MyObj(T value); … }; MyObj(const char*) -> MyObj&lt;string>;//显示提供导向 当构造函数中传入const char*的实参时，将模板T设定为string MyObj obj{"hello"}; // 得到 MyObj&lt;string> 4结构化绑定
+...</p></div><footer class=entry-footer><span title=2022-02-27T00:00:00+00:00>创建于 2022-02-27</span>&nbsp;·&nbsp;<span title=2025-06-29T00:00:00+00:00>最后修改于 2025-06-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 8 易用性改进1：自动类型推断和初始化 2 类模板的参数推导 结构化绑定 列表初始化 统一初始化 数据成员的默认初始化" href=https://jler666.github.io/cpp/dggn64/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>8 易用性改进1：自动类型推断和初始化 1 auto,decltype</h2></header><div class=entry-content><p>自动类型推断
+1auto
+编译器根据表达式返回的类型，在编译时，自动决定变量的类型(从c++14开始 也可以自动推断函数的返回类型)。
+// vector&lt;int> v; for (vector&lt;int>::iterator it = v.begin(), end = v.end(); it != end; ++it) { // 循环体 } 从前不知道容器类型，使用模板手动传入
+template &lt;typename T> void foo(const T& container) { for (typename T::const_iterator//container为const引用，取其迭代器 需要取const类型的迭代器，并且因为容器类型未知(不仅仅是容器中的元素类型未知)，还需要加上typename it = v.begin(), … } 在以前如果begin返回的不是我们规定的const_iterator的嵌套类型的话，我们必须写多个foo的重载函数，比如如果foo函数要支持C数组的范围遍历的话就需要再写一个下面数组版本的重载
+template &lt;typename T, std::size_t N> void foo(const T (&amp;a)[N]) { typedef const T* ptr_t; for (ptr_t it = a, end = a + N; it != end; ++it) { // 循环体 } } 现在可以直接使用auto对迭代器类型进行自动推断，并且**使用c++11提供的全局begin()和end()函数—(全局begin,end 如果传入容器得到两个迭代器，传入C数组得到数组的起始终止地址)**上面两个版本的代码可以统一成
+...</p></div><footer class=entry-footer><span title=2022-02-27T00:00:00+00:00>创建于 2022-02-27</span>&nbsp;·&nbsp;<span title=2025-02-10T00:00:00+00:00>最后修改于 2025-02-10</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 8 易用性改进1：自动类型推断和初始化 1 auto,decltype" href=https://jler666.github.io/cpp/be7z6q/></a></article><footer class=page-footer><nav class=pagination><a class=prev href=https://jler666.github.io/cpp/page/3/>«&nbsp;Prev&nbsp;
+</a><a class=next href=https://jler666.github.io/cpp/page/5/>Next&nbsp;&nbsp;»</a></nav></footer></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

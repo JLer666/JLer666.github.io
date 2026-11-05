@@ -1,0 +1,105 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>vim | CantBlog</title><meta name=keywords content><meta name=description content="1 安装vim-plug
+不要用他github主页上提供的方法下载，没翻q下不了。直接在home目录下
+git clone https://github.com/junegunn/vim-plug
+mkdir -p  ~/.vim/autoload/
+cp ~/vim-plug/plug.vim  ~/.vim/autoload/plug.vim
+2 安装插件
+在下面网站查找需要的vim插件
+https://vimawesome.com/
+编辑 ~/.vimrc 文件中的内容，比如安装“vim-cpp-enhanced-highlight” 插件
+set number
+call plug#begin(&rsquo;~/.vim/plugged')
+Plug &lsquo;octol/vim-cpp-enhanced-highlight&rsquo;
+call plug#end()
+更新后,打开一个新的vim窗口在其中输入命令
+:source ~/.vimrc
+:PlugStatus  #查看插件状态
+:PlugInstall #安装之前在配置文件中声明的插件
+打开 vim 使用命令 :PlugInstall 插件
+打开 vim 使用命令 :PlugClean 插件
+所有插件的都是在Github上面获取的  https://blog.51cto.com/u_11555417/2150626
+https://zhuanlan.zhihu.com/p/360981919
+
+
+vscode安装
+去官网获取下载的链接地址，如：
+https://az764295.vo.msecnd.net/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb
+改为用国内的镜像下载
+修改其中的主机域名：az764295.vo.msecnd.net为 vscode.cdn.azure.cn，即
+https://vscode.cdn.azure.cn/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb
+可以直接命令在ubuntu中vscode叫code
+sudo snap install code &ndash;classic
+snap商店中下载的有问题 无法使用中文输入法
+卸载重新安装官方版本
+sudo snap remove &ndash;purge code
+插件安装，在vim中执行
+:PlugInstall"><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/tools/nbpxgl/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/tools/nbpxgl/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/tools/nbpxgl/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="vim"><meta property="og:description" content="1 安装vim-plug
+不要用他github主页上提供的方法下载，没翻q下不了。直接在home目录下
+git clone https://github.com/junegunn/vim-plug
+mkdir -p ~/.vim/autoload/
+cp ~/vim-plug/plug.vim ~/.vim/autoload/plug.vim
+2 安装插件
+在下面网站查找需要的vim插件
+https://vimawesome.com/
+编辑 ~/.vimrc 文件中的内容，比如安装“vim-cpp-enhanced-highlight” 插件
+set number
+call plug#begin(’~/.vim/plugged')
+Plug ‘octol/vim-cpp-enhanced-highlight’
+call plug#end()
+更新后,打开一个新的vim窗口在其中输入命令
+:source ~/.vimrc
+:PlugStatus #查看插件状态
+:PlugInstall #安装之前在配置文件中声明的插件
+打开 vim 使用命令 :PlugInstall 插件
+打开 vim 使用命令 :PlugClean 插件
+所有插件的都是在Github上面获取的 https://blog.51cto.com/u_11555417/2150626 https://zhuanlan.zhihu.com/p/360981919
+vscode安装
+去官网获取下载的链接地址，如：
+https://az764295.vo.msecnd.net/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb
+改为用国内的镜像下载
+修改其中的主机域名：az764295.vo.msecnd.net为 vscode.cdn.azure.cn，即
+https://vscode.cdn.azure.cn/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb
+可以直接命令在ubuntu中vscode叫code
+sudo snap install code –classic
+snap商店中下载的有问题 无法使用中文输入法 卸载重新安装官方版本
+sudo snap remove –purge code
+插件安装，在vim中执行
+:PlugInstall"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="tools"><meta property="article:published_time" content="2022-06-17T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-27T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="vim"><meta name=twitter:description content="1 安装vim-plug
+不要用他github主页上提供的方法下载，没翻q下不了。直接在home目录下
+git clone https://github.com/junegunn/vim-plug
+mkdir -p ~/.vim/autoload/
+cp ~/vim-plug/plug.vim ~/.vim/autoload/plug.vim
+2 安装插件
+在下面网站查找需要的vim插件
+https://vimawesome.com/
+编辑 ~/.vimrc 文件中的内容，比如安装“vim-cpp-enhanced-highlight” 插件
+set number
+call plug#begin(’~/.vim/plugged')
+Plug ‘octol/vim-cpp-enhanced-highlight’
+call plug#end()
+更新后,打开一个新的vim窗口在其中输入命令
+:source ~/.vimrc
+:PlugStatus #查看插件状态
+:PlugInstall #安装之前在配置文件中声明的插件
+打开 vim 使用命令 :PlugInstall 插件
+打开 vim 使用命令 :PlugClean 插件
+所有插件的都是在Github上面获取的 https://blog.51cto.com/u_11555417/2150626 https://zhuanlan.zhihu.com/p/360981919
+vscode安装
+去官网获取下载的链接地址，如：
+https://az764295.vo.msecnd.net/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb
+改为用国内的镜像下载
+修改其中的主机域名：az764295.vo.msecnd.net为 vscode.cdn.azure.cn，即
+https://vscode.cdn.azure.cn/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb
+可以直接命令在ubuntu中vscode叫code
+sudo snap install code –classic
+snap商店中下载的有问题 无法使用中文输入法 卸载重新安装官方版本
+sudo snap remove –purge code
+插件安装，在vim中执行
+:PlugInstall"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"开发工具","item":"https://jler666.github.io/tools/"},{"@type":"ListItem","position":2,"name":"vim","item":"https://jler666.github.io/tools/nbpxgl/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"vim","name":"vim","description":"1 安装vim-plug\n不要用他github主页上提供的方法下载，没翻q下不了。直接在home目录下\ngit clone https://github.com/junegunn/vim-plug\nmkdir -p ~/.vim/autoload/\ncp ~/vim-plug/plug.vim ~/.vim/autoload/plug.vim\n2 安装插件\n在下面网站查找需要的vim插件\nhttps://vimawesome.com/\n编辑 ~/.vimrc 文件中的内容，比如安装“vim-cpp-enhanced-highlight” 插件\nset number\ncall plug#begin(\u0026rsquo;~/.vim/plugged')\nPlug \u0026lsquo;octol/vim-cpp-enhanced-highlight\u0026rsquo;\ncall plug#end()\n更新后,打开一个新的vim窗口在其中输入命令\n:source ~/.vimrc\n:PlugStatus #查看插件状态\n:PlugInstall #安装之前在配置文件中声明的插件\n打开 vim 使用命令 :PlugInstall 插件\n打开 vim 使用命令 :PlugClean 插件\n所有插件的都是在Github上面获取的 https://blog.51cto.com/u_11555417/2150626 https://zhuanlan.zhihu.com/p/360981919\nvscode安装\n去官网获取下载的链接地址，如：\nhttps://az764295.vo.msecnd.net/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb\n改为用国内的镜像下载\n修改其中的主机域名：az764295.vo.msecnd.net为 vscode.cdn.azure.cn，即\nhttps://vscode.cdn.azure.cn/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb\n可以直接命令在ubuntu中vscode叫code\nsudo snap install code \u0026ndash;classic\nsnap商店中下载的有问题 无法使用中文输入法 卸载重新安装官方版本\nsudo snap remove \u0026ndash;purge code\n插件安装，在vim中执行\n:PlugInstall\n","keywords":[],"articleBody":"1 安装vim-plug\n不要用他github主页上提供的方法下载，没翻q下不了。直接在home目录下\ngit clone https://github.com/junegunn/vim-plug\nmkdir -p ~/.vim/autoload/\ncp ~/vim-plug/plug.vim ~/.vim/autoload/plug.vim\n2 安装插件\n在下面网站查找需要的vim插件\nhttps://vimawesome.com/\n编辑 ~/.vimrc 文件中的内容，比如安装“vim-cpp-enhanced-highlight” 插件\nset number\ncall plug#begin(’~/.vim/plugged')\nPlug ‘octol/vim-cpp-enhanced-highlight’\ncall plug#end()\n更新后,打开一个新的vim窗口在其中输入命令\n:source ~/.vimrc\n:PlugStatus #查看插件状态\n:PlugInstall #安装之前在配置文件中声明的插件\n打开 vim 使用命令 :PlugInstall 插件\n打开 vim 使用命令 :PlugClean 插件\n所有插件的都是在Github上面获取的 https://blog.51cto.com/u_11555417/2150626 https://zhuanlan.zhihu.com/p/360981919\nvscode安装\n去官网获取下载的链接地址，如：\nhttps://az764295.vo.msecnd.net/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb\n改为用国内的镜像下载\n修改其中的主机域名：az764295.vo.msecnd.net为 vscode.cdn.azure.cn，即\nhttps://vscode.cdn.azure.cn/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb\n可以直接命令在ubuntu中vscode叫code\nsudo snap install code –classic\nsnap商店中下载的有问题 无法使用中文输入法 卸载重新安装官方版本\nsudo snap remove –purge code\n插件安装，在vim中执行\n:PlugInstall\n","wordCount":"71","inLanguage":"en","datePublished":"2022-06-17T00:00:00Z","dateModified":"2025-06-27T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/tools/nbpxgl/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">vim</h1><div class=post-meta><span title=2022-06-17T00:00:00+00:00>创建于 2022-06-17</span>&nbsp;·&nbsp;<span title=2025-06-27T00:00:00+00:00>最后修改于 2025-06-27</span>&nbsp;·&nbsp;<span>cant</span></div></header><details class=toc open><summary accesskey=c title="(Alt + C)"><span class=title>Table of Contents</span></summary><div class=inner><nav id=TableOfContents></nav></div></details><div class="post-content md-content"><p>1 安装vim-plug</p><p>不要用他github主页上提供的方法下载，没翻q下不了。直接在home目录下</p><p>git clone <a href=https://github.com/junegunn/vim-plug>https://github.com/junegunn/vim-plug</a></p><p>mkdir -p ~/.vim/autoload/</p><p>cp ~/vim-plug/plug.vim ~/.vim/autoload/plug.vim</p><p>2 安装插件</p><p>在下面网站查找需要的vim插件</p><p><a href=https://vimawesome.com/>https://vimawesome.com/</a></p><p>编辑 ~/.vimrc 文件中的内容，比如安装“vim-cpp-enhanced-highlight” 插件</p><p>set number</p><p>call plug#begin(&rsquo;~/.vim/plugged')</p><p>Plug &lsquo;octol/vim-cpp-enhanced-highlight&rsquo;</p><p>call plug#end()</p><p>更新后,打开一个新的vim窗口在其中输入命令</p><p>:source ~/.vimrc</p><p>:PlugStatus #查看插件状态</p><p>:PlugInstall #安装之前在配置文件中声明的插件</p><p>打开 vim 使用命令 :PlugInstall 插件</p><p>打开 vim 使用命令 :PlugClean 插件</p><h1 id=所有插件的都是在github上面获取的--httpsblog51ctocomu_115554172150626>所有插件的都是在Github上面获取的 <a href=https://blog.51cto.com/u_11555417/2150626>https://blog.51cto.com/u_11555417/2150626</a><a hidden class=anchor aria-hidden=true href=#所有插件的都是在github上面获取的--httpsblog51ctocomu_115554172150626>#</a></h1><p><a href=https://zhuanlan.zhihu.com/p/360981919>https://zhuanlan.zhihu.com/p/360981919</a></p><p><a href=https://blog.51cto.com/u_11555417/2150626></a></p><p>vscode安装</p><p>去官网获取下载的链接地址，如：</p><p><a href=https://az764295.vo.msecnd.net/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb>https://az764295.vo.msecnd.net/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb</a></p><p>改为用国内的镜像下载</p><p>修改其中的主机域名：az764295.vo.msecnd.net为 <a href="https://link.zhihu.com/?target=http%3A//vscode.cdn.azure.cn/">vscode.cdn.azure.cn</a>，即</p><p><a href="https://link.zhihu.com/?target=http%3A//vscode.cdn.azure.cn/">https://vscode.cdn.azure.cn/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb</a></p><p>可以直接命令在ubuntu中vscode叫code</p><p>sudo snap install code &ndash;classic</p><p>snap商店中下载的有问题 无法使用中文输入法
+卸载重新安装官方版本</p><p>sudo snap remove &ndash;purge code</p><p>插件安装，在vim中执行</p><p>:PlugInstall</p></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

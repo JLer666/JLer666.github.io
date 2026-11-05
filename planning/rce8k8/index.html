@@ -1,0 +1,593 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>3 基于采样的路径规划2 KDtree代码注释,BBF介绍 | CantBlog</title><meta name=keywords content><meta name=description content="struct KdTreeNode{
+    geometry_msgs::Point point; // 节点坐标
+    KdTreeNode* parent_node;        // Used for plan planning  父节点
+    double distance;                // Used for plan planning
+    KdTreeNode* left_node;          // Used for kd tree 左孩子
+    KdTreeNode* right_node;         // used for kd tree 右孩子
+    int trajectory_id;              // used for submaps
+    int submap_index;               // used for submaps
+
+    KdTreeNode();
+    KdTreeNode(geometry_msgs::Point p);
+    KdTreeNode(geometry_msgs::Point p, int trajectory_idx, int submap_idx);
+};
+// 节点构造 依次赋值
+    KdTreeNode::KdTreeNode() : parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr),
+                           trajectory_id(0), submap_index(0){
+        point.x = 0.0;
+        point.y = 0.0;
+        point.z = 0.0;
+    }
+
+    KdTreeNode::KdTreeNode(geometry_msgs::Point p) : point(p), parent_node(nullptr), distance (0.0),
+        left_node(nullptr), right_node(nullptr), trajectory_id(0), submap_index(0){}
+
+    KdTreeNode::KdTreeNode(geometry_msgs::Point p, int trajectory_idx, int submap_idx) : point(p),
+        parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr),
+        trajectory_id(trajectory_idx), submap_index(submap_idx){}
+
+    // 树的构造
+    // Constructor
+    KdTree::KdTree() : root_(new KdTreeNode ()){}
+    KdTree::KdTree(geometry_msgs::Point start_point) : root_(new KdTreeNode (start_point)){}
+
+    // 递归析构kd tree Destroy RRT
+    void KdTree::DestroyRRT(KdTreeNode* root){
+        if(root!=nullptr){
+            DestroyRRT(root->left_node);// 递归析构左子树
+            DestroyRRT(root->right_node);// 递归析构右子树
+            delete(root);
+        }
+    }
+
+    KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point& point){
+        return AddPointToKdTree(point, root_, 0);
+    }
+
+    KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point& point, int trajectory_idx, int submap_idx){
+        auto added_node = AddPointToKdTree(point, root_, 0);
+        added_node->trajectory_id = trajectory_idx;
+        added_node->submap_index = submap_idx;
+        return added_node;
+    }
+
+    KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point& point, KdTreeNode* parent, int depth){
+            //向kd 树中添加节点，这里kd树每层的划分标准依然是依次划分选择维度 --- 先划分x维度再y维度
+            //-- depth从0开始， depth%2==0的层次 其右子树的x都大于此层，左子树的x都小于此层。
+            // depth%2==1的层次 其右子树的y都大于此层，左子树的y都小于此层。
+            //而非选择最大方差维度划分
+
+            //就是二分添加 依照每层的划分规则 不断下探 新节点一定作为叶子节点！！！！
+
+            if(parent->point == point) return nullptr;// 节点已经存在于树中
+            bool turn_left = (depth%2)? point.y <= parent->point.y: point.x <= parent->point.x;//==算在左树里
+
+            // 叶子节点的情况下面 已经考虑到了不需要单独再写了
+            // if(!parent->left_node && !parent->right_node)
+            // {
+            //     //当前节点parent是叶子节点
+            //     KdTreeNode* new_node = new KdTreeNode(point);
+            //     if(turn_left)
+            //     {
+            //         parent->left_node =new_node;
+            //         parent->left_node->parent_node = parent;
+            //     }
+            //     else
+            //     {
+            //         parent->right_node = new_node;
+            //         parent->right_node->parent_node = parent;
+            //     }
+            //     return new_node;
+            // }
+
+            if(turn_left)
+            {
+                if(parent->left_node)
+                    return AddPointToKdTree(point,parent->left_node,depth+1);
+                else  // 父节点没有左子树 则新节点就正好插在那个地方
+                {
+                    parent->left_node =new KdTreeNode(point);
+                    parent->left_node->parent_node = parent;
+                    return parent->left_node;
+                }
+            }
+            else
+            {
+                if(parent->right_node)
+                    return AddPointToKdTree(point,parent->right_node,depth+1);
+                else
+                {
+                    parent->right_node =new KdTreeNode(point);
+                    parent->right_node->parent_node = parent;
+                    return parent->right_node;
+                }
+            }
+    }
+
+    // 查找target的接口
+    KdTreeNode* KdTree::NearestKdTreeNode(const geometry_msgs::Point& target) const {
+        KdTreeNode* nearest_node = nullptr;
+        double closest_distance2 = DBL_MAX;//DBL_MAX为double最大值的宏
+        SearchKdTreeNode(target, root_, nearest_node, closest_distance2,0);
+        return nearest_node;
+    }
+    // 半径内查找target的接口
+    std::vector<KdTreeNode*> KdTree::NearKdTreeNode(const geometry_msgs::Point& target,
+                                                    double radius) const {
+        std::vector<KdTreeNode*> near_nodes;
+        SearchKdTreeNode(target,root_,near_nodes,radius * radius,0);
+        return near_nodes;
+    }
+    void KdTree::SearchKdTreeNode(const geometry_msgs::Point& target,
+                                KdTreeNode* current_node, // 当前递归深度的节点
+                                KdTreeNode*& current_nearest_node,// 指针的引用 此指针可修改 并做传出参数
+                                double& current_cloest_distance2,// 当前的最近欧式距离^2
+                                int depth) const{
+            // 搜索target节点的 最近邻居节点
+            //                                                                     |
+            //                                        右子树根节点 是半个子空间的中心   x划分
+            //                                                                     |
+            // ----------父节点 y划分是左右子空间的中心-----------
+            //                                      |                                     target
+            //    左子树根节点 是半个子空间的中心 x划分
+            //                                      |
+
+            // 可能出现target在 左或右某个子空间中  但是 它离另外一个子空间更近 所以需要检查是否离另一子空间中新更近
+            // 如果没有离另一子空间更近 则那个子空间中不存在离target更近的节点?
+            // 不太靠谱，还是有可能存在的，如果另一子空间中方差较大，就是可能存在 dis(子空间根节点,target) > dis(某一子节点,target)
+            // 那根据dis(子空间根节点,target) > current_cloest_distance2 直接不看这个子空间 就可能错过最近节点
+            // 之前没理解到位 对于这个是否要检查另一分支的条件没有搞清楚
+
+            // 以target为圆心 以当前最近距离current_cloest_distance2为半径画圆
+            // 如果圆与节点所代表的轴！！！相交  (则轴线两边的空间都需要检查 因为一边在向下递归中检查过了 所以)
+            // 则需要将轴的另外一边需要检查
+            // 判断相交 如果圆心target和轴线的垂直距离 小于最近距离 则就是发生相交
+            // 在笔记中有图
+
+            // 先一路到最底叶子节点 (根据那层的比较维度 二分地选择分支递归向下) 中间不断计算到节点距离 更新最近节点指针
+            // 在向下的同时记录 以current_node节点为圆心 target到current_node节点的距离为半径，
+            // 如果current_node的子节点 和 target之间的距离大于这个半径 则那个分支可以完全不看
+            // 并且在之后回溯检查的时候也可以完全不管那些分支
+
+            if(!current_node) return;//到底开始回溯
+
+            //向下深入   查询与target处于同一子空间的节点   很快能找到最近邻的近似！！！点
+            bool turn_left = (depth%2)? target.y <= current_node->point.y: target.x <= current_node->point.x;
+
+            if(turn_left)
+                SearchKdTreeNode(target,current_node->left_node,current_nearest_node,current_cloest_distance2,depth+1);
+            else
+                SearchKdTreeNode(target,current_node->right_node,current_nearest_node,current_cloest_distance2,depth+1);
+
+            //回溯检查 另一分支 用turn_left就可直到上次哪个分支没被检查
+
+            // 为什么不在向下深入的时候判断最近距离 而在回溯的时候计算最近距离
+
+            // 并且因为下面 是否要查看另一分支时需要用到current_cloest_distance2，
+            // 在回溯的时候检查 越接近根节点current_cloest_distance2越接近正确值的那个最小距离
+            // 回溯到根节点时current_cloest_distance2越小，越有机会不去查看分支 可以减去大量的分支
+            double r = (target.x - current_node->point.x) * (target.x - current_node->point.x) + (target.y - current_node->point.y) * (target.y- current_node->point.y);
+            if( r < current_cloest_distance2)
+            {
+                current_cloest_distance2 = r;
+                current_nearest_node = current_node;
+            }
+            // 检查另一分支 的距离是否比当前最近距离current_cloest_distance2还近 如果更近才有检查的价值
+
+            // 理解错误  之前没理解到位 对于这个是否要检查另一分支的条件没有搞清楚
+            // https://blog.csdn.net/silangquan/article/details/41483689  这个帖子 或者笔记有解释
+            // if(turn_left)
+            //     if(current_node->right_node)
+            //         out_r = (target.x - current_node->right_node->point.x) * (target.x - current_node->right_node->point.x) +
+            //         (target.y - current_node->right_node->point.y) * (target.y- current_node->right_node->point.y) > current_cloest_distance2? true:false;
+            // else
+            //     if(current_node->left_node)
+            //         out_r = (target.x - current_node->left_node->point.x) * (target.x - current_node->left_node->point.x) +
+            //         (target.y - current_node->left_node->point.y) * (target.y- current_node->left_node->point.y) > current_cloest_distance2? true:false;
+
+            // if(!out_r) // 另一分支子空间超出范围则没有检查的必要 (超球面和子空间矩形完全不相交)
+            // {
+            //     if(turn_left)// 之前检查左 则这次检查右
+            //         SearchKdTreeNode(target,current_node->right_node,current_nearest_node,current_cloest_distance2,depth+1);
+            //     else // 之前检查右 则这次检查左
+            //         SearchKdTreeNode(target,current_node->left_node,current_nearest_node,current_cloest_distance2,depth+1);
+            // }
+
+            // 什么情况下，kd tree在回溯时需要检查另一空间
+            // 如上图，以target为圆心，以当前最近距离为半径，如果这个圆与中位数轴线相交，则这走线的两边空间内的节点都需要检查，
+            // 因为在递归向下时已经检查过了一个分支，所以回溯时只需要检查另外一个分支即可,判断是否相交 -- 圆心到轴线距离 < 最近邻距离(半径) 那就是相交了。
+            // 为什么和轴线相交了就需要查看轴线两边的空间点?
+            // 因为只要与轴线相交了，轴线两边的空间就一定都会有一部分在圆内！ 在圆内的空间中如果有节点就会出现比当前最近邻还近的节点。
+            double tar2axis_dis2 = !(depth%2)
+                    ?   (target.x - current_node->point.x) * (target.x - current_node->point.x)
+                    :   (target.y - current_node->point.y) * (target.y - current_node->point.y); //圆心到current_node轴线的距离
+
+            //如果圆(tar为圆心 最近邻距离current_cloest_distance2为半径)与轴线相交 则需要检查另一分支
+            if(current_cloest_distance2 > tar2axis_dis2)//相交
+            {
+                //检查另外一分支
+                if(!turn_left)
+                    SearchKdTreeNode(target,current_node->left_node,current_nearest_node,current_cloest_distance2,depth+1);
+                else
+                    SearchKdTreeNode(target,current_node->right_node,current_nearest_node,current_cloest_distance2,depth+1);
+            }
+
+    }
+
+    // 搜索target  radius半径内的节点 结果存在near_nodes中传出
+    void KdTree::SearchKdTreeNode(const geometry_msgs::Point& target,
+                              KdTreeNode* current_node,// 当前递归深度的节点
+                              std::vector<KdTreeNode*>& near_nodes,
+                              double radius,
+                              int depth) const{
+             // 搜索target  radius半径内的节点 结果存在near_nodes中传出
+            if(!current_node) return;//到底开始回溯
+
+            //向下深入   查询与target处于同一子空间的节点   很快能找到最近邻的近似！！！点
+            bool turn_left = (depth%2)? target.y <= current_node->point.y: target.x <= current_node->point.x;
+
+            if(turn_left)
+                SearchKdTreeNode(target,current_node->left_node,near_nodes,radius,depth+1);
+            else
+                SearchKdTreeNode(target,current_node->right_node,near_nodes,radius,depth+1);
+
+            // 这里的距离计算在 回溯时或递归深入时计算都可以
+            double r = (target.x - current_node->point.x) * (target.x - current_node->point.x) + (target.y - current_node->point.y) * (target.y- current_node->point.y);
+            if(r < radius) near_nodes.push_back(current_node);// 满足半径内要求
+
+            double tar2axis_dis2 = !(depth%2)
+                    ?   (target.x - current_node->point.x) * (target.x - current_node->point.x)
+                    :   (target.y - current_node->point.y) * (target.y - current_node->point.y); //圆心到current_node轴线的距离
+
+            // 在target圆心radius半径 的圆是否与轴线相交
+            // 只要与轴线相交了，轴线两边的空间就一定都会有一部分在圆内！  则那部分圆内空间就可能包含节点
+            // 只要有节点 这些节点都是满足与target距离小于radius 的满足要求的节点
+            if(radius > tar2axis_dis2)//相交
+            {
+                //检查另外一分支
+                if(!turn_left)
+                    SearchKdTreeNode(target,current_node->left_node,near_nodes,radius,depth+1);
+                else
+                    SearchKdTreeNode(target,current_node->right_node,near_nodes,radius,depth+1);
+            }
+
+    }
+
+    // 非kd tree BFS直接遍历整棵树得到解 可以拿这个解和kd tree的解比较 看kd tree的解是否正确
+
+    // BFS直接遍历整棵树 得到离target最近的节点
+    KdTreeNode* KdTree::BruceNearestKdTreeNode(const geometry_msgs::Point& target){
+        KdTreeNode* nearest_node = nullptr;
+        double min_distance2 = DBL_MAX;
+        std::queue<KdTreeNode*> q;
+        q.push(root_);
+        while(!q.empty()){
+            double distance2 = (target.x - q.front()->point.x)*(target.x - q.front()->point.x) + (target.y - q.front()->point.y)*(target.y - q.front()->point.y);
+            if(distance2<min_distance2){
+                min_distance2 = distance2;
+                nearest_node = q.front();
+            }
+            if(q.front()->left_node) q.push(q.front()->left_node);
+            if(q.front()->right_node) q.push(q.front()->right_node);
+            q.pop();
+        }
+        return nearest_node;
+    }
+
+    // BFS直接遍历整棵树 得到离target radius范围内的节点
+    std::vector<KdTreeNode*> KdTree::BruceNearKdTreeNode(const geometry_msgs::Point& target,
+                                                                double radius){
+        std::vector<KdTreeNode*> bruce_near_nodes;
+        std::queue<KdTreeNode*> q;
+        q.push(root_);
+        while(!q.empty()){
+            double distance2 = (target.x - q.front()->point.x)*(target.x - q.front()->point.x) + (target.y - q.front()->point.y)*(target.y - q.front()->point.y);
+            if(distance2 < radius){
+                bruce_near_nodes.push_back(q.front());
+            }
+            if(q.front()->left_node) q.push(q.front()->left_node);
+            if(q.front()->right_node) q.push(q.front()->right_node);
+            q.pop();
+        }
+        return bruce_near_nodes;
+}
+下面补充一下kd tree在高维度的改进 BBF"><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/planning/rce8k8/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/planning/rce8k8/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/planning/rce8k8/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="3 基于采样的路径规划2 KDtree代码注释,BBF介绍"><meta property="og:description" content="struct KdTreeNode{ geometry_msgs::Point point; // 节点坐标 KdTreeNode* parent_node; // Used for plan planning 父节点 double distance; // Used for plan planning KdTreeNode* left_node; // Used for kd tree 左孩子 KdTreeNode* right_node; // used for kd tree 右孩子 int trajectory_id; // used for submaps int submap_index; // used for submaps KdTreeNode(); KdTreeNode(geometry_msgs::Point p); KdTreeNode(geometry_msgs::Point p, int trajectory_idx, int submap_idx); }; // 节点构造 依次赋值 KdTreeNode::KdTreeNode() : parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(0), submap_index(0){ point.x = 0.0; point.y = 0.0; point.z = 0.0; } KdTreeNode::KdTreeNode(geometry_msgs::Point p) : point(p), parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(0), submap_index(0){} KdTreeNode::KdTreeNode(geometry_msgs::Point p, int trajectory_idx, int submap_idx) : point(p), parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(trajectory_idx), submap_index(submap_idx){} // 树的构造 // Constructor KdTree::KdTree() : root_(new KdTreeNode ()){} KdTree::KdTree(geometry_msgs::Point start_point) : root_(new KdTreeNode (start_point)){} // 递归析构kd tree Destroy RRT void KdTree::DestroyRRT(KdTreeNode* root){ if(root!=nullptr){ DestroyRRT(root->left_node);// 递归析构左子树 DestroyRRT(root->right_node);// 递归析构右子树 delete(root); } } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point& point){ return AddPointToKdTree(point, root_, 0); } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point& point, int trajectory_idx, int submap_idx){ auto added_node = AddPointToKdTree(point, root_, 0); added_node->trajectory_id = trajectory_idx; added_node->submap_index = submap_idx; return added_node; } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point& point, KdTreeNode* parent, int depth){ //向kd 树中添加节点，这里kd树每层的划分标准依然是依次划分选择维度 --- 先划分x维度再y维度 //-- depth从0开始， depth%2==0的层次 其右子树的x都大于此层，左子树的x都小于此层。 // depth%2==1的层次 其右子树的y都大于此层，左子树的y都小于此层。 //而非选择最大方差维度划分 //就是二分添加 依照每层的划分规则 不断下探 新节点一定作为叶子节点！！！！ if(parent->point == point) return nullptr;// 节点已经存在于树中 bool turn_left = (depth%2)? point.y <= parent->point.y: point.x <= parent->point.x;//==算在左树里 // 叶子节点的情况下面 已经考虑到了不需要单独再写了 // if(!parent->left_node && !parent->right_node) // { // //当前节点parent是叶子节点 // KdTreeNode* new_node = new KdTreeNode(point); // if(turn_left) // { // parent->left_node =new_node; // parent->left_node->parent_node = parent; // } // else // { // parent->right_node = new_node; // parent->right_node->parent_node = parent; // } // return new_node; // } if(turn_left) { if(parent->left_node) return AddPointToKdTree(point,parent->left_node,depth+1); else // 父节点没有左子树 则新节点就正好插在那个地方 { parent->left_node =new KdTreeNode(point); parent->left_node->parent_node = parent; return parent->left_node; } } else { if(parent->right_node) return AddPointToKdTree(point,parent->right_node,depth+1); else { parent->right_node =new KdTreeNode(point); parent->right_node->parent_node = parent; return parent->right_node; } } } // 查找target的接口 KdTreeNode* KdTree::NearestKdTreeNode(const geometry_msgs::Point& target) const { KdTreeNode* nearest_node = nullptr; double closest_distance2 = DBL_MAX;//DBL_MAX为double最大值的宏 SearchKdTreeNode(target, root_, nearest_node, closest_distance2,0); return nearest_node; } // 半径内查找target的接口 std::vector<KdTreeNode*> KdTree::NearKdTreeNode(const geometry_msgs::Point& target, double radius) const { std::vector<KdTreeNode*> near_nodes; SearchKdTreeNode(target,root_,near_nodes,radius * radius,0); return near_nodes; } void KdTree::SearchKdTreeNode(const geometry_msgs::Point& target, KdTreeNode* current_node, // 当前递归深度的节点 KdTreeNode*& current_nearest_node,// 指针的引用 此指针可修改 并做传出参数 double& current_cloest_distance2,// 当前的最近欧式距离^2 int depth) const{ // 搜索target节点的 最近邻居节点 // | // 右子树根节点 是半个子空间的中心 x划分 // | // ----------父节点 y划分是左右子空间的中心----------- // | target // 左子树根节点 是半个子空间的中心 x划分 // | // 可能出现target在 左或右某个子空间中 但是 它离另外一个子空间更近 所以需要检查是否离另一子空间中新更近 // 如果没有离另一子空间更近 则那个子空间中不存在离target更近的节点? // 不太靠谱，还是有可能存在的，如果另一子空间中方差较大，就是可能存在 dis(子空间根节点,target) > dis(某一子节点,target) // 那根据dis(子空间根节点,target) > current_cloest_distance2 直接不看这个子空间 就可能错过最近节点 // 之前没理解到位 对于这个是否要检查另一分支的条件没有搞清楚 // 以target为圆心 以当前最近距离current_cloest_distance2为半径画圆 // 如果圆与节点所代表的轴！！！相交 (则轴线两边的空间都需要检查 因为一边在向下递归中检查过了 所以) // 则需要将轴的另外一边需要检查 // 判断相交 如果圆心target和轴线的垂直距离 小于最近距离 则就是发生相交 // 在笔记中有图 // 先一路到最底叶子节点 (根据那层的比较维度 二分地选择分支递归向下) 中间不断计算到节点距离 更新最近节点指针 // 在向下的同时记录 以current_node节点为圆心 target到current_node节点的距离为半径， // 如果current_node的子节点 和 target之间的距离大于这个半径 则那个分支可以完全不看 // 并且在之后回溯检查的时候也可以完全不管那些分支 if(!current_node) return;//到底开始回溯 //向下深入 查询与target处于同一子空间的节点 很快能找到最近邻的近似！！！点 bool turn_left = (depth%2)? target.y <= current_node->point.y: target.x <= current_node->point.x; if(turn_left) SearchKdTreeNode(target,current_node->left_node,current_nearest_node,current_cloest_distance2,depth+1); else SearchKdTreeNode(target,current_node->right_node,current_nearest_node,current_cloest_distance2,depth+1); //回溯检查 另一分支 用turn_left就可直到上次哪个分支没被检查 // 为什么不在向下深入的时候判断最近距离 而在回溯的时候计算最近距离 // 并且因为下面 是否要查看另一分支时需要用到current_cloest_distance2， // 在回溯的时候检查 越接近根节点current_cloest_distance2越接近正确值的那个最小距离 // 回溯到根节点时current_cloest_distance2越小，越有机会不去查看分支 可以减去大量的分支 double r = (target.x - current_node->point.x) * (target.x - current_node->point.x) + (target.y - current_node->point.y) * (target.y- current_node->point.y); if( r < current_cloest_distance2) { current_cloest_distance2 = r; current_nearest_node = current_node; } // 检查另一分支 的距离是否比当前最近距离current_cloest_distance2还近 如果更近才有检查的价值 // 理解错误 之前没理解到位 对于这个是否要检查另一分支的条件没有搞清楚 // https://blog.csdn.net/silangquan/article/details/41483689 这个帖子 或者笔记有解释 // if(turn_left) // if(current_node->right_node) // out_r = (target.x - current_node->right_node->point.x) * (target.x - current_node->right_node->point.x) + // (target.y - current_node->right_node->point.y) * (target.y- current_node->right_node->point.y) > current_cloest_distance2? true:false; // else // if(current_node->left_node) // out_r = (target.x - current_node->left_node->point.x) * (target.x - current_node->left_node->point.x) + // (target.y - current_node->left_node->point.y) * (target.y- current_node->left_node->point.y) > current_cloest_distance2? true:false; // if(!out_r) // 另一分支子空间超出范围则没有检查的必要 (超球面和子空间矩形完全不相交) // { // if(turn_left)// 之前检查左 则这次检查右 // SearchKdTreeNode(target,current_node->right_node,current_nearest_node,current_cloest_distance2,depth+1); // else // 之前检查右 则这次检查左 // SearchKdTreeNode(target,current_node->left_node,current_nearest_node,current_cloest_distance2,depth+1); // } // 什么情况下，kd tree在回溯时需要检查另一空间 // 如上图，以target为圆心，以当前最近距离为半径，如果这个圆与中位数轴线相交，则这走线的两边空间内的节点都需要检查， // 因为在递归向下时已经检查过了一个分支，所以回溯时只需要检查另外一个分支即可,判断是否相交 -- 圆心到轴线距离 < 最近邻距离(半径) 那就是相交了。 // 为什么和轴线相交了就需要查看轴线两边的空间点? // 因为只要与轴线相交了，轴线两边的空间就一定都会有一部分在圆内！ 在圆内的空间中如果有节点就会出现比当前最近邻还近的节点。 double tar2axis_dis2 = !(depth%2) ? (target.x - current_node->point.x) * (target.x - current_node->point.x) : (target.y - current_node->point.y) * (target.y - current_node->point.y); //圆心到current_node轴线的距离 //如果圆(tar为圆心 最近邻距离current_cloest_distance2为半径)与轴线相交 则需要检查另一分支 if(current_cloest_distance2 > tar2axis_dis2)//相交 { //检查另外一分支 if(!turn_left) SearchKdTreeNode(target,current_node->left_node,current_nearest_node,current_cloest_distance2,depth+1); else SearchKdTreeNode(target,current_node->right_node,current_nearest_node,current_cloest_distance2,depth+1); } } // 搜索target radius半径内的节点 结果存在near_nodes中传出 void KdTree::SearchKdTreeNode(const geometry_msgs::Point& target, KdTreeNode* current_node,// 当前递归深度的节点 std::vector<KdTreeNode*>& near_nodes, double radius, int depth) const{ // 搜索target radius半径内的节点 结果存在near_nodes中传出 if(!current_node) return;//到底开始回溯 //向下深入 查询与target处于同一子空间的节点 很快能找到最近邻的近似！！！点 bool turn_left = (depth%2)? target.y <= current_node->point.y: target.x <= current_node->point.x; if(turn_left) SearchKdTreeNode(target,current_node->left_node,near_nodes,radius,depth+1); else SearchKdTreeNode(target,current_node->right_node,near_nodes,radius,depth+1); // 这里的距离计算在 回溯时或递归深入时计算都可以 double r = (target.x - current_node->point.x) * (target.x - current_node->point.x) + (target.y - current_node->point.y) * (target.y- current_node->point.y); if(r < radius) near_nodes.push_back(current_node);// 满足半径内要求 double tar2axis_dis2 = !(depth%2) ? (target.x - current_node->point.x) * (target.x - current_node->point.x) : (target.y - current_node->point.y) * (target.y - current_node->point.y); //圆心到current_node轴线的距离 // 在target圆心radius半径 的圆是否与轴线相交 // 只要与轴线相交了，轴线两边的空间就一定都会有一部分在圆内！ 则那部分圆内空间就可能包含节点 // 只要有节点 这些节点都是满足与target距离小于radius 的满足要求的节点 if(radius > tar2axis_dis2)//相交 { //检查另外一分支 if(!turn_left) SearchKdTreeNode(target,current_node->left_node,near_nodes,radius,depth+1); else SearchKdTreeNode(target,current_node->right_node,near_nodes,radius,depth+1); } } // 非kd tree BFS直接遍历整棵树得到解 可以拿这个解和kd tree的解比较 看kd tree的解是否正确 // BFS直接遍历整棵树 得到离target最近的节点 KdTreeNode* KdTree::BruceNearestKdTreeNode(const geometry_msgs::Point& target){ KdTreeNode* nearest_node = nullptr; double min_distance2 = DBL_MAX; std::queue<KdTreeNode*> q; q.push(root_); while(!q.empty()){ double distance2 = (target.x - q.front()->point.x)*(target.x - q.front()->point.x) + (target.y - q.front()->point.y)*(target.y - q.front()->point.y); if(distance2<min_distance2){ min_distance2 = distance2; nearest_node = q.front(); } if(q.front()->left_node) q.push(q.front()->left_node); if(q.front()->right_node) q.push(q.front()->right_node); q.pop(); } return nearest_node; } // BFS直接遍历整棵树 得到离target radius范围内的节点 std::vector<KdTreeNode*> KdTree::BruceNearKdTreeNode(const geometry_msgs::Point& target, double radius){ std::vector<KdTreeNode*> bruce_near_nodes; std::queue<KdTreeNode*> q; q.push(root_); while(!q.empty()){ double distance2 = (target.x - q.front()->point.x)*(target.x - q.front()->point.x) + (target.y - q.front()->point.y)*(target.y - q.front()->point.y); if(distance2 < radius){ bruce_near_nodes.push_back(q.front()); } if(q.front()->left_node) q.push(q.front()->left_node); if(q.front()->right_node) q.push(q.front()->right_node); q.pop(); } return bruce_near_nodes; } 下面补充一下kd tree在高维度的改进 BBF"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="planning"><meta property="article:published_time" content="2022-03-05T00:00:00+00:00"><meta property="article:modified_time" content="2025-03-03T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="3 基于采样的路径规划2 KDtree代码注释,BBF介绍"><meta name=twitter:description content="struct KdTreeNode{ geometry_msgs::Point point; // 节点坐标 KdTreeNode* parent_node; // Used for plan planning 父节点 double distance; // Used for plan planning KdTreeNode* left_node; // Used for kd tree 左孩子 KdTreeNode* right_node; // used for kd tree 右孩子 int trajectory_id; // used for submaps int submap_index; // used for submaps KdTreeNode(); KdTreeNode(geometry_msgs::Point p); KdTreeNode(geometry_msgs::Point p, int trajectory_idx, int submap_idx); }; // 节点构造 依次赋值 KdTreeNode::KdTreeNode() : parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(0), submap_index(0){ point.x = 0.0; point.y = 0.0; point.z = 0.0; } KdTreeNode::KdTreeNode(geometry_msgs::Point p) : point(p), parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(0), submap_index(0){} KdTreeNode::KdTreeNode(geometry_msgs::Point p, int trajectory_idx, int submap_idx) : point(p), parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(trajectory_idx), submap_index(submap_idx){} // 树的构造 // Constructor KdTree::KdTree() : root_(new KdTreeNode ()){} KdTree::KdTree(geometry_msgs::Point start_point) : root_(new KdTreeNode (start_point)){} // 递归析构kd tree Destroy RRT void KdTree::DestroyRRT(KdTreeNode* root){ if(root!=nullptr){ DestroyRRT(root->left_node);// 递归析构左子树 DestroyRRT(root->right_node);// 递归析构右子树 delete(root); } } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point& point){ return AddPointToKdTree(point, root_, 0); } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point& point, int trajectory_idx, int submap_idx){ auto added_node = AddPointToKdTree(point, root_, 0); added_node->trajectory_id = trajectory_idx; added_node->submap_index = submap_idx; return added_node; } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point& point, KdTreeNode* parent, int depth){ //向kd 树中添加节点，这里kd树每层的划分标准依然是依次划分选择维度 --- 先划分x维度再y维度 //-- depth从0开始， depth%2==0的层次 其右子树的x都大于此层，左子树的x都小于此层。 // depth%2==1的层次 其右子树的y都大于此层，左子树的y都小于此层。 //而非选择最大方差维度划分 //就是二分添加 依照每层的划分规则 不断下探 新节点一定作为叶子节点！！！！ if(parent->point == point) return nullptr;// 节点已经存在于树中 bool turn_left = (depth%2)? point.y <= parent->point.y: point.x <= parent->point.x;//==算在左树里 // 叶子节点的情况下面 已经考虑到了不需要单独再写了 // if(!parent->left_node && !parent->right_node) // { // //当前节点parent是叶子节点 // KdTreeNode* new_node = new KdTreeNode(point); // if(turn_left) // { // parent->left_node =new_node; // parent->left_node->parent_node = parent; // } // else // { // parent->right_node = new_node; // parent->right_node->parent_node = parent; // } // return new_node; // } if(turn_left) { if(parent->left_node) return AddPointToKdTree(point,parent->left_node,depth+1); else // 父节点没有左子树 则新节点就正好插在那个地方 { parent->left_node =new KdTreeNode(point); parent->left_node->parent_node = parent; return parent->left_node; } } else { if(parent->right_node) return AddPointToKdTree(point,parent->right_node,depth+1); else { parent->right_node =new KdTreeNode(point); parent->right_node->parent_node = parent; return parent->right_node; } } } // 查找target的接口 KdTreeNode* KdTree::NearestKdTreeNode(const geometry_msgs::Point& target) const { KdTreeNode* nearest_node = nullptr; double closest_distance2 = DBL_MAX;//DBL_MAX为double最大值的宏 SearchKdTreeNode(target, root_, nearest_node, closest_distance2,0); return nearest_node; } // 半径内查找target的接口 std::vector<KdTreeNode*> KdTree::NearKdTreeNode(const geometry_msgs::Point& target, double radius) const { std::vector<KdTreeNode*> near_nodes; SearchKdTreeNode(target,root_,near_nodes,radius * radius,0); return near_nodes; } void KdTree::SearchKdTreeNode(const geometry_msgs::Point& target, KdTreeNode* current_node, // 当前递归深度的节点 KdTreeNode*& current_nearest_node,// 指针的引用 此指针可修改 并做传出参数 double& current_cloest_distance2,// 当前的最近欧式距离^2 int depth) const{ // 搜索target节点的 最近邻居节点 // | // 右子树根节点 是半个子空间的中心 x划分 // | // ----------父节点 y划分是左右子空间的中心----------- // | target // 左子树根节点 是半个子空间的中心 x划分 // | // 可能出现target在 左或右某个子空间中 但是 它离另外一个子空间更近 所以需要检查是否离另一子空间中新更近 // 如果没有离另一子空间更近 则那个子空间中不存在离target更近的节点? // 不太靠谱，还是有可能存在的，如果另一子空间中方差较大，就是可能存在 dis(子空间根节点,target) > dis(某一子节点,target) // 那根据dis(子空间根节点,target) > current_cloest_distance2 直接不看这个子空间 就可能错过最近节点 // 之前没理解到位 对于这个是否要检查另一分支的条件没有搞清楚 // 以target为圆心 以当前最近距离current_cloest_distance2为半径画圆 // 如果圆与节点所代表的轴！！！相交 (则轴线两边的空间都需要检查 因为一边在向下递归中检查过了 所以) // 则需要将轴的另外一边需要检查 // 判断相交 如果圆心target和轴线的垂直距离 小于最近距离 则就是发生相交 // 在笔记中有图 // 先一路到最底叶子节点 (根据那层的比较维度 二分地选择分支递归向下) 中间不断计算到节点距离 更新最近节点指针 // 在向下的同时记录 以current_node节点为圆心 target到current_node节点的距离为半径， // 如果current_node的子节点 和 target之间的距离大于这个半径 则那个分支可以完全不看 // 并且在之后回溯检查的时候也可以完全不管那些分支 if(!current_node) return;//到底开始回溯 //向下深入 查询与target处于同一子空间的节点 很快能找到最近邻的近似！！！点 bool turn_left = (depth%2)? target.y <= current_node->point.y: target.x <= current_node->point.x; if(turn_left) SearchKdTreeNode(target,current_node->left_node,current_nearest_node,current_cloest_distance2,depth+1); else SearchKdTreeNode(target,current_node->right_node,current_nearest_node,current_cloest_distance2,depth+1); //回溯检查 另一分支 用turn_left就可直到上次哪个分支没被检查 // 为什么不在向下深入的时候判断最近距离 而在回溯的时候计算最近距离 // 并且因为下面 是否要查看另一分支时需要用到current_cloest_distance2， // 在回溯的时候检查 越接近根节点current_cloest_distance2越接近正确值的那个最小距离 // 回溯到根节点时current_cloest_distance2越小，越有机会不去查看分支 可以减去大量的分支 double r = (target.x - current_node->point.x) * (target.x - current_node->point.x) + (target.y - current_node->point.y) * (target.y- current_node->point.y); if( r < current_cloest_distance2) { current_cloest_distance2 = r; current_nearest_node = current_node; } // 检查另一分支 的距离是否比当前最近距离current_cloest_distance2还近 如果更近才有检查的价值 // 理解错误 之前没理解到位 对于这个是否要检查另一分支的条件没有搞清楚 // https://blog.csdn.net/silangquan/article/details/41483689 这个帖子 或者笔记有解释 // if(turn_left) // if(current_node->right_node) // out_r = (target.x - current_node->right_node->point.x) * (target.x - current_node->right_node->point.x) + // (target.y - current_node->right_node->point.y) * (target.y- current_node->right_node->point.y) > current_cloest_distance2? true:false; // else // if(current_node->left_node) // out_r = (target.x - current_node->left_node->point.x) * (target.x - current_node->left_node->point.x) + // (target.y - current_node->left_node->point.y) * (target.y- current_node->left_node->point.y) > current_cloest_distance2? true:false; // if(!out_r) // 另一分支子空间超出范围则没有检查的必要 (超球面和子空间矩形完全不相交) // { // if(turn_left)// 之前检查左 则这次检查右 // SearchKdTreeNode(target,current_node->right_node,current_nearest_node,current_cloest_distance2,depth+1); // else // 之前检查右 则这次检查左 // SearchKdTreeNode(target,current_node->left_node,current_nearest_node,current_cloest_distance2,depth+1); // } // 什么情况下，kd tree在回溯时需要检查另一空间 // 如上图，以target为圆心，以当前最近距离为半径，如果这个圆与中位数轴线相交，则这走线的两边空间内的节点都需要检查， // 因为在递归向下时已经检查过了一个分支，所以回溯时只需要检查另外一个分支即可,判断是否相交 -- 圆心到轴线距离 < 最近邻距离(半径) 那就是相交了。 // 为什么和轴线相交了就需要查看轴线两边的空间点? // 因为只要与轴线相交了，轴线两边的空间就一定都会有一部分在圆内！ 在圆内的空间中如果有节点就会出现比当前最近邻还近的节点。 double tar2axis_dis2 = !(depth%2) ? (target.x - current_node->point.x) * (target.x - current_node->point.x) : (target.y - current_node->point.y) * (target.y - current_node->point.y); //圆心到current_node轴线的距离 //如果圆(tar为圆心 最近邻距离current_cloest_distance2为半径)与轴线相交 则需要检查另一分支 if(current_cloest_distance2 > tar2axis_dis2)//相交 { //检查另外一分支 if(!turn_left) SearchKdTreeNode(target,current_node->left_node,current_nearest_node,current_cloest_distance2,depth+1); else SearchKdTreeNode(target,current_node->right_node,current_nearest_node,current_cloest_distance2,depth+1); } } // 搜索target radius半径内的节点 结果存在near_nodes中传出 void KdTree::SearchKdTreeNode(const geometry_msgs::Point& target, KdTreeNode* current_node,// 当前递归深度的节点 std::vector<KdTreeNode*>& near_nodes, double radius, int depth) const{ // 搜索target radius半径内的节点 结果存在near_nodes中传出 if(!current_node) return;//到底开始回溯 //向下深入 查询与target处于同一子空间的节点 很快能找到最近邻的近似！！！点 bool turn_left = (depth%2)? target.y <= current_node->point.y: target.x <= current_node->point.x; if(turn_left) SearchKdTreeNode(target,current_node->left_node,near_nodes,radius,depth+1); else SearchKdTreeNode(target,current_node->right_node,near_nodes,radius,depth+1); // 这里的距离计算在 回溯时或递归深入时计算都可以 double r = (target.x - current_node->point.x) * (target.x - current_node->point.x) + (target.y - current_node->point.y) * (target.y- current_node->point.y); if(r < radius) near_nodes.push_back(current_node);// 满足半径内要求 double tar2axis_dis2 = !(depth%2) ? (target.x - current_node->point.x) * (target.x - current_node->point.x) : (target.y - current_node->point.y) * (target.y - current_node->point.y); //圆心到current_node轴线的距离 // 在target圆心radius半径 的圆是否与轴线相交 // 只要与轴线相交了，轴线两边的空间就一定都会有一部分在圆内！ 则那部分圆内空间就可能包含节点 // 只要有节点 这些节点都是满足与target距离小于radius 的满足要求的节点 if(radius > tar2axis_dis2)//相交 { //检查另外一分支 if(!turn_left) SearchKdTreeNode(target,current_node->left_node,near_nodes,radius,depth+1); else SearchKdTreeNode(target,current_node->right_node,near_nodes,radius,depth+1); } } // 非kd tree BFS直接遍历整棵树得到解 可以拿这个解和kd tree的解比较 看kd tree的解是否正确 // BFS直接遍历整棵树 得到离target最近的节点 KdTreeNode* KdTree::BruceNearestKdTreeNode(const geometry_msgs::Point& target){ KdTreeNode* nearest_node = nullptr; double min_distance2 = DBL_MAX; std::queue<KdTreeNode*> q; q.push(root_); while(!q.empty()){ double distance2 = (target.x - q.front()->point.x)*(target.x - q.front()->point.x) + (target.y - q.front()->point.y)*(target.y - q.front()->point.y); if(distance2<min_distance2){ min_distance2 = distance2; nearest_node = q.front(); } if(q.front()->left_node) q.push(q.front()->left_node); if(q.front()->right_node) q.push(q.front()->right_node); q.pop(); } return nearest_node; } // BFS直接遍历整棵树 得到离target radius范围内的节点 std::vector<KdTreeNode*> KdTree::BruceNearKdTreeNode(const geometry_msgs::Point& target, double radius){ std::vector<KdTreeNode*> bruce_near_nodes; std::queue<KdTreeNode*> q; q.push(root_); while(!q.empty()){ double distance2 = (target.x - q.front()->point.x)*(target.x - q.front()->point.x) + (target.y - q.front()->point.y)*(target.y - q.front()->point.y); if(distance2 < radius){ bruce_near_nodes.push_back(q.front()); } if(q.front()->left_node) q.push(q.front()->left_node); if(q.front()->right_node) q.push(q.front()->right_node); q.pop(); } return bruce_near_nodes; } 下面补充一下kd tree在高维度的改进 BBF"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Planning","item":"https://jler666.github.io/planning/"},{"@type":"ListItem","position":2,"name":"3 基于采样的路径规划2 KDtree代码注释,BBF介绍","item":"https://jler666.github.io/planning/rce8k8/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"3 基于采样的路径规划2 KDtree代码注释,BBF介绍","name":"3 基于采样的路径规划2 KDtree代码注释,BBF介绍","description":"struct KdTreeNode{ geometry_msgs::Point point; // 节点坐标 KdTreeNode* parent_node; // Used for plan planning 父节点 double distance; // Used for plan planning KdTreeNode* left_node; // Used for kd tree 左孩子 KdTreeNode* right_node; // used for kd tree 右孩子 int trajectory_id; // used for submaps int submap_index; // used for submaps KdTreeNode(); KdTreeNode(geometry_msgs::Point p); KdTreeNode(geometry_msgs::Point p, int trajectory_idx, int submap_idx); }; // 节点构造 依次赋值 KdTreeNode::KdTreeNode() : parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(0), submap_index(0){ point.x = 0.0; point.y = 0.0; point.z = 0.0; } KdTreeNode::KdTreeNode(geometry_msgs::Point p) : point(p), parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(0), submap_index(0){} KdTreeNode::KdTreeNode(geometry_msgs::Point p, int trajectory_idx, int submap_idx) : point(p), parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(trajectory_idx), submap_index(submap_idx){} // 树的构造 // Constructor KdTree::KdTree() : root_(new KdTreeNode ()){} KdTree::KdTree(geometry_msgs::Point start_point) : root_(new KdTreeNode (start_point)){} // 递归析构kd tree Destroy RRT void KdTree::DestroyRRT(KdTreeNode* root){ if(root!=nullptr){ DestroyRRT(root-\u0026gt;left_node);// 递归析构左子树 DestroyRRT(root-\u0026gt;right_node);// 递归析构右子树 delete(root); } } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point\u0026amp; point){ return AddPointToKdTree(point, root_, 0); } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point\u0026amp; point, int trajectory_idx, int submap_idx){ auto added_node = AddPointToKdTree(point, root_, 0); added_node-\u0026gt;trajectory_id = trajectory_idx; added_node-\u0026gt;submap_index = submap_idx; return added_node; } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point\u0026amp; point, KdTreeNode* parent, int depth){ //向kd 树中添加节点，这里kd树每层的划分标准依然是依次划分选择维度 --- 先划分x维度再y维度 //-- depth从0开始， depth%2==0的层次 其右子树的x都大于此层，左子树的x都小于此层。 // depth%2==1的层次 其右子树的y都大于此层，左子树的y都小于此层。 //而非选择最大方差维度划分 //就是二分添加 依照每层的划分规则 不断下探 新节点一定作为叶子节点！！！！ if(parent-\u0026gt;point == point) return nullptr;// 节点已经存在于树中 bool turn_left = (depth%2)? point.y \u0026lt;= parent-\u0026gt;point.y: point.x \u0026lt;= parent-\u0026gt;point.x;//==算在左树里 // 叶子节点的情况下面 已经考虑到了不需要单独再写了 // if(!parent-\u0026gt;left_node \u0026amp;\u0026amp; !parent-\u0026gt;right_node) // { // //当前节点parent是叶子节点 // KdTreeNode* new_node = new KdTreeNode(point); // if(turn_left) // { // parent-\u0026gt;left_node =new_node; // parent-\u0026gt;left_node-\u0026gt;parent_node = parent; // } // else // { // parent-\u0026gt;right_node = new_node; // parent-\u0026gt;right_node-\u0026gt;parent_node = parent; // } // return new_node; // } if(turn_left) { if(parent-\u0026gt;left_node) return AddPointToKdTree(point,parent-\u0026gt;left_node,depth+1); else // 父节点没有左子树 则新节点就正好插在那个地方 { parent-\u0026gt;left_node =new KdTreeNode(point); parent-\u0026gt;left_node-\u0026gt;parent_node = parent; return parent-\u0026gt;left_node; } } else { if(parent-\u0026gt;right_node) return AddPointToKdTree(point,parent-\u0026gt;right_node,depth+1); else { parent-\u0026gt;right_node =new KdTreeNode(point); parent-\u0026gt;right_node-\u0026gt;parent_node = parent; return parent-\u0026gt;right_node; } } } // 查找target的接口 KdTreeNode* KdTree::NearestKdTreeNode(const geometry_msgs::Point\u0026amp; target) const { KdTreeNode* nearest_node = nullptr; double closest_distance2 = DBL_MAX;//DBL_MAX为double最大值的宏 SearchKdTreeNode(target, root_, nearest_node, closest_distance2,0); return nearest_node; } // 半径内查找target的接口 std::vector\u0026lt;KdTreeNode*\u0026gt; KdTree::NearKdTreeNode(const geometry_msgs::Point\u0026amp; target, double radius) const { std::vector\u0026lt;KdTreeNode*\u0026gt; near_nodes; SearchKdTreeNode(target,root_,near_nodes,radius * radius,0); return near_nodes; } void KdTree::SearchKdTreeNode(const geometry_msgs::Point\u0026amp; target, KdTreeNode* current_node, // 当前递归深度的节点 KdTreeNode*\u0026amp; current_nearest_node,// 指针的引用 此指针可修改 并做传出参数 double\u0026amp; current_cloest_distance2,// 当前的最近欧式距离^2 int depth) const{ // 搜索target节点的 最近邻居节点 // | // 右子树根节点 是半个子空间的中心 x划分 // | // ----------父节点 y划分是左右子空间的中心----------- // | target // 左子树根节点 是半个子空间的中心 x划分 // | // 可能出现target在 左或右某个子空间中 但是 它离另外一个子空间更近 所以需要检查是否离另一子空间中新更近 // 如果没有离另一子空间更近 则那个子空间中不存在离target更近的节点? // 不太靠谱，还是有可能存在的，如果另一子空间中方差较大，就是可能存在 dis(子空间根节点,target) \u0026gt; dis(某一子节点,target) // 那根据dis(子空间根节点,target) \u0026gt; current_cloest_distance2 直接不看这个子空间 就可能错过最近节点 // 之前没理解到位 对于这个是否要检查另一分支的条件没有搞清楚 // 以target为圆心 以当前最近距离current_cloest_distance2为半径画圆 // 如果圆与节点所代表的轴！！！相交 (则轴线两边的空间都需要检查 因为一边在向下递归中检查过了 所以) // 则需要将轴的另外一边需要检查 // 判断相交 如果圆心target和轴线的垂直距离 小于最近距离 则就是发生相交 // 在笔记中有图 // 先一路到最底叶子节点 (根据那层的比较维度 二分地选择分支递归向下) 中间不断计算到节点距离 更新最近节点指针 // 在向下的同时记录 以current_node节点为圆心 target到current_node节点的距离为半径， // 如果current_node的子节点 和 target之间的距离大于这个半径 则那个分支可以完全不看 // 并且在之后回溯检查的时候也可以完全不管那些分支 if(!current_node) return;//到底开始回溯 //向下深入 查询与target处于同一子空间的节点 很快能找到最近邻的近似！！！点 bool turn_left = (depth%2)? target.y \u0026lt;= current_node-\u0026gt;point.y: target.x \u0026lt;= current_node-\u0026gt;point.x; if(turn_left) SearchKdTreeNode(target,current_node-\u0026gt;left_node,current_nearest_node,current_cloest_distance2,depth+1); else SearchKdTreeNode(target,current_node-\u0026gt;right_node,current_nearest_node,current_cloest_distance2,depth+1); //回溯检查 另一分支 用turn_left就可直到上次哪个分支没被检查 // 为什么不在向下深入的时候判断最近距离 而在回溯的时候计算最近距离 // 并且因为下面 是否要查看另一分支时需要用到current_cloest_distance2， // 在回溯的时候检查 越接近根节点current_cloest_distance2越接近正确值的那个最小距离 // 回溯到根节点时current_cloest_distance2越小，越有机会不去查看分支 可以减去大量的分支 double r = (target.x - current_node-\u0026gt;point.x) * (target.x - current_node-\u0026gt;point.x) + (target.y - current_node-\u0026gt;point.y) * (target.y- current_node-\u0026gt;point.y); if( r \u0026lt; current_cloest_distance2) { current_cloest_distance2 = r; current_nearest_node = current_node; } // 检查另一分支 的距离是否比当前最近距离current_cloest_distance2还近 如果更近才有检查的价值 // 理解错误 之前没理解到位 对于这个是否要检查另一分支的条件没有搞清楚 // https://blog.csdn.net/silangquan/article/details/41483689 这个帖子 或者笔记有解释 // if(turn_left) // if(current_node-\u0026gt;right_node) // out_r = (target.x - current_node-\u0026gt;right_node-\u0026gt;point.x) * (target.x - current_node-\u0026gt;right_node-\u0026gt;point.x) + // (target.y - current_node-\u0026gt;right_node-\u0026gt;point.y) * (target.y- current_node-\u0026gt;right_node-\u0026gt;point.y) \u0026gt; current_cloest_distance2? true:false; // else // if(current_node-\u0026gt;left_node) // out_r = (target.x - current_node-\u0026gt;left_node-\u0026gt;point.x) * (target.x - current_node-\u0026gt;left_node-\u0026gt;point.x) + // (target.y - current_node-\u0026gt;left_node-\u0026gt;point.y) * (target.y- current_node-\u0026gt;left_node-\u0026gt;point.y) \u0026gt; current_cloest_distance2? true:false; // if(!out_r) // 另一分支子空间超出范围则没有检查的必要 (超球面和子空间矩形完全不相交) // { // if(turn_left)// 之前检查左 则这次检查右 // SearchKdTreeNode(target,current_node-\u0026gt;right_node,current_nearest_node,current_cloest_distance2,depth+1); // else // 之前检查右 则这次检查左 // SearchKdTreeNode(target,current_node-\u0026gt;left_node,current_nearest_node,current_cloest_distance2,depth+1); // } // 什么情况下，kd tree在回溯时需要检查另一空间 // 如上图，以target为圆心，以当前最近距离为半径，如果这个圆与中位数轴线相交，则这走线的两边空间内的节点都需要检查， // 因为在递归向下时已经检查过了一个分支，所以回溯时只需要检查另外一个分支即可,判断是否相交 -- 圆心到轴线距离 \u0026lt; 最近邻距离(半径) 那就是相交了。 // 为什么和轴线相交了就需要查看轴线两边的空间点? // 因为只要与轴线相交了，轴线两边的空间就一定都会有一部分在圆内！ 在圆内的空间中如果有节点就会出现比当前最近邻还近的节点。 double tar2axis_dis2 = !(depth%2) ? (target.x - current_node-\u0026gt;point.x) * (target.x - current_node-\u0026gt;point.x) : (target.y - current_node-\u0026gt;point.y) * (target.y - current_node-\u0026gt;point.y); //圆心到current_node轴线的距离 //如果圆(tar为圆心 最近邻距离current_cloest_distance2为半径)与轴线相交 则需要检查另一分支 if(current_cloest_distance2 \u0026gt; tar2axis_dis2)//相交 { //检查另外一分支 if(!turn_left) SearchKdTreeNode(target,current_node-\u0026gt;left_node,current_nearest_node,current_cloest_distance2,depth+1); else SearchKdTreeNode(target,current_node-\u0026gt;right_node,current_nearest_node,current_cloest_distance2,depth+1); } } // 搜索target radius半径内的节点 结果存在near_nodes中传出 void KdTree::SearchKdTreeNode(const geometry_msgs::Point\u0026amp; target, KdTreeNode* current_node,// 当前递归深度的节点 std::vector\u0026lt;KdTreeNode*\u0026gt;\u0026amp; near_nodes, double radius, int depth) const{ // 搜索target radius半径内的节点 结果存在near_nodes中传出 if(!current_node) return;//到底开始回溯 //向下深入 查询与target处于同一子空间的节点 很快能找到最近邻的近似！！！点 bool turn_left = (depth%2)? target.y \u0026lt;= current_node-\u0026gt;point.y: target.x \u0026lt;= current_node-\u0026gt;point.x; if(turn_left) SearchKdTreeNode(target,current_node-\u0026gt;left_node,near_nodes,radius,depth+1); else SearchKdTreeNode(target,current_node-\u0026gt;right_node,near_nodes,radius,depth+1); // 这里的距离计算在 回溯时或递归深入时计算都可以 double r = (target.x - current_node-\u0026gt;point.x) * (target.x - current_node-\u0026gt;point.x) + (target.y - current_node-\u0026gt;point.y) * (target.y- current_node-\u0026gt;point.y); if(r \u0026lt; radius) near_nodes.push_back(current_node);// 满足半径内要求 double tar2axis_dis2 = !(depth%2) ? (target.x - current_node-\u0026gt;point.x) * (target.x - current_node-\u0026gt;point.x) : (target.y - current_node-\u0026gt;point.y) * (target.y - current_node-\u0026gt;point.y); //圆心到current_node轴线的距离 // 在target圆心radius半径 的圆是否与轴线相交 // 只要与轴线相交了，轴线两边的空间就一定都会有一部分在圆内！ 则那部分圆内空间就可能包含节点 // 只要有节点 这些节点都是满足与target距离小于radius 的满足要求的节点 if(radius \u0026gt; tar2axis_dis2)//相交 { //检查另外一分支 if(!turn_left) SearchKdTreeNode(target,current_node-\u0026gt;left_node,near_nodes,radius,depth+1); else SearchKdTreeNode(target,current_node-\u0026gt;right_node,near_nodes,radius,depth+1); } } // 非kd tree BFS直接遍历整棵树得到解 可以拿这个解和kd tree的解比较 看kd tree的解是否正确 // BFS直接遍历整棵树 得到离target最近的节点 KdTreeNode* KdTree::BruceNearestKdTreeNode(const geometry_msgs::Point\u0026amp; target){ KdTreeNode* nearest_node = nullptr; double min_distance2 = DBL_MAX; std::queue\u0026lt;KdTreeNode*\u0026gt; q; q.push(root_); while(!q.empty()){ double distance2 = (target.x - q.front()-\u0026gt;point.x)*(target.x - q.front()-\u0026gt;point.x) + (target.y - q.front()-\u0026gt;point.y)*(target.y - q.front()-\u0026gt;point.y); if(distance2\u0026lt;min_distance2){ min_distance2 = distance2; nearest_node = q.front(); } if(q.front()-\u0026gt;left_node) q.push(q.front()-\u0026gt;left_node); if(q.front()-\u0026gt;right_node) q.push(q.front()-\u0026gt;right_node); q.pop(); } return nearest_node; } // BFS直接遍历整棵树 得到离target radius范围内的节点 std::vector\u0026lt;KdTreeNode*\u0026gt; KdTree::BruceNearKdTreeNode(const geometry_msgs::Point\u0026amp; target, double radius){ std::vector\u0026lt;KdTreeNode*\u0026gt; bruce_near_nodes; std::queue\u0026lt;KdTreeNode*\u0026gt; q; q.push(root_); while(!q.empty()){ double distance2 = (target.x - q.front()-\u0026gt;point.x)*(target.x - q.front()-\u0026gt;point.x) + (target.y - q.front()-\u0026gt;point.y)*(target.y - q.front()-\u0026gt;point.y); if(distance2 \u0026lt; radius){ bruce_near_nodes.push_back(q.front()); } if(q.front()-\u0026gt;left_node) q.push(q.front()-\u0026gt;left_node); if(q.front()-\u0026gt;right_node) q.push(q.front()-\u0026gt;right_node); q.pop(); } return bruce_near_nodes; } 下面补充一下kd tree在高维度的改进 BBF\n","keywords":[],"articleBody":"struct KdTreeNode{ geometry_msgs::Point point; // 节点坐标 KdTreeNode* parent_node; // Used for plan planning 父节点 double distance; // Used for plan planning KdTreeNode* left_node; // Used for kd tree 左孩子 KdTreeNode* right_node; // used for kd tree 右孩子 int trajectory_id; // used for submaps int submap_index; // used for submaps KdTreeNode(); KdTreeNode(geometry_msgs::Point p); KdTreeNode(geometry_msgs::Point p, int trajectory_idx, int submap_idx); }; // 节点构造 依次赋值 KdTreeNode::KdTreeNode() : parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(0), submap_index(0){ point.x = 0.0; point.y = 0.0; point.z = 0.0; } KdTreeNode::KdTreeNode(geometry_msgs::Point p) : point(p), parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(0), submap_index(0){} KdTreeNode::KdTreeNode(geometry_msgs::Point p, int trajectory_idx, int submap_idx) : point(p), parent_node(nullptr), distance (0.0), left_node(nullptr), right_node(nullptr), trajectory_id(trajectory_idx), submap_index(submap_idx){} // 树的构造 // Constructor KdTree::KdTree() : root_(new KdTreeNode ()){} KdTree::KdTree(geometry_msgs::Point start_point) : root_(new KdTreeNode (start_point)){} // 递归析构kd tree Destroy RRT void KdTree::DestroyRRT(KdTreeNode* root){ if(root!=nullptr){ DestroyRRT(root-\u003eleft_node);// 递归析构左子树 DestroyRRT(root-\u003eright_node);// 递归析构右子树 delete(root); } } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point\u0026 point){ return AddPointToKdTree(point, root_, 0); } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point\u0026 point, int trajectory_idx, int submap_idx){ auto added_node = AddPointToKdTree(point, root_, 0); added_node-\u003etrajectory_id = trajectory_idx; added_node-\u003esubmap_index = submap_idx; return added_node; } KdTreeNode* KdTree::AddPointToKdTree(const geometry_msgs::Point\u0026 point, KdTreeNode* parent, int depth){ //向kd 树中添加节点，这里kd树每层的划分标准依然是依次划分选择维度 --- 先划分x维度再y维度 //-- depth从0开始， depth%2==0的层次 其右子树的x都大于此层，左子树的x都小于此层。 // depth%2==1的层次 其右子树的y都大于此层，左子树的y都小于此层。 //而非选择最大方差维度划分 //就是二分添加 依照每层的划分规则 不断下探 新节点一定作为叶子节点！！！！ if(parent-\u003epoint == point) return nullptr;// 节点已经存在于树中 bool turn_left = (depth%2)? point.y \u003c= parent-\u003epoint.y: point.x \u003c= parent-\u003epoint.x;//==算在左树里 // 叶子节点的情况下面 已经考虑到了不需要单独再写了 // if(!parent-\u003eleft_node \u0026\u0026 !parent-\u003eright_node) // { // //当前节点parent是叶子节点 // KdTreeNode* new_node = new KdTreeNode(point); // if(turn_left) // { // parent-\u003eleft_node =new_node; // parent-\u003eleft_node-\u003eparent_node = parent; // } // else // { // parent-\u003eright_node = new_node; // parent-\u003eright_node-\u003eparent_node = parent; // } // return new_node; // } if(turn_left) { if(parent-\u003eleft_node) return AddPointToKdTree(point,parent-\u003eleft_node,depth+1); else // 父节点没有左子树 则新节点就正好插在那个地方 { parent-\u003eleft_node =new KdTreeNode(point); parent-\u003eleft_node-\u003eparent_node = parent; return parent-\u003eleft_node; } } else { if(parent-\u003eright_node) return AddPointToKdTree(point,parent-\u003eright_node,depth+1); else { parent-\u003eright_node =new KdTreeNode(point); parent-\u003eright_node-\u003eparent_node = parent; return parent-\u003eright_node; } } } // 查找target的接口 KdTreeNode* KdTree::NearestKdTreeNode(const geometry_msgs::Point\u0026 target) const { KdTreeNode* nearest_node = nullptr; double closest_distance2 = DBL_MAX;//DBL_MAX为double最大值的宏 SearchKdTreeNode(target, root_, nearest_node, closest_distance2,0); return nearest_node; } // 半径内查找target的接口 std::vector\u003cKdTreeNode*\u003e KdTree::NearKdTreeNode(const geometry_msgs::Point\u0026 target, double radius) const { std::vector\u003cKdTreeNode*\u003e near_nodes; SearchKdTreeNode(target,root_,near_nodes,radius * radius,0); return near_nodes; } void KdTree::SearchKdTreeNode(const geometry_msgs::Point\u0026 target, KdTreeNode* current_node, // 当前递归深度的节点 KdTreeNode*\u0026 current_nearest_node,// 指针的引用 此指针可修改 并做传出参数 double\u0026 current_cloest_distance2,// 当前的最近欧式距离^2 int depth) const{ // 搜索target节点的 最近邻居节点 // | // 右子树根节点 是半个子空间的中心 x划分 // | // ----------父节点 y划分是左右子空间的中心----------- // | target // 左子树根节点 是半个子空间的中心 x划分 // | // 可能出现target在 左或右某个子空间中 但是 它离另外一个子空间更近 所以需要检查是否离另一子空间中新更近 // 如果没有离另一子空间更近 则那个子空间中不存在离target更近的节点? // 不太靠谱，还是有可能存在的，如果另一子空间中方差较大，就是可能存在 dis(子空间根节点,target) \u003e dis(某一子节点,target) // 那根据dis(子空间根节点,target) \u003e current_cloest_distance2 直接不看这个子空间 就可能错过最近节点 // 之前没理解到位 对于这个是否要检查另一分支的条件没有搞清楚 // 以target为圆心 以当前最近距离current_cloest_distance2为半径画圆 // 如果圆与节点所代表的轴！！！相交 (则轴线两边的空间都需要检查 因为一边在向下递归中检查过了 所以) // 则需要将轴的另外一边需要检查 // 判断相交 如果圆心target和轴线的垂直距离 小于最近距离 则就是发生相交 // 在笔记中有图 // 先一路到最底叶子节点 (根据那层的比较维度 二分地选择分支递归向下) 中间不断计算到节点距离 更新最近节点指针 // 在向下的同时记录 以current_node节点为圆心 target到current_node节点的距离为半径， // 如果current_node的子节点 和 target之间的距离大于这个半径 则那个分支可以完全不看 // 并且在之后回溯检查的时候也可以完全不管那些分支 if(!current_node) return;//到底开始回溯 //向下深入 查询与target处于同一子空间的节点 很快能找到最近邻的近似！！！点 bool turn_left = (depth%2)? target.y \u003c= current_node-\u003epoint.y: target.x \u003c= current_node-\u003epoint.x; if(turn_left) SearchKdTreeNode(target,current_node-\u003eleft_node,current_nearest_node,current_cloest_distance2,depth+1); else SearchKdTreeNode(target,current_node-\u003eright_node,current_nearest_node,current_cloest_distance2,depth+1); //回溯检查 另一分支 用turn_left就可直到上次哪个分支没被检查 // 为什么不在向下深入的时候判断最近距离 而在回溯的时候计算最近距离 // 并且因为下面 是否要查看另一分支时需要用到current_cloest_distance2， // 在回溯的时候检查 越接近根节点current_cloest_distance2越接近正确值的那个最小距离 // 回溯到根节点时current_cloest_distance2越小，越有机会不去查看分支 可以减去大量的分支 double r = (target.x - current_node-\u003epoint.x) * (target.x - current_node-\u003epoint.x) + (target.y - current_node-\u003epoint.y) * (target.y- current_node-\u003epoint.y); if( r \u003c current_cloest_distance2) { current_cloest_distance2 = r; current_nearest_node = current_node; } // 检查另一分支 的距离是否比当前最近距离current_cloest_distance2还近 如果更近才有检查的价值 // 理解错误 之前没理解到位 对于这个是否要检查另一分支的条件没有搞清楚 // https://blog.csdn.net/silangquan/article/details/41483689 这个帖子 或者笔记有解释 // if(turn_left) // if(current_node-\u003eright_node) // out_r = (target.x - current_node-\u003eright_node-\u003epoint.x) * (target.x - current_node-\u003eright_node-\u003epoint.x) + // (target.y - current_node-\u003eright_node-\u003epoint.y) * (target.y- current_node-\u003eright_node-\u003epoint.y) \u003e current_cloest_distance2? true:false; // else // if(current_node-\u003eleft_node) // out_r = (target.x - current_node-\u003eleft_node-\u003epoint.x) * (target.x - current_node-\u003eleft_node-\u003epoint.x) + // (target.y - current_node-\u003eleft_node-\u003epoint.y) * (target.y- current_node-\u003eleft_node-\u003epoint.y) \u003e current_cloest_distance2? true:false; // if(!out_r) // 另一分支子空间超出范围则没有检查的必要 (超球面和子空间矩形完全不相交) // { // if(turn_left)// 之前检查左 则这次检查右 // SearchKdTreeNode(target,current_node-\u003eright_node,current_nearest_node,current_cloest_distance2,depth+1); // else // 之前检查右 则这次检查左 // SearchKdTreeNode(target,current_node-\u003eleft_node,current_nearest_node,current_cloest_distance2,depth+1); // } // 什么情况下，kd tree在回溯时需要检查另一空间 // 如上图，以target为圆心，以当前最近距离为半径，如果这个圆与中位数轴线相交，则这走线的两边空间内的节点都需要检查， // 因为在递归向下时已经检查过了一个分支，所以回溯时只需要检查另外一个分支即可,判断是否相交 -- 圆心到轴线距离 \u003c 最近邻距离(半径) 那就是相交了。 // 为什么和轴线相交了就需要查看轴线两边的空间点? // 因为只要与轴线相交了，轴线两边的空间就一定都会有一部分在圆内！ 在圆内的空间中如果有节点就会出现比当前最近邻还近的节点。 double tar2axis_dis2 = !(depth%2) ? (target.x - current_node-\u003epoint.x) * (target.x - current_node-\u003epoint.x) : (target.y - current_node-\u003epoint.y) * (target.y - current_node-\u003epoint.y); //圆心到current_node轴线的距离 //如果圆(tar为圆心 最近邻距离current_cloest_distance2为半径)与轴线相交 则需要检查另一分支 if(current_cloest_distance2 \u003e tar2axis_dis2)//相交 { //检查另外一分支 if(!turn_left) SearchKdTreeNode(target,current_node-\u003eleft_node,current_nearest_node,current_cloest_distance2,depth+1); else SearchKdTreeNode(target,current_node-\u003eright_node,current_nearest_node,current_cloest_distance2,depth+1); } } // 搜索target radius半径内的节点 结果存在near_nodes中传出 void KdTree::SearchKdTreeNode(const geometry_msgs::Point\u0026 target, KdTreeNode* current_node,// 当前递归深度的节点 std::vector\u003cKdTreeNode*\u003e\u0026 near_nodes, double radius, int depth) const{ // 搜索target radius半径内的节点 结果存在near_nodes中传出 if(!current_node) return;//到底开始回溯 //向下深入 查询与target处于同一子空间的节点 很快能找到最近邻的近似！！！点 bool turn_left = (depth%2)? target.y \u003c= current_node-\u003epoint.y: target.x \u003c= current_node-\u003epoint.x; if(turn_left) SearchKdTreeNode(target,current_node-\u003eleft_node,near_nodes,radius,depth+1); else SearchKdTreeNode(target,current_node-\u003eright_node,near_nodes,radius,depth+1); // 这里的距离计算在 回溯时或递归深入时计算都可以 double r = (target.x - current_node-\u003epoint.x) * (target.x - current_node-\u003epoint.x) + (target.y - current_node-\u003epoint.y) * (target.y- current_node-\u003epoint.y); if(r \u003c radius) near_nodes.push_back(current_node);// 满足半径内要求 double tar2axis_dis2 = !(depth%2) ? (target.x - current_node-\u003epoint.x) * (target.x - current_node-\u003epoint.x) : (target.y - current_node-\u003epoint.y) * (target.y - current_node-\u003epoint.y); //圆心到current_node轴线的距离 // 在target圆心radius半径 的圆是否与轴线相交 // 只要与轴线相交了，轴线两边的空间就一定都会有一部分在圆内！ 则那部分圆内空间就可能包含节点 // 只要有节点 这些节点都是满足与target距离小于radius 的满足要求的节点 if(radius \u003e tar2axis_dis2)//相交 { //检查另外一分支 if(!turn_left) SearchKdTreeNode(target,current_node-\u003eleft_node,near_nodes,radius,depth+1); else SearchKdTreeNode(target,current_node-\u003eright_node,near_nodes,radius,depth+1); } } // 非kd tree BFS直接遍历整棵树得到解 可以拿这个解和kd tree的解比较 看kd tree的解是否正确 // BFS直接遍历整棵树 得到离target最近的节点 KdTreeNode* KdTree::BruceNearestKdTreeNode(const geometry_msgs::Point\u0026 target){ KdTreeNode* nearest_node = nullptr; double min_distance2 = DBL_MAX; std::queue\u003cKdTreeNode*\u003e q; q.push(root_); while(!q.empty()){ double distance2 = (target.x - q.front()-\u003epoint.x)*(target.x - q.front()-\u003epoint.x) + (target.y - q.front()-\u003epoint.y)*(target.y - q.front()-\u003epoint.y); if(distance2\u003cmin_distance2){ min_distance2 = distance2; nearest_node = q.front(); } if(q.front()-\u003eleft_node) q.push(q.front()-\u003eleft_node); if(q.front()-\u003eright_node) q.push(q.front()-\u003eright_node); q.pop(); } return nearest_node; } // BFS直接遍历整棵树 得到离target radius范围内的节点 std::vector\u003cKdTreeNode*\u003e KdTree::BruceNearKdTreeNode(const geometry_msgs::Point\u0026 target, double radius){ std::vector\u003cKdTreeNode*\u003e bruce_near_nodes; std::queue\u003cKdTreeNode*\u003e q; q.push(root_); while(!q.empty()){ double distance2 = (target.x - q.front()-\u003epoint.x)*(target.x - q.front()-\u003epoint.x) + (target.y - q.front()-\u003epoint.y)*(target.y - q.front()-\u003epoint.y); if(distance2 \u003c radius){ bruce_near_nodes.push_back(q.front()); } if(q.front()-\u003eleft_node) q.push(q.front()-\u003eleft_node); if(q.front()-\u003eright_node) q.push(q.front()-\u003eright_node); q.pop(); } return bruce_near_nodes; } 下面补充一下kd tree在高维度的改进 BBF\n一节介绍的Kd-tree在维度较小时（例如：K≤30），算法的查找效率很高，然而当Kd-tree用于对高维数据（例如：K≥100）进行索引和查找时，就面临着维数灾难（curse of dimension）问题，查找效率会随着维度的增加而迅速下降。通常，实际应用中，我们常常处理的数据都具有高维的特点，例如在图像检索和识别中，每张图像通常用一个几百维的向量来表示，每个特征点的局部特征用一个高维向量来表征（例如：128维的SIFT特征）。因此，为了能够让Kd-tree满足对高维数据的索引，Jeffrey S. Beis和David G. Lowe提出了一种改进算法——Kd-tree with BBF（Best Bin First），该算法能够实现近似K近邻的快速搜索，在保证一定查找精度的前提下使得查找速度较快。 — 查找距离最近的特征向量\n原始Kd-tree是为什么在低维空间中有效而到了高维空间后查找效率就会下降？\n为了能够找到查询点Q在数据集合中的最近邻点，有一个重要的操作步骤：回溯，该步骤是在未被访问过的且与Q的超球面相交的子树分支中查找可能存在的最近邻点。随着维度K的增大，与Q的超球面相交的超矩形（子树分支所在的区域）就会增加，这就意味着需要回溯判断的树分支就会更多，从而算法的查找效率便会下降很大。\n一个很自然的思路是：既然kd-tree算法在高维空间中是由于过多的回溯次数导致算法查找效率下降的话，我们就可以限制查找时进行回溯的次数上限，从而避免查找效率下降。这样做有两个问题需要解决：1）最大回溯次数怎么确定？2）怎样保证在最大回溯次数内找到的最近邻比较接近真实最近邻，即查找准确度不能下降太大。\n问题1）：最大回溯次数怎么确定？\n最大回溯次数一般人为设定，通常根据在数据集上的实验结果进行调整。\n问题2）：怎样保证在最大回溯次数内找到的最近邻比较接近真实最近邻，即查找准确度不能下降太大？\n限制回溯次数后，如果我们还是按照原来的回溯方法挨个地进行访问的话，那很显然最后的查找结果的精度就很大程度上取决于数据的分布和回溯次数了。挨个访问的方法的问题在于认为每个待回溯的树分支中存在最近邻的概率是一样的，所以它对所有的待回溯树分支一视同仁。实际上，在这些待回溯树分支中，有些树分支存在最近邻的可能性比其他树分支要高，因为树分支离Q点之间的距离或相交程度是不一样的，离Q更近的树分支存在Q的最近邻的可能性更高。因此，我们需要区别对待每个待回溯的树分支，即采用某种优先级顺序来访问这些待回溯树分支，使得在有限的回溯次数中找到Q的最近邻的可能性很高\n基于BBF的Kd-Tree近似最近邻查找算法\n已知：\nQ：查询数据； KT：已建好的Kd-Tree；\n查找Q的当前最近邻点P 1）从KT的根结点开始，将Q与中间结点node(k,m)进行比较，根据比较结果选择某个树分支Branch（或称为Bin）；并将未被选择的另一个树分支（Unexplored Branch）所在的树中位置和它跟Q之间的距离一起保存到一个优先级队列中Queue；\n2）按照步骤1）的过程，对树分支Branch进行如上比较和选择，直至访问到叶子结点，然后计算Q与叶子结点中保存的数据之间的距离，并记录下最小距离D以及对应的数据P。\n注：\nA、Q与中间结点node(k,m)的比较过程：如果Q(k) \u003e m则选择右子树，否则选择左子树。\nB、优先级队列：按照距离从小到大的顺序排列。\nC、叶子结点：每个叶子结点中保存的数据的个数可能是一个或多个。\n基于BBF的回溯 已知：最大回溯次数BTmax\n1）如果当前回溯的次数小于BTmax，且Queue不为空，则进行如下操作：\n从Queue中取出最小距离对应的Branch，然后按照1.1步骤访问该Branch直至达到叶子结点；计算Q与叶子结点中各个数据间距离，如果有比D更小的值，则将该值赋给D，该数据则被认为是Q的当前近似最近邻点；\n2）重复1）步骤，直到回溯次数大于BTmax或Queue为空时，查找结束，此时得到的数据P和距离D就是Q的近似最近邻点和它们之间的距离。\n","wordCount":"888","inLanguage":"en","datePublished":"2022-03-05T00:00:00Z","dateModified":"2025-03-03T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/planning/rce8k8/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">3 基于采样的路径规划2 KDtree代码注释,BBF介绍</h1><div class=post-meta><span title=2022-03-05T00:00:00+00:00>创建于 2022-03-05</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>KdTreeNode</span>{
+</span></span><span style=display:flex><span>    geometry_msgs<span style=color:#f92672>::</span>Point point; <span style=color:#75715e>// 节点坐标
+</span></span></span><span style=display:flex><span>    KdTreeNode<span style=color:#f92672>*</span> parent_node;        <span style=color:#75715e>// Used for plan planning  父节点
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>double</span> distance;                <span style=color:#75715e>// Used for plan planning
+</span></span></span><span style=display:flex><span>    KdTreeNode<span style=color:#f92672>*</span> left_node;          <span style=color:#75715e>// Used for kd tree 左孩子
+</span></span></span><span style=display:flex><span>    KdTreeNode<span style=color:#f92672>*</span> right_node;         <span style=color:#75715e>// used for kd tree 右孩子
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> trajectory_id;              <span style=color:#75715e>// used for submaps
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> submap_index;               <span style=color:#75715e>// used for submaps
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    KdTreeNode();
+</span></span><span style=display:flex><span>    KdTreeNode(geometry_msgs<span style=color:#f92672>::</span>Point p);
+</span></span><span style=display:flex><span>    KdTreeNode(geometry_msgs<span style=color:#f92672>::</span>Point p, <span style=color:#66d9ef>int</span> trajectory_idx, <span style=color:#66d9ef>int</span> submap_idx);
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>// 节点构造 依次赋值
+</span></span></span><span style=display:flex><span>    KdTreeNode<span style=color:#f92672>::</span>KdTreeNode() <span style=color:#f92672>:</span> parent_node(<span style=color:#66d9ef>nullptr</span>), distance (<span style=color:#ae81ff>0.0</span>), left_node(<span style=color:#66d9ef>nullptr</span>), right_node(<span style=color:#66d9ef>nullptr</span>),
+</span></span><span style=display:flex><span>                           trajectory_id(<span style=color:#ae81ff>0</span>), submap_index(<span style=color:#ae81ff>0</span>){
+</span></span><span style=display:flex><span>        point.x <span style=color:#f92672>=</span> <span style=color:#ae81ff>0.0</span>;
+</span></span><span style=display:flex><span>        point.y <span style=color:#f92672>=</span> <span style=color:#ae81ff>0.0</span>;
+</span></span><span style=display:flex><span>        point.z <span style=color:#f92672>=</span> <span style=color:#ae81ff>0.0</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    KdTreeNode<span style=color:#f92672>::</span>KdTreeNode(geometry_msgs<span style=color:#f92672>::</span>Point p) <span style=color:#f92672>:</span> point(p), parent_node(<span style=color:#66d9ef>nullptr</span>), distance (<span style=color:#ae81ff>0.0</span>),
+</span></span><span style=display:flex><span>        left_node(<span style=color:#66d9ef>nullptr</span>), right_node(<span style=color:#66d9ef>nullptr</span>), trajectory_id(<span style=color:#ae81ff>0</span>), submap_index(<span style=color:#ae81ff>0</span>){}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    KdTreeNode<span style=color:#f92672>::</span>KdTreeNode(geometry_msgs<span style=color:#f92672>::</span>Point p, <span style=color:#66d9ef>int</span> trajectory_idx, <span style=color:#66d9ef>int</span> submap_idx) <span style=color:#f92672>:</span> point(p),
+</span></span><span style=display:flex><span>        parent_node(<span style=color:#66d9ef>nullptr</span>), distance (<span style=color:#ae81ff>0.0</span>), left_node(<span style=color:#66d9ef>nullptr</span>), right_node(<span style=color:#66d9ef>nullptr</span>),
+</span></span><span style=display:flex><span>        trajectory_id(trajectory_idx), submap_index(submap_idx){}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 树的构造
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// Constructor
+</span></span></span><span style=display:flex><span>    KdTree<span style=color:#f92672>::</span>KdTree() <span style=color:#f92672>:</span> root_(<span style=color:#66d9ef>new</span> KdTreeNode ()){}
+</span></span><span style=display:flex><span>    KdTree<span style=color:#f92672>::</span>KdTree(geometry_msgs<span style=color:#f92672>::</span>Point start_point) <span style=color:#f92672>:</span> root_(<span style=color:#66d9ef>new</span> KdTreeNode (start_point)){}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 递归析构kd tree Destroy RRT
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> KdTree<span style=color:#f92672>::</span>DestroyRRT(KdTreeNode<span style=color:#f92672>*</span> root){
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span>(root<span style=color:#f92672>!=</span><span style=color:#66d9ef>nullptr</span>){
+</span></span><span style=display:flex><span>            DestroyRRT(root<span style=color:#f92672>-&gt;</span>left_node);<span style=color:#75715e>// 递归析构左子树
+</span></span></span><span style=display:flex><span>            DestroyRRT(root<span style=color:#f92672>-&gt;</span>right_node);<span style=color:#75715e>// 递归析构右子树
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>delete</span>(root);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    KdTreeNode<span style=color:#f92672>*</span> KdTree<span style=color:#f92672>::</span>AddPointToKdTree(<span style=color:#66d9ef>const</span> geometry_msgs<span style=color:#f92672>::</span>Point<span style=color:#f92672>&amp;</span> point){
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#a6e22e>AddPointToKdTree</span>(point, root_, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    KdTreeNode<span style=color:#f92672>*</span> KdTree<span style=color:#f92672>::</span>AddPointToKdTree(<span style=color:#66d9ef>const</span> geometry_msgs<span style=color:#f92672>::</span>Point<span style=color:#f92672>&amp;</span> point, <span style=color:#66d9ef>int</span> trajectory_idx, <span style=color:#66d9ef>int</span> submap_idx){
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>auto</span> added_node <span style=color:#f92672>=</span> AddPointToKdTree(point, root_, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>        added_node<span style=color:#f92672>-&gt;</span>trajectory_id <span style=color:#f92672>=</span> trajectory_idx;
+</span></span><span style=display:flex><span>        added_node<span style=color:#f92672>-&gt;</span>submap_index <span style=color:#f92672>=</span> submap_idx;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> added_node;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    KdTreeNode<span style=color:#f92672>*</span> KdTree<span style=color:#f92672>::</span>AddPointToKdTree(<span style=color:#66d9ef>const</span> geometry_msgs<span style=color:#f92672>::</span>Point<span style=color:#f92672>&amp;</span> point, KdTreeNode<span style=color:#f92672>*</span> parent, <span style=color:#66d9ef>int</span> depth){
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//向kd 树中添加节点，这里kd树每层的划分标准依然是依次划分选择维度 --- 先划分x维度再y维度
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//-- depth从0开始， depth%2==0的层次 其右子树的x都大于此层，左子树的x都小于此层。
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// depth%2==1的层次 其右子树的y都大于此层，左子树的y都小于此层。
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//而非选择最大方差维度划分
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//就是二分添加 依照每层的划分规则 不断下探 新节点一定作为叶子节点！！！！
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(parent<span style=color:#f92672>-&gt;</span>point <span style=color:#f92672>==</span> point) <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>nullptr</span>;<span style=color:#75715e>// 节点已经存在于树中
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>bool</span> turn_left <span style=color:#f92672>=</span> (depth<span style=color:#f92672>%</span><span style=color:#ae81ff>2</span>)<span style=color:#f92672>?</span> point.y <span style=color:#f92672>&lt;=</span> parent<span style=color:#f92672>-&gt;</span>point.y: point.x <span style=color:#f92672>&lt;=</span> parent<span style=color:#f92672>-&gt;</span>point.x;<span style=color:#75715e>//==算在左树里
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 叶子节点的情况下面 已经考虑到了不需要单独再写了
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// if(!parent-&gt;left_node &amp;&amp; !parent-&gt;right_node)
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// {
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//     //当前节点parent是叶子节点
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//     KdTreeNode* new_node = new KdTreeNode(point);
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//     if(turn_left)
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//     {
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//         parent-&gt;left_node =new_node;
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//         parent-&gt;left_node-&gt;parent_node = parent;
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//     }
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//     else
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//     {
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//         parent-&gt;right_node = new_node;
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//         parent-&gt;right_node-&gt;parent_node = parent;
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//     }
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//     return new_node;
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// }
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(turn_left)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>if</span>(parent<span style=color:#f92672>-&gt;</span>left_node)
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>return</span> AddPointToKdTree(point,parent<span style=color:#f92672>-&gt;</span>left_node,depth<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>else</span>  <span style=color:#75715e>// 父节点没有左子树 则新节点就正好插在那个地方
+</span></span></span><span style=display:flex><span>                {
+</span></span><span style=display:flex><span>                    parent<span style=color:#f92672>-&gt;</span>left_node <span style=color:#f92672>=</span><span style=color:#66d9ef>new</span> KdTreeNode(point);
+</span></span><span style=display:flex><span>                    parent<span style=color:#f92672>-&gt;</span>left_node<span style=color:#f92672>-&gt;</span>parent_node <span style=color:#f92672>=</span> parent;
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>return</span> parent<span style=color:#f92672>-&gt;</span>left_node;
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>if</span>(parent<span style=color:#f92672>-&gt;</span>right_node)
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>return</span> AddPointToKdTree(point,parent<span style=color:#f92672>-&gt;</span>right_node,depth<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>                {
+</span></span><span style=display:flex><span>                    parent<span style=color:#f92672>-&gt;</span>right_node <span style=color:#f92672>=</span><span style=color:#66d9ef>new</span> KdTreeNode(point);
+</span></span><span style=display:flex><span>                    parent<span style=color:#f92672>-&gt;</span>right_node<span style=color:#f92672>-&gt;</span>parent_node <span style=color:#f92672>=</span> parent;
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>return</span> parent<span style=color:#f92672>-&gt;</span>right_node;
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 查找target的接口
+</span></span></span><span style=display:flex><span>    KdTreeNode<span style=color:#f92672>*</span> KdTree<span style=color:#f92672>::</span>NearestKdTreeNode(<span style=color:#66d9ef>const</span> geometry_msgs<span style=color:#f92672>::</span>Point<span style=color:#f92672>&amp;</span> target) <span style=color:#66d9ef>const</span> {
+</span></span><span style=display:flex><span>        KdTreeNode<span style=color:#f92672>*</span> nearest_node <span style=color:#f92672>=</span> <span style=color:#66d9ef>nullptr</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>double</span> closest_distance2 <span style=color:#f92672>=</span> DBL_MAX;<span style=color:#75715e>//DBL_MAX为double最大值的宏
+</span></span></span><span style=display:flex><span>        SearchKdTreeNode(target, root_, nearest_node, closest_distance2,<span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> nearest_node;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 半径内查找target的接口
+</span></span></span><span style=display:flex><span>    std<span style=color:#f92672>::</span>vector<span style=color:#f92672>&lt;</span>KdTreeNode<span style=color:#f92672>*&gt;</span> KdTree<span style=color:#f92672>::</span>NearKdTreeNode(<span style=color:#66d9ef>const</span> geometry_msgs<span style=color:#f92672>::</span>Point<span style=color:#f92672>&amp;</span> target,
+</span></span><span style=display:flex><span>                                                    <span style=color:#66d9ef>double</span> radius) <span style=color:#66d9ef>const</span> {
+</span></span><span style=display:flex><span>        std<span style=color:#f92672>::</span>vector<span style=color:#f92672>&lt;</span>KdTreeNode<span style=color:#f92672>*&gt;</span> near_nodes;
+</span></span><span style=display:flex><span>        SearchKdTreeNode(target,root_,near_nodes,radius <span style=color:#f92672>*</span> radius,<span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> near_nodes;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> KdTree<span style=color:#f92672>::</span>SearchKdTreeNode(<span style=color:#66d9ef>const</span> geometry_msgs<span style=color:#f92672>::</span>Point<span style=color:#f92672>&amp;</span> target,
+</span></span><span style=display:flex><span>                                KdTreeNode<span style=color:#f92672>*</span> current_node, <span style=color:#75715e>// 当前递归深度的节点
+</span></span></span><span style=display:flex><span>                                KdTreeNode<span style=color:#f92672>*&amp;</span> current_nearest_node,<span style=color:#75715e>// 指针的引用 此指针可修改 并做传出参数
+</span></span></span><span style=display:flex><span>                                <span style=color:#66d9ef>double</span><span style=color:#f92672>&amp;</span> current_cloest_distance2,<span style=color:#75715e>// 当前的最近欧式距离^2
+</span></span></span><span style=display:flex><span>                                <span style=color:#66d9ef>int</span> depth) <span style=color:#66d9ef>const</span>{
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 搜索target节点的 最近邻居节点
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//                                                                     |
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//                                        右子树根节点 是半个子空间的中心   x划分
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//                                                                     |
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// ----------父节点 y划分是左右子空间的中心-----------
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//                                      |                                     target
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//    左子树根节点 是半个子空间的中心 x划分
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//                                      |
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 可能出现target在 左或右某个子空间中  但是 它离另外一个子空间更近 所以需要检查是否离另一子空间中新更近
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 如果没有离另一子空间更近 则那个子空间中不存在离target更近的节点?
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 不太靠谱，还是有可能存在的，如果另一子空间中方差较大，就是可能存在 dis(子空间根节点,target) &gt; dis(某一子节点,target)
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 那根据dis(子空间根节点,target) &gt; current_cloest_distance2 直接不看这个子空间 就可能错过最近节点
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 之前没理解到位 对于这个是否要检查另一分支的条件没有搞清楚
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 以target为圆心 以当前最近距离current_cloest_distance2为半径画圆
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 如果圆与节点所代表的轴！！！相交  (则轴线两边的空间都需要检查 因为一边在向下递归中检查过了 所以)
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 则需要将轴的另外一边需要检查
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 判断相交 如果圆心target和轴线的垂直距离 小于最近距离 则就是发生相交
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 在笔记中有图
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 先一路到最底叶子节点 (根据那层的比较维度 二分地选择分支递归向下) 中间不断计算到节点距离 更新最近节点指针
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 在向下的同时记录 以current_node节点为圆心 target到current_node节点的距离为半径，
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 如果current_node的子节点 和 target之间的距离大于这个半径 则那个分支可以完全不看
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 并且在之后回溯检查的时候也可以完全不管那些分支
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(<span style=color:#f92672>!</span>current_node) <span style=color:#66d9ef>return</span>;<span style=color:#75715e>//到底开始回溯
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//向下深入   查询与target处于同一子空间的节点   很快能找到最近邻的近似！！！点
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>bool</span> turn_left <span style=color:#f92672>=</span> (depth<span style=color:#f92672>%</span><span style=color:#ae81ff>2</span>)<span style=color:#f92672>?</span> target.y <span style=color:#f92672>&lt;=</span> current_node<span style=color:#f92672>-&gt;</span>point.y: target.x <span style=color:#f92672>&lt;=</span> current_node<span style=color:#f92672>-&gt;</span>point.x;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(turn_left)
+</span></span><span style=display:flex><span>                SearchKdTreeNode(target,current_node<span style=color:#f92672>-&gt;</span>left_node,current_nearest_node,current_cloest_distance2,depth<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>                <span style=color:#a6e22e>SearchKdTreeNode</span>(target,current_node<span style=color:#f92672>-&gt;</span>right_node,current_nearest_node,current_cloest_distance2,depth<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//回溯检查 另一分支 用turn_left就可直到上次哪个分支没被检查
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 为什么不在向下深入的时候判断最近距离 而在回溯的时候计算最近距离
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 并且因为下面 是否要查看另一分支时需要用到current_cloest_distance2，
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 在回溯的时候检查 越接近根节点current_cloest_distance2越接近正确值的那个最小距离
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 回溯到根节点时current_cloest_distance2越小，越有机会不去查看分支 可以减去大量的分支
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>double</span> r <span style=color:#f92672>=</span> (target.x <span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.x) <span style=color:#f92672>*</span> (target.x <span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.x) <span style=color:#f92672>+</span> (target.y <span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.y) <span style=color:#f92672>*</span> (target.y<span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.y);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>( r <span style=color:#f92672>&lt;</span> current_cloest_distance2)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                current_cloest_distance2 <span style=color:#f92672>=</span> r;
+</span></span><span style=display:flex><span>                current_nearest_node <span style=color:#f92672>=</span> current_node;
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 检查另一分支 的距离是否比当前最近距离current_cloest_distance2还近 如果更近才有检查的价值
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 理解错误  之前没理解到位 对于这个是否要检查另一分支的条件没有搞清楚
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// https://blog.csdn.net/silangquan/article/details/41483689  这个帖子 或者笔记有解释
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// if(turn_left)
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//     if(current_node-&gt;right_node)
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//         out_r = (target.x - current_node-&gt;right_node-&gt;point.x) * (target.x - current_node-&gt;right_node-&gt;point.x) +
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//         (target.y - current_node-&gt;right_node-&gt;point.y) * (target.y- current_node-&gt;right_node-&gt;point.y) &gt; current_cloest_distance2? true:false;
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// else
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//     if(current_node-&gt;left_node)
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//         out_r = (target.x - current_node-&gt;left_node-&gt;point.x) * (target.x - current_node-&gt;left_node-&gt;point.x) +
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//         (target.y - current_node-&gt;left_node-&gt;point.y) * (target.y- current_node-&gt;left_node-&gt;point.y) &gt; current_cloest_distance2? true:false;
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// if(!out_r) // 另一分支子空间超出范围则没有检查的必要 (超球面和子空间矩形完全不相交)
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// {
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//     if(turn_left)// 之前检查左 则这次检查右
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//         SearchKdTreeNode(target,current_node-&gt;right_node,current_nearest_node,current_cloest_distance2,depth+1);
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//     else // 之前检查右 则这次检查左
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//         SearchKdTreeNode(target,current_node-&gt;left_node,current_nearest_node,current_cloest_distance2,depth+1);
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// }
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 什么情况下，kd tree在回溯时需要检查另一空间
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 如上图，以target为圆心，以当前最近距离为半径，如果这个圆与中位数轴线相交，则这走线的两边空间内的节点都需要检查，
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 因为在递归向下时已经检查过了一个分支，所以回溯时只需要检查另外一个分支即可,判断是否相交 -- 圆心到轴线距离 &lt; 最近邻距离(半径) 那就是相交了。
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 为什么和轴线相交了就需要查看轴线两边的空间点?
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 因为只要与轴线相交了，轴线两边的空间就一定都会有一部分在圆内！ 在圆内的空间中如果有节点就会出现比当前最近邻还近的节点。
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>double</span> tar2axis_dis2 <span style=color:#f92672>=</span> <span style=color:#f92672>!</span>(depth<span style=color:#f92672>%</span><span style=color:#ae81ff>2</span>)
+</span></span><span style=display:flex><span>                    <span style=color:#f92672>?</span>   (target.x <span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.x) <span style=color:#f92672>*</span> (target.x <span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.x)
+</span></span><span style=display:flex><span>                    <span style=color:#f92672>:</span>   (target.y <span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.y) <span style=color:#f92672>*</span> (target.y <span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.y); <span style=color:#75715e>//圆心到current_node轴线的距离
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//如果圆(tar为圆心 最近邻距离current_cloest_distance2为半径)与轴线相交 则需要检查另一分支
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(current_cloest_distance2 <span style=color:#f92672>&gt;</span> tar2axis_dis2)<span style=color:#75715e>//相交
+</span></span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//检查另外一分支
+</span></span></span><span style=display:flex><span>                <span style=color:#66d9ef>if</span>(<span style=color:#f92672>!</span>turn_left)
+</span></span><span style=display:flex><span>                    SearchKdTreeNode(target,current_node<span style=color:#f92672>-&gt;</span>left_node,current_nearest_node,current_cloest_distance2,depth<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>                    <span style=color:#a6e22e>SearchKdTreeNode</span>(target,current_node<span style=color:#f92672>-&gt;</span>right_node,current_nearest_node,current_cloest_distance2,depth<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 搜索target  radius半径内的节点 结果存在near_nodes中传出
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> KdTree<span style=color:#f92672>::</span>SearchKdTreeNode(<span style=color:#66d9ef>const</span> geometry_msgs<span style=color:#f92672>::</span>Point<span style=color:#f92672>&amp;</span> target,
+</span></span><span style=display:flex><span>                              KdTreeNode<span style=color:#f92672>*</span> current_node,<span style=color:#75715e>// 当前递归深度的节点
+</span></span></span><span style=display:flex><span>                              std<span style=color:#f92672>::</span>vector<span style=color:#f92672>&lt;</span>KdTreeNode<span style=color:#f92672>*&gt;&amp;</span> near_nodes,
+</span></span><span style=display:flex><span>                              <span style=color:#66d9ef>double</span> radius,
+</span></span><span style=display:flex><span>                              <span style=color:#66d9ef>int</span> depth) <span style=color:#66d9ef>const</span>{
+</span></span><span style=display:flex><span>             <span style=color:#75715e>// 搜索target  radius半径内的节点 结果存在near_nodes中传出
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(<span style=color:#f92672>!</span>current_node) <span style=color:#66d9ef>return</span>;<span style=color:#75715e>//到底开始回溯
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//向下深入   查询与target处于同一子空间的节点   很快能找到最近邻的近似！！！点
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>bool</span> turn_left <span style=color:#f92672>=</span> (depth<span style=color:#f92672>%</span><span style=color:#ae81ff>2</span>)<span style=color:#f92672>?</span> target.y <span style=color:#f92672>&lt;=</span> current_node<span style=color:#f92672>-&gt;</span>point.y: target.x <span style=color:#f92672>&lt;=</span> current_node<span style=color:#f92672>-&gt;</span>point.x;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(turn_left)
+</span></span><span style=display:flex><span>                SearchKdTreeNode(target,current_node<span style=color:#f92672>-&gt;</span>left_node,near_nodes,radius,depth<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>                <span style=color:#a6e22e>SearchKdTreeNode</span>(target,current_node<span style=color:#f92672>-&gt;</span>right_node,near_nodes,radius,depth<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 这里的距离计算在 回溯时或递归深入时计算都可以
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>double</span> r <span style=color:#f92672>=</span> (target.x <span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.x) <span style=color:#f92672>*</span> (target.x <span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.x) <span style=color:#f92672>+</span> (target.y <span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.y) <span style=color:#f92672>*</span> (target.y<span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.y);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(r <span style=color:#f92672>&lt;</span> radius) near_nodes.push_back(current_node);<span style=color:#75715e>// 满足半径内要求
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>double</span> tar2axis_dis2 <span style=color:#f92672>=</span> <span style=color:#f92672>!</span>(depth<span style=color:#f92672>%</span><span style=color:#ae81ff>2</span>)
+</span></span><span style=display:flex><span>                    <span style=color:#f92672>?</span>   (target.x <span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.x) <span style=color:#f92672>*</span> (target.x <span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.x)
+</span></span><span style=display:flex><span>                    <span style=color:#f92672>:</span>   (target.y <span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.y) <span style=color:#f92672>*</span> (target.y <span style=color:#f92672>-</span> current_node<span style=color:#f92672>-&gt;</span>point.y); <span style=color:#75715e>//圆心到current_node轴线的距离
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 在target圆心radius半径 的圆是否与轴线相交
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 只要与轴线相交了，轴线两边的空间就一定都会有一部分在圆内！  则那部分圆内空间就可能包含节点
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 只要有节点 这些节点都是满足与target距离小于radius 的满足要求的节点
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(radius <span style=color:#f92672>&gt;</span> tar2axis_dis2)<span style=color:#75715e>//相交
+</span></span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//检查另外一分支
+</span></span></span><span style=display:flex><span>                <span style=color:#66d9ef>if</span>(<span style=color:#f92672>!</span>turn_left)
+</span></span><span style=display:flex><span>                    SearchKdTreeNode(target,current_node<span style=color:#f92672>-&gt;</span>left_node,near_nodes,radius,depth<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>                    <span style=color:#a6e22e>SearchKdTreeNode</span>(target,current_node<span style=color:#f92672>-&gt;</span>right_node,near_nodes,radius,depth<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 非kd tree BFS直接遍历整棵树得到解 可以拿这个解和kd tree的解比较 看kd tree的解是否正确
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// BFS直接遍历整棵树 得到离target最近的节点
+</span></span></span><span style=display:flex><span>    KdTreeNode<span style=color:#f92672>*</span> KdTree<span style=color:#f92672>::</span>BruceNearestKdTreeNode(<span style=color:#66d9ef>const</span> geometry_msgs<span style=color:#f92672>::</span>Point<span style=color:#f92672>&amp;</span> target){
+</span></span><span style=display:flex><span>        KdTreeNode<span style=color:#f92672>*</span> nearest_node <span style=color:#f92672>=</span> <span style=color:#66d9ef>nullptr</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>double</span> min_distance2 <span style=color:#f92672>=</span> DBL_MAX;
+</span></span><span style=display:flex><span>        std<span style=color:#f92672>::</span>queue<span style=color:#f92672>&lt;</span>KdTreeNode<span style=color:#f92672>*&gt;</span> q;
+</span></span><span style=display:flex><span>        q.push(root_);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span>(<span style=color:#f92672>!</span>q.empty()){
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>double</span> distance2 <span style=color:#f92672>=</span> (target.x <span style=color:#f92672>-</span> q.front()<span style=color:#f92672>-&gt;</span>point.x)<span style=color:#f92672>*</span>(target.x <span style=color:#f92672>-</span> q.front()<span style=color:#f92672>-&gt;</span>point.x) <span style=color:#f92672>+</span> (target.y <span style=color:#f92672>-</span> q.front()<span style=color:#f92672>-&gt;</span>point.y)<span style=color:#f92672>*</span>(target.y <span style=color:#f92672>-</span> q.front()<span style=color:#f92672>-&gt;</span>point.y);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(distance2<span style=color:#f92672>&lt;</span>min_distance2){
+</span></span><span style=display:flex><span>                min_distance2 <span style=color:#f92672>=</span> distance2;
+</span></span><span style=display:flex><span>                nearest_node <span style=color:#f92672>=</span> q.front();
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(q.front()<span style=color:#f92672>-&gt;</span>left_node) q.push(q.front()<span style=color:#f92672>-&gt;</span>left_node);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(q.front()<span style=color:#f92672>-&gt;</span>right_node) q.push(q.front()<span style=color:#f92672>-&gt;</span>right_node);
+</span></span><span style=display:flex><span>            q.pop();
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> nearest_node;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// BFS直接遍历整棵树 得到离target radius范围内的节点
+</span></span></span><span style=display:flex><span>    std<span style=color:#f92672>::</span>vector<span style=color:#f92672>&lt;</span>KdTreeNode<span style=color:#f92672>*&gt;</span> KdTree<span style=color:#f92672>::</span>BruceNearKdTreeNode(<span style=color:#66d9ef>const</span> geometry_msgs<span style=color:#f92672>::</span>Point<span style=color:#f92672>&amp;</span> target,
+</span></span><span style=display:flex><span>                                                                <span style=color:#66d9ef>double</span> radius){
+</span></span><span style=display:flex><span>        std<span style=color:#f92672>::</span>vector<span style=color:#f92672>&lt;</span>KdTreeNode<span style=color:#f92672>*&gt;</span> bruce_near_nodes;
+</span></span><span style=display:flex><span>        std<span style=color:#f92672>::</span>queue<span style=color:#f92672>&lt;</span>KdTreeNode<span style=color:#f92672>*&gt;</span> q;
+</span></span><span style=display:flex><span>        q.push(root_);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span>(<span style=color:#f92672>!</span>q.empty()){
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>double</span> distance2 <span style=color:#f92672>=</span> (target.x <span style=color:#f92672>-</span> q.front()<span style=color:#f92672>-&gt;</span>point.x)<span style=color:#f92672>*</span>(target.x <span style=color:#f92672>-</span> q.front()<span style=color:#f92672>-&gt;</span>point.x) <span style=color:#f92672>+</span> (target.y <span style=color:#f92672>-</span> q.front()<span style=color:#f92672>-&gt;</span>point.y)<span style=color:#f92672>*</span>(target.y <span style=color:#f92672>-</span> q.front()<span style=color:#f92672>-&gt;</span>point.y);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(distance2 <span style=color:#f92672>&lt;</span> radius){
+</span></span><span style=display:flex><span>                bruce_near_nodes.push_back(q.front());
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(q.front()<span style=color:#f92672>-&gt;</span>left_node) q.push(q.front()<span style=color:#f92672>-&gt;</span>left_node);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span>(q.front()<span style=color:#f92672>-&gt;</span>right_node) q.push(q.front()<span style=color:#f92672>-&gt;</span>right_node);
+</span></span><span style=display:flex><span>            q.pop();
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> bruce_near_nodes;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>下面补充一下kd tree在高维度的改进 BBF</p><p>一节介绍的Kd-tree在维度较小时（例如：K≤30），算法的查找效率很高，然而当Kd-tree用于对高维数据（例如：K≥100）进行索引和查找时，就面临着维数灾难（curse of dimension）问题，查找效率会随着维度的增加而迅速下降。通常，实际应用中，我们常常处理的数据都具有高维的特点，例如在图像检索和识别中，每张图像通常用一个几百维的向量来表示，每个特征点的局部特征用一个高维向量来表征（例如：128维的SIFT特征）。因此，为了能够让Kd-tree满足对高维数据的索引，Jeffrey S. Beis和David G. Lowe提出了一种改进算法——Kd-tree with BBF（Best Bin First），该算法能够实现近似K近邻的快速搜索，在保证一定查找精度的前提下使得查找速度较快。 &mdash; 查找距离最近的特征向量</p><p>原始Kd-tree是为什么在低维空间中有效而到了高维空间后查找效率就会下降？</p><p>为了能够找到查询点Q在数据集合中的最近邻点，有一个重要的操作步骤：回溯，该步骤是在未被访问过的且与Q的超球面相交的子树分支中查找可能存在的最近邻点。随着维度K的增大，与Q的超球面相交的超矩形（子树分支所在的区域）就会增加，这就意味着需要回溯判断的树分支就会更多，从而算法的查找效率便会下降很大。</p><p>一个很自然的思路是：既然kd-tree算法在高维空间中是由于过多的回溯次数导致算法查找效率下降的话，我们就可以限制查找时进行回溯的次数上限，从而避免查找效率下降。这样做有两个问题需要解决：1）最大回溯次数怎么确定？2）怎样保证在最大回溯次数内找到的最近邻比较接近真实最近邻，即查找准确度不能下降太大。</p><p>问题1）：最大回溯次数怎么确定？</p><p>最大回溯次数一般人为设定，通常根据在数据集上的实验结果进行调整。</p><p>问题2）：怎样保证在最大回溯次数内找到的最近邻比较接近真实最近邻，即查找准确度不能下降太大？</p><p>限制回溯次数后，如果我们还是按照原来的回溯方法挨个地进行访问的话，那很显然最后的查找结果的精度就很大程度上取决于数据的分布和回溯次数了。挨个访问的方法的问题在于认为每个待回溯的树分支中存在最近邻的概率是一样的，所以它对所有的待回溯树分支一视同仁。实际上，在这些待回溯树分支中，有些树分支存在最近邻的可能性比其他树分支要高，因为树分支离Q点之间的距离或相交程度是不一样的，离Q更近的树分支存在Q的最近邻的可能性更高。因此，我们需要区别对待每个待回溯的树分支，即采用某种优先级顺序来访问这些待回溯树分支，使得在有限的回溯次数中找到Q的最近邻的可能性很高</p><p>基于BBF的Kd-Tree近似最近邻查找算法</p><p>已知：</p><p>Q：查询数据； KT：已建好的Kd-Tree；</p><ol><li>查找Q的当前最近邻点P</li></ol><p>1）从KT的根结点开始，将Q与中间结点node(k,m)进行比较，根据比较结果选择某个树分支Branch（或称为Bin）；并将未被选择的另一个树分支（Unexplored Branch）所在的树中位置和它跟Q之间的距离一起保存到一个优先级队列中Queue；</p><p>2）按照步骤1）的过程，对树分支Branch进行如上比较和选择，直至访问到叶子结点，然后计算Q与叶子结点中保存的数据之间的距离，并记录下最小距离D以及对应的数据P。</p><p>注：</p><p>A、Q与中间结点node(k,m)的比较过程：如果Q(k) > m则选择右子树，否则选择左子树。</p><p>B、优先级队列：按照距离从小到大的顺序排列。</p><p>C、叶子结点：每个叶子结点中保存的数据的个数可能是一个或多个。</p><ol start=2><li>基于BBF的回溯</li></ol><p>已知：最大回溯次数BTmax</p><p>1）如果当前回溯的次数小于BTmax，且Queue不为空，则进行如下操作：</p><p>从Queue中取出最小距离对应的Branch，然后按照1.1步骤访问该Branch直至达到叶子结点；计算Q与叶子结点中各个数据间距离，如果有比D更小的值，则将该值赋给D，该数据则被认为是Q的当前近似最近邻点；</p><p>2）重复1）步骤，直到回溯次数大于BTmax或Queue为空时，查找结束，此时得到的数据P和距离D就是Q的近似最近邻点和它们之间的距离。</p></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

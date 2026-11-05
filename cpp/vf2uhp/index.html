@@ -1,0 +1,222 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux网络编程6 IO多路复用简介,select | CantBlog</title><meta name=keywords content><meta name=description content="IO多路复用简介
+IO多路复用(IO多路转接)**使得程序能同时监听多个文件描述符(多个缓冲区)，**提高程序性能，Linux下实现IO多路复用的系统调用主要有select,poll和epoll
+I 文件中内容写入内存 O 内存中内容输出到文件
+socket(fd文件描述符 对应于内核当中的一块读写缓冲区 )
+这里的IO其实就是指对这块缓冲区的操作
+a向写缓冲区中写数据 内核将写缓冲区的数据发到b底层 从底层中复制数据到 b的读缓冲区(内核中) b再从读缓冲区中读数据到应用程序(用户区中)
+几种常见的IO模型
+同步IO
+1阻塞等待 阻塞IO模型(Blocking IO)
+使用系统调用并一直阻塞到内核将数据准备好，之后再将数据从内核缓冲区复制到用户区中，在内核将数据准备好之前什么也干不了
+下图函数调用期间 一直被阻塞 直到数据准备好 且从内核复制到用户程序时系统调用才解除阻塞 函数返回
+|  |
+| &mdash; |
+阻塞期间用户线程挂起 不会占用CPU资源。但只能一个线程维护一个IO，如果要用于并发需要开启大量线程用来维护网络连接(我们之前写的就是这种)  就是Linux中阻塞的read
+2 非阻塞IO (Non-blocking IO)
+内核在没准备好数据的时候会直接返回错误码，不会阻塞。调用程序不会挂起，而是不断轮询内核数据是否准备好。 非阻塞式IO的轮询会耗费大量cpu**，通过将调节字描述符属性设置为非阻塞可使用该功能。 Linux中非阻塞read**
+如果服务器连接了成千上万个客户端，每一次调用recv都需要去遍历这成千上万的fd看是否有数据到达，非常低效
+每次发起IO调用，在内核等待数据的过程中可以立即返回，用户线程不会阻塞，实时性较好。 但是在并发时多个线程不断轮询内核是否有数据，会占用大量CPU时间，效率不高。一般web服务器不采用此模式。
+|  |
+| &mdash; |
+3多路复用IO(IO Multiplexing)
+类似于非阻塞，但是轮询不由用户线程执行而是由内核线程去轮询，内核监听程序听到数据准备好后，调用内核函数复制数据到用户态。
+比如下图中的select 这个系统调用充当代理的角色，不断轮询select注册的所有需要IO的文件描述符，当多个套接字的任意一个的数据准备好了，用户线程再调用read将数据从内核区复制到用户区(复制的过程中 进程阻塞)。
+|  |
+| &mdash; |
+select 线性扫描所有监听的为念描述符，不管它们是否活跃(监听数量有上限 32位机1024  64位机 2048)
+poll 同select但是数据结构不同，需要分配一个pollfd数据结构数组在内核中，没有大小限制(无监听上限) 不过需要很多复制操作
+slect和poll。只会告诉你有几个fd接收到消息了，但是不会告诉你是哪几个fd还是需要后续自己去遍历
+epoll 无大小限制(无监听上限)。使用一个文件描述符管理多个文件描述符，使用红黑树存储。同时用事件驱动代替轮询。epoll_ctl中注册的文件描述符在事件触发的时候会通过回调机制激活该文件描述符，epoll_wait函数返回。并且采用mmap虚拟内存映射技术减少用户态和内核态数据传输的开销。
+epoll会告诉你有几个fd接收到消息了，也会告诉你是哪几个fd消息到了
+系统不必维护大量线程 只需要一个线程就能处理大量的连接监听。本质上select/epoll系统调用是阻塞式的，属于同步IO，需要在读写事件就绪后，再有系统读写系统调用进行阻塞的读写。
+4 信号驱动式IO
+当内核数据准备就绪时通过信号来通知，当数据准备好内核会发送SIGIO信号，收到信号后再进行io操作。"><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/vf2uhp/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/vf2uhp/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/vf2uhp/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux网络编程6 IO多路复用简介,select"><meta property="og:description" content="IO多路复用简介
+IO多路复用(IO多路转接)**使得程序能同时监听多个文件描述符(多个缓冲区)，**提高程序性能，Linux下实现IO多路复用的系统调用主要有select,poll和epoll
+I 文件中内容写入内存 O 内存中内容输出到文件
+socket(fd文件描述符 对应于内核当中的一块读写缓冲区 )
+这里的IO其实就是指对这块缓冲区的操作
+a向写缓冲区中写数据 内核将写缓冲区的数据发到b底层 从底层中复制数据到 b的读缓冲区(内核中) b再从读缓冲区中读数据到应用程序(用户区中)
+几种常见的IO模型
+同步IO
+1阻塞等待 阻塞IO模型(Blocking IO)
+使用系统调用并一直阻塞到内核将数据准备好，之后再将数据从内核缓冲区复制到用户区中，在内核将数据准备好之前什么也干不了
+下图函数调用期间 一直被阻塞 直到数据准备好 且从内核复制到用户程序时系统调用才解除阻塞 函数返回
+| |
+| — |
+阻塞期间用户线程挂起 不会占用CPU资源。但只能一个线程维护一个IO，如果要用于并发需要开启大量线程用来维护网络连接(我们之前写的就是这种) 就是Linux中阻塞的read
+2 非阻塞IO (Non-blocking IO)
+内核在没准备好数据的时候会直接返回错误码，不会阻塞。调用程序不会挂起，而是不断轮询内核数据是否准备好。 非阻塞式IO的轮询会耗费大量cpu**，通过将调节字描述符属性设置为非阻塞可使用该功能。 Linux中非阻塞read**
+如果服务器连接了成千上万个客户端，每一次调用recv都需要去遍历这成千上万的fd看是否有数据到达，非常低效
+每次发起IO调用，在内核等待数据的过程中可以立即返回，用户线程不会阻塞，实时性较好。 但是在并发时多个线程不断轮询内核是否有数据，会占用大量CPU时间，效率不高。一般web服务器不采用此模式。
+| |
+| — |
+3多路复用IO(IO Multiplexing)
+类似于非阻塞，但是轮询不由用户线程执行而是由内核线程去轮询，内核监听程序听到数据准备好后，调用内核函数复制数据到用户态。
+比如下图中的select 这个系统调用充当代理的角色，不断轮询select注册的所有需要IO的文件描述符，当多个套接字的任意一个的数据准备好了，用户线程再调用read将数据从内核区复制到用户区(复制的过程中 进程阻塞)。
+| |
+| — |
+select 线性扫描所有监听的为念描述符，不管它们是否活跃(监听数量有上限 32位机1024 64位机 2048)
+poll 同select但是数据结构不同，需要分配一个pollfd数据结构数组在内核中，没有大小限制(无监听上限) 不过需要很多复制操作
+slect和poll。只会告诉你有几个fd接收到消息了，但是不会告诉你是哪几个fd还是需要后续自己去遍历
+epoll 无大小限制(无监听上限)。使用一个文件描述符管理多个文件描述符，使用红黑树存储。同时用事件驱动代替轮询。epoll_ctl中注册的文件描述符在事件触发的时候会通过回调机制激活该文件描述符，epoll_wait函数返回。并且采用mmap虚拟内存映射技术减少用户态和内核态数据传输的开销。
+epoll会告诉你有几个fd接收到消息了，也会告诉你是哪几个fd消息到了
+系统不必维护大量线程 只需要一个线程就能处理大量的连接监听。本质上select/epoll系统调用是阻塞式的，属于同步IO，需要在读写事件就绪后，再有系统读写系统调用进行阻塞的读写。
+4 信号驱动式IO
+当内核数据准备就绪时通过信号来通知，当数据准备好内核会发送SIGIO信号，收到信号后再进行io操作。"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-22T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux网络编程6 IO多路复用简介,select"><meta name=twitter:description content="IO多路复用简介
+IO多路复用(IO多路转接)**使得程序能同时监听多个文件描述符(多个缓冲区)，**提高程序性能，Linux下实现IO多路复用的系统调用主要有select,poll和epoll
+I 文件中内容写入内存 O 内存中内容输出到文件
+socket(fd文件描述符 对应于内核当中的一块读写缓冲区 )
+这里的IO其实就是指对这块缓冲区的操作
+a向写缓冲区中写数据 内核将写缓冲区的数据发到b底层 从底层中复制数据到 b的读缓冲区(内核中) b再从读缓冲区中读数据到应用程序(用户区中)
+几种常见的IO模型
+同步IO
+1阻塞等待 阻塞IO模型(Blocking IO)
+使用系统调用并一直阻塞到内核将数据准备好，之后再将数据从内核缓冲区复制到用户区中，在内核将数据准备好之前什么也干不了
+下图函数调用期间 一直被阻塞 直到数据准备好 且从内核复制到用户程序时系统调用才解除阻塞 函数返回
+| |
+| — |
+阻塞期间用户线程挂起 不会占用CPU资源。但只能一个线程维护一个IO，如果要用于并发需要开启大量线程用来维护网络连接(我们之前写的就是这种) 就是Linux中阻塞的read
+2 非阻塞IO (Non-blocking IO)
+内核在没准备好数据的时候会直接返回错误码，不会阻塞。调用程序不会挂起，而是不断轮询内核数据是否准备好。 非阻塞式IO的轮询会耗费大量cpu**，通过将调节字描述符属性设置为非阻塞可使用该功能。 Linux中非阻塞read**
+如果服务器连接了成千上万个客户端，每一次调用recv都需要去遍历这成千上万的fd看是否有数据到达，非常低效
+每次发起IO调用，在内核等待数据的过程中可以立即返回，用户线程不会阻塞，实时性较好。 但是在并发时多个线程不断轮询内核是否有数据，会占用大量CPU时间，效率不高。一般web服务器不采用此模式。
+| |
+| — |
+3多路复用IO(IO Multiplexing)
+类似于非阻塞，但是轮询不由用户线程执行而是由内核线程去轮询，内核监听程序听到数据准备好后，调用内核函数复制数据到用户态。
+比如下图中的select 这个系统调用充当代理的角色，不断轮询select注册的所有需要IO的文件描述符，当多个套接字的任意一个的数据准备好了，用户线程再调用read将数据从内核区复制到用户区(复制的过程中 进程阻塞)。
+| |
+| — |
+select 线性扫描所有监听的为念描述符，不管它们是否活跃(监听数量有上限 32位机1024 64位机 2048)
+poll 同select但是数据结构不同，需要分配一个pollfd数据结构数组在内核中，没有大小限制(无监听上限) 不过需要很多复制操作
+slect和poll。只会告诉你有几个fd接收到消息了，但是不会告诉你是哪几个fd还是需要后续自己去遍历
+epoll 无大小限制(无监听上限)。使用一个文件描述符管理多个文件描述符，使用红黑树存储。同时用事件驱动代替轮询。epoll_ctl中注册的文件描述符在事件触发的时候会通过回调机制激活该文件描述符，epoll_wait函数返回。并且采用mmap虚拟内存映射技术减少用户态和内核态数据传输的开销。
+epoll会告诉你有几个fd接收到消息了，也会告诉你是哪几个fd消息到了
+系统不必维护大量线程 只需要一个线程就能处理大量的连接监听。本质上select/epoll系统调用是阻塞式的，属于同步IO，需要在读写事件就绪后，再有系统读写系统调用进行阻塞的读写。
+4 信号驱动式IO
+当内核数据准备就绪时通过信号来通知，当数据准备好内核会发送SIGIO信号，收到信号后再进行io操作。"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux网络编程6 IO多路复用简介,select","item":"https://jler666.github.io/cpp/vf2uhp/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux网络编程6 IO多路复用简介,select","name":"Linux网络编程6 IO多路复用简介,select","description":"IO多路复用简介\nIO多路复用(IO多路转接)**使得程序能同时监听多个文件描述符(多个缓冲区)，**提高程序性能，Linux下实现IO多路复用的系统调用主要有select,poll和epoll\nI 文件中内容写入内存 O 内存中内容输出到文件\nsocket(fd文件描述符 对应于内核当中的一块读写缓冲区 )\n这里的IO其实就是指对这块缓冲区的操作\na向写缓冲区中写数据 内核将写缓冲区的数据发到b底层 从底层中复制数据到 b的读缓冲区(内核中) b再从读缓冲区中读数据到应用程序(用户区中)\n几种常见的IO模型\n同步IO\n1阻塞等待 阻塞IO模型(Blocking IO)\n使用系统调用并一直阻塞到内核将数据准备好，之后再将数据从内核缓冲区复制到用户区中，在内核将数据准备好之前什么也干不了\n下图函数调用期间 一直被阻塞 直到数据准备好 且从内核复制到用户程序时系统调用才解除阻塞 函数返回\n| |\n| \u0026mdash; |\n阻塞期间用户线程挂起 不会占用CPU资源。但只能一个线程维护一个IO，如果要用于并发需要开启大量线程用来维护网络连接(我们之前写的就是这种) 就是Linux中阻塞的read\n2 非阻塞IO (Non-blocking IO)\n内核在没准备好数据的时候会直接返回错误码，不会阻塞。调用程序不会挂起，而是不断轮询内核数据是否准备好。 非阻塞式IO的轮询会耗费大量cpu**，通过将调节字描述符属性设置为非阻塞可使用该功能。 Linux中非阻塞read**\n如果服务器连接了成千上万个客户端，每一次调用recv都需要去遍历这成千上万的fd看是否有数据到达，非常低效\n每次发起IO调用，在内核等待数据的过程中可以立即返回，用户线程不会阻塞，实时性较好。 但是在并发时多个线程不断轮询内核是否有数据，会占用大量CPU时间，效率不高。一般web服务器不采用此模式。\n| |\n| \u0026mdash; |\n3多路复用IO(IO Multiplexing)\n类似于非阻塞，但是轮询不由用户线程执行而是由内核线程去轮询，内核监听程序听到数据准备好后，调用内核函数复制数据到用户态。\n比如下图中的select 这个系统调用充当代理的角色，不断轮询select注册的所有需要IO的文件描述符，当多个套接字的任意一个的数据准备好了，用户线程再调用read将数据从内核区复制到用户区(复制的过程中 进程阻塞)。\n| |\n| \u0026mdash; |\nselect 线性扫描所有监听的为念描述符，不管它们是否活跃(监听数量有上限 32位机1024 64位机 2048)\npoll 同select但是数据结构不同，需要分配一个pollfd数据结构数组在内核中，没有大小限制(无监听上限) 不过需要很多复制操作\nslect和poll。只会告诉你有几个fd接收到消息了，但是不会告诉你是哪几个fd还是需要后续自己去遍历\nepoll 无大小限制(无监听上限)。使用一个文件描述符管理多个文件描述符，使用红黑树存储。同时用事件驱动代替轮询。epoll_ctl中注册的文件描述符在事件触发的时候会通过回调机制激活该文件描述符，epoll_wait函数返回。并且采用mmap虚拟内存映射技术减少用户态和内核态数据传输的开销。\nepoll会告诉你有几个fd接收到消息了，也会告诉你是哪几个fd消息到了\n系统不必维护大量线程 只需要一个线程就能处理大量的连接监听。本质上select/epoll系统调用是阻塞式的，属于同步IO，需要在读写事件就绪后，再有系统读写系统调用进行阻塞的读写。\n4 信号驱动式IO\n当内核数据准备就绪时通过信号来通知，当数据准备好内核会发送SIGIO信号，收到信号后再进行io操作。\n","keywords":[],"articleBody":"IO多路复用简介\nIO多路复用(IO多路转接)**使得程序能同时监听多个文件描述符(多个缓冲区)，**提高程序性能，Linux下实现IO多路复用的系统调用主要有select,poll和epoll\nI 文件中内容写入内存 O 内存中内容输出到文件\nsocket(fd文件描述符 对应于内核当中的一块读写缓冲区 )\n这里的IO其实就是指对这块缓冲区的操作\na向写缓冲区中写数据 内核将写缓冲区的数据发到b底层 从底层中复制数据到 b的读缓冲区(内核中) b再从读缓冲区中读数据到应用程序(用户区中)\n几种常见的IO模型\n同步IO\n1阻塞等待 阻塞IO模型(Blocking IO)\n使用系统调用并一直阻塞到内核将数据准备好，之后再将数据从内核缓冲区复制到用户区中，在内核将数据准备好之前什么也干不了\n下图函数调用期间 一直被阻塞 直到数据准备好 且从内核复制到用户程序时系统调用才解除阻塞 函数返回\n| |\n| — |\n阻塞期间用户线程挂起 不会占用CPU资源。但只能一个线程维护一个IO，如果要用于并发需要开启大量线程用来维护网络连接(我们之前写的就是这种) 就是Linux中阻塞的read\n2 非阻塞IO (Non-blocking IO)\n内核在没准备好数据的时候会直接返回错误码，不会阻塞。调用程序不会挂起，而是不断轮询内核数据是否准备好。 非阻塞式IO的轮询会耗费大量cpu**，通过将调节字描述符属性设置为非阻塞可使用该功能。 Linux中非阻塞read**\n如果服务器连接了成千上万个客户端，每一次调用recv都需要去遍历这成千上万的fd看是否有数据到达，非常低效\n每次发起IO调用，在内核等待数据的过程中可以立即返回，用户线程不会阻塞，实时性较好。 但是在并发时多个线程不断轮询内核是否有数据，会占用大量CPU时间，效率不高。一般web服务器不采用此模式。\n| |\n| — |\n3多路复用IO(IO Multiplexing)\n类似于非阻塞，但是轮询不由用户线程执行而是由内核线程去轮询，内核监听程序听到数据准备好后，调用内核函数复制数据到用户态。\n比如下图中的select 这个系统调用充当代理的角色，不断轮询select注册的所有需要IO的文件描述符，当多个套接字的任意一个的数据准备好了，用户线程再调用read将数据从内核区复制到用户区(复制的过程中 进程阻塞)。\n| |\n| — |\nselect 线性扫描所有监听的为念描述符，不管它们是否活跃(监听数量有上限 32位机1024 64位机 2048)\npoll 同select但是数据结构不同，需要分配一个pollfd数据结构数组在内核中，没有大小限制(无监听上限) 不过需要很多复制操作\nslect和poll。只会告诉你有几个fd接收到消息了，但是不会告诉你是哪几个fd还是需要后续自己去遍历\nepoll 无大小限制(无监听上限)。使用一个文件描述符管理多个文件描述符，使用红黑树存储。同时用事件驱动代替轮询。epoll_ctl中注册的文件描述符在事件触发的时候会通过回调机制激活该文件描述符，epoll_wait函数返回。并且采用mmap虚拟内存映射技术减少用户态和内核态数据传输的开销。\nepoll会告诉你有几个fd接收到消息了，也会告诉你是哪几个fd消息到了\n系统不必维护大量线程 只需要一个线程就能处理大量的连接监听。本质上select/epoll系统调用是阻塞式的，属于同步IO，需要在读写事件就绪后，再有系统读写系统调用进行阻塞的读写。\n4 信号驱动式IO\n当内核数据准备就绪时通过信号来通知，当数据准备好内核会发送SIGIO信号，收到信号后再进行io操作。\n| |\n| — |\n5异步IO(Asynchronous IO)\n异步IO依赖信号处理函数进行通知，和前面的同步IO模型的不同点在于 前面的都是数据准备阶段的阻塞与非阻塞，但是异步IO直接通知IO操作是否完成\n异步IO才是真正的非阻塞，主进程只负责做自己的事，等IO操作完成(数据成功从内核中复制到应用程序空间)时通过回调函数对数据进行处理\nunix总异步io函数以aio_或lio_打头\n| |\n| — |\n真正实现了非阻塞，吞吐量在几种模式中是最高的，\n需要内核支持，异步IO在Linux2.6才引入，目前并不完善，其底层实现仍使用epoll\n5种IO模型对比\n| |\n| — |\nselect API介绍\n1 首先构造一个关于文件描述符的列表，将要监听的文件描述符添加到该列表中\n2 调用select 监听该列表中的所有文件描述符。当这些描述符中的一个或多个进行IO操作时，该函数返回(没检测到列表中fd有做IO操作时阻塞)。\nselect对文件描述符列表的检测操作 由内核帮我们做了\n3 select返回时 会告诉进程有多少(哪些)描述符进行了IO操作\n#include #include #include #include int select(int nfds,fd_set *readfds,fd_set *writefds, fd_set *exceptfds,struct timeval *timeout); //nfds 委托内核检测的最大文件描述符的值+1 //readfds 委托内核要检测的是否可以进行读IO操作的文件描述符(文件描述符的读缓存区是否有数据---检测对方是否发送数据过来)的集合，此参数是个传入传出参数，传入想读的fd_set(想读对应fd数值位置1)，传出当前可读的fd(可读的对应fd数值位置1) //sizeof(fd_set) = 128(字节)--1024位(正好就是一个进程最多可拥有的文件描述符的数量) //writefds委托内核要检测的是否可以进行写IO操作的文件描述符(文件描述符的写缓存区是否有空间可以进行写)的集合，此参数是个传入传出参数，传入想写的fd_set(想写对应fd数值位置1)，传出当前可写的fd(可写的对应fd数值位置1 对应fd写缓冲区满了的位为0) //exceptfds 委托内核要检测的是否发生异常的文件描述符集合 //timeout 此函数阻塞检测的最大时间 timeval {tv_sec//秒 tv_usec//微秒} 传NULL则为永久阻塞直到要检测的fd的状态发生变化。tv_sec tv_usec都为0 则select不会阻塞 //返回-1 调用失败 n\u003e0 检测的fd集合中有n个描述符发生了变化 //下面函数都是对fd集合的二进制位操作 void FD_CLR(int fd,fd_set *set); //将set中fd值对应的位置(第fd+1位 因为fd是从0开始的) 清0 int FD_ISSET(int fd,fd_set *set); //判断set中fd值对应的位置(第fd+1位 因为fd是从0开始的) 是0还是1 //是0返回0 是1返回1 void FD_SET(int fd,fd_set *set); //将set中fd值对应的位置(第fd+1位 因为fd是从0开始的) 置1 void FD_ZERO(fd_set *set); //将set的所有位清0 举个例子 说明select的工作流程\n客户端A B C D连接到服务器分别对应文件描述符3,4,100,101\n下面设置一个fd集合reads,并且调用select进行监听。虽然只有4个文件描述符要监听但是内核依旧会线性扫描0-nfds(101+1)中所有fd，如果在set中此fd+1值对应的位为1才会去检测这个文件描述符是否有数据。\n| |\n| — |\n| |\n做过reads这个fdset将内核中检测到的结果set传出 拷贝到用户态\nselect代码举例\n//io多路复用之select #include #include #include #include #include #include int main() { //创建监听socket int lfd = socket(PF_INET, SOCK_STREAM, 0); struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip //绑定 bind(lfd, (struct sockaddr *)\u0026saddr, sizeof(saddr)); //监听 listen(lfd, 8); //等待连接的最大队列长度为8 //原BIO accept 接收连接 + while死循环与客户端通信 //IOM 多路复用 fd_set reads, reads_temp; //fd_set本质上是个数组存了1024位(128个字节) long int(8字节) long int [1024/64] //需要检测的是reads 交给内核去修改的是reads_temp FD_ZERO(\u0026reads); //清空 所有位置为0 //添加要监听的文件描述符到set中 FD_SET(lfd, \u0026reads); //监听连接的这个fd 是肯定要读的 int maxfd = lfd; while (1) { reads_temp = reads; //调用select 让内核帮助监听文件描述符 int ret = select(maxfd + 1, \u0026reads_temp, NULL, NULL, NULL); //只辅助监听 不检测是否能写 不检测是否有一样 永久阻塞 if (ret == -1) { perror(\"select:\"); exit(-1); } else if (ret == 0) //超时时间到了 并且在这段时间内要检测的fd的状态没有改变(没有新的可读信息) { continue; } else if (ret \u003e 0) //ret\u003e0 ret中保存我们监听的fd中有几个的状态发生改变(有几个fd的读缓冲区数据发生变化--即有新的可读信息) { //reads为传入传出参数 传出有新可读信息fd+1位为1 if (FD_ISSET(lfd, \u0026reads_temp)) { //判断服务器监听描述符的读缓冲区是否有新的数据 //如果有则 ISSET返回1 其实就是表示有新的客户端连接进来了！！！！！！！ struct sockaddr_in client_addr; int len = sizeof(client_addr); int cfd = accept(lfd, (struct sockaddr *)\u0026client_addr, \u0026len); //接收这个新的连接 这里因为提前直到有新连接到来 调用accept不会阻塞 而是直接接收到那个连接请求 //返回的新的用于和连接进来的客户端通信的cfd //我们需要将这个通信fd也加入select监听的fd集合中 FD_SET(cfd, \u0026reads); maxfd = maxfd \u003e cfd ? maxfd : cfd; } //遍历其他集合中的文件描述符 //lfd是最早申请的 所以他的值也一定比后面新建的fd值小 for (int i = lfd + 1; i \u003c= maxfd; i++) { if (FD_ISSET(i, \u0026reads_temp)) { //fd = i对应的连接的客户端发来了数据 char buf[1024] = {}; int len = read(i, buf, sizeof(buf)); //调用read 因为缓冲区有数据 所以不会阻塞可以直接读 if (len == -1) { perror(\"read:\"); exit(-1); } else if (len == 0) { //对方断开连接 printf(\"client closed\\n\"); //将这个通信fd移除 close(i); FD_CLR(i, \u0026reads); } else if (len \u003e 0) //读到了数据 { //数据处理 printf(\"from client: %s \\n\", buf); write(i, buf, strlen(buf) + 1); //回写 } } } } } close(lfd); return 0; } ","wordCount":"451","inLanguage":"en","datePublished":"2022-03-22T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/vf2uhp/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux网络编程6 IO多路复用简介,select</h1><div class=post-meta><span title=2022-03-22T00:00:00+00:00>创建于 2022-03-22</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>IO多路复用简介</strong></p><p>IO多路复用(IO多路转接)**使得程序能同时监听多个文件描述符(多个缓冲区)，**提高程序性能，Linux下实现IO多路复用的系统调用主要有select,poll和epoll</p><p>I 文件中内容写入内存 O 内存中内容输出到文件</p><p>socket(fd文件描述符 对应于内核当中的一块读写缓冲区 )</p><p>这里的IO其实就是指对这块缓冲区的操作</p><p>a向写缓冲区中写数据 内核将写缓冲区的数据发到b底层 从底层中复制数据到 b的读缓冲区(内核中) b再从读缓冲区中读数据到应用程序(用户区中)</p><p>几种常见的IO模型</p><p>同步IO</p><p>1阻塞等待 阻塞IO模型(Blocking IO)</p><p>使用系统调用并一直阻塞到内核将数据准备好，之后再将数据从内核缓冲区复制到用户区中，在内核将数据准备好之前什么也干不了</p><p>下图函数调用期间 一直被阻塞 直到数据准备好 且从内核复制到用户程序时系统调用才解除阻塞 函数返回</p><p>| <img alt=1647917994400-398fbf43-aa2e-43ab-882e-444e8a206d32.png loading=lazy src=/images/DD6oWGdPpT6JwrgQ/1647917994400-398fbf43-aa2e-43ab-882e-444e8a206d32-804014.png> |</p><p>| &mdash; |</p><p>阻塞期间用户线程挂起 不会占用CPU资源。但只能一个线程维护一个IO，如果要用于并发需要开启大量线程用来维护网络连接(我们之前写的就是这种) <strong>就是Linux中阻塞的read</strong></p><p>2 非阻塞IO (Non-blocking IO)</p><p>内核在没准备好数据的时候会直接返回错误码，不会阻塞。调用程序不会挂起，而是不断轮询内核数据是否准备好。 非阻塞式IO的轮询会耗费大量cpu**，通过将调节字描述符属性设置为非阻塞可使用该功能。 Linux中非阻塞read**</p><p><strong>如果服务器连接了成千上万个客户端，每一次调用recv都需要去遍历这成千上万的fd看是否有数据到达，非常低效</strong></p><p>每次发起IO调用，在内核等待数据的过程中可以立即返回，用户线程不会阻塞，实时性较好。 但是在并发时多个线程不断轮询内核是否有数据，<strong>会占用大量CPU时间</strong>，效率不高。一般web服务器不采用此模式。</p><p>| <img alt=1647917995473-c33f6a13-0495-4684-9ee5-9c0c81b73588.png loading=lazy src=/images/DD6oWGdPpT6JwrgQ/1647917995473-c33f6a13-0495-4684-9ee5-9c0c81b73588-524170.png> |</p><p>| &mdash; |</p><p>3多路复用IO(IO Multiplexing)</p><p><strong>类似于非阻塞，但是轮询不由用户线程执行而是由内核线程去轮询，内核监听程序听到数据准备好后，调用内核函数复制数据到用户态。</strong></p><p><strong>比如下图中的select 这个系统调用充当代理的角色，不断轮询select注册的所有需要IO的文件描述符，当多个套接字的任意一个的数据准备好了，用户线程再调用read将数据从内核区复制到用户区(复制的过程中 进程阻塞)。</strong></p><p>| <img alt=1647917996850-216ec343-c5c1-4ac7-a89f-6672122cdd8f.png loading=lazy src=/images/DD6oWGdPpT6JwrgQ/1647917996850-216ec343-c5c1-4ac7-a89f-6672122cdd8f-304726.png> |</p><p>| &mdash; |</p><p><strong>select 线性扫描所有监听的为念描述符，不管它们是否活跃(监听数量有上限 32位机1024 64位机 2048)</strong></p><p><strong>poll 同select但是数据结构不同，需要分配一个pollfd数据结构数组在内核中，没有大小限制(无监听上限) 不过需要很多复制操作</strong></p><p><strong>slect和poll。只会告诉你有几个fd接收到消息了，但是不会告诉你是哪几个fd还是需要后续自己去遍历</strong></p><p><strong>epoll 无大小限制(无监听上限)。使用一个文件描述符管理多个文件描述符，使用红黑树存储。同时用事件驱动代替轮询。epoll_ctl中注册的文件描述符在事件触发的时候会通过回调机制激活该文件描述符，epoll_wait函数返回。并且采用mmap虚拟内存映射技术减少用户态和内核态数据传输的开销。</strong></p><p><strong>epoll会告诉你有几个fd接收到消息了，也会告诉你是哪几个fd消息到了</strong></p><p><strong>系统不必维护大量线程 只需要一个线程就能处理大量的连接监听。本质上select/epoll系统调用是阻塞式的，属于同步IO，需要在读写事件就绪后，再有系统读写系统调用进行阻塞的读写。</strong></p><p>4 信号驱动式IO</p><p>当内核数据准备就绪时通过信号来通知，当数据准备好内核会发送SIGIO信号，收到信号后再进行io操作。</p><p>| <img alt=1647917998266-baa15527-05f2-4769-bdba-b1ec424c62c4.png loading=lazy src=/images/DD6oWGdPpT6JwrgQ/1647917998266-baa15527-05f2-4769-bdba-b1ec424c62c4-692636.png> |</p><p>| &mdash; |</p><p>5异步IO(Asynchronous IO)</p><p>异步IO依赖信号处理函数进行通知，和前面的同步IO模型的不同点在于 前面的都是数据准备阶段的阻塞与非阻塞，但是异步IO直接通知IO操作是否完成</p><p>异步IO才是真正的非阻塞，主进程只负责做自己的事，等IO操作完成(数据成功从内核中复制到应用程序空间)时通过回调函数对数据进行处理</p><p>unix总异步io函数以aio_或lio_打头</p><p>| <img alt=1647918000910-e39c1123-0bb4-4265-96d7-72b361c14505.png loading=lazy src=/images/DD6oWGdPpT6JwrgQ/1647918000910-e39c1123-0bb4-4265-96d7-72b361c14505-570327.png> |</p><p>| &mdash; |</p><p>真正实现了非阻塞，吞吐量在几种模式中是最高的，</p><p>需要内核支持，异步IO在Linux2.6才引入，目前并不完善，其底层实现仍使用epoll</p><p>5种IO模型对比</p><p>| <img alt=1647918002830-67d01de9-fc57-491b-b79e-cfd3c5be5ad5.png loading=lazy src=/images/DD6oWGdPpT6JwrgQ/1647918002830-67d01de9-fc57-491b-b79e-cfd3c5be5ad5-288041.png> |</p><p>| &mdash; |</p><p><strong>select API介绍</strong></p><p>1 首先构造一个关于文件描述符的列表，将要监听的文件描述符添加到该列表中</p><p>2 调用select 监听该列表中的所有文件描述符。当这些描述符中的一个或多个进行IO操作时，该函数返回(没检测到列表中fd有做IO操作时<strong>阻塞</strong>)。</p><p>select对文件描述符列表的检测操作 由内核帮我们做了</p><p>3 select返回时 会告诉进程有多少(哪些)描述符进行了IO操作</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/time.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/select.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>select</span>(<span style=color:#66d9ef>int</span> nfds,fd_set <span style=color:#f92672>*</span>readfds,fd_set <span style=color:#f92672>*</span>writefds,
+</span></span><span style=display:flex><span>fd_set <span style=color:#f92672>*</span>exceptfds,<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>timeval</span> <span style=color:#f92672>*</span>timeout);
+</span></span><span style=display:flex><span><span style=color:#75715e>//nfds 委托内核检测的最大文件描述符的值+1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//readfds 委托内核要检测的是否可以进行读IO操作的文件描述符(文件描述符的读缓存区是否有数据---检测对方是否发送数据过来)的集合，此参数是个传入传出参数，传入想读的fd_set(想读对应fd数值位置1)，传出当前可读的fd(可读的对应fd数值位置1)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//sizeof(fd_set) = 128(字节)--1024位(正好就是一个进程最多可拥有的文件描述符的数量)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//writefds委托内核要检测的是否可以进行写IO操作的文件描述符(文件描述符的写缓存区是否有空间可以进行写)的集合，此参数是个传入传出参数，传入想写的fd_set(想写对应fd数值位置1)，传出当前可写的fd(可写的对应fd数值位置1  对应fd写缓冲区满了的位为0)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//exceptfds 委托内核要检测的是否发生异常的文件描述符集合
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//timeout 此函数阻塞检测的最大时间   timeval {tv_sec//秒 tv_usec//微秒} 传NULL则为永久阻塞直到要检测的fd的状态发生变化。tv_sec tv_usec都为0 则select不会阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//返回-1 调用失败  n&gt;0 检测的fd集合中有n个描述符发生了变化
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>//下面函数都是对fd集合的二进制位操作
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>FD_CLR</span>(<span style=color:#66d9ef>int</span> fd,fd_set <span style=color:#f92672>*</span>set);
+</span></span><span style=display:flex><span><span style=color:#75715e>//将set中fd值对应的位置(第fd+1位 因为fd是从0开始的) 清0
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>FD_ISSET</span>(<span style=color:#66d9ef>int</span> fd,fd_set <span style=color:#f92672>*</span>set);
+</span></span><span style=display:flex><span><span style=color:#75715e>//判断set中fd值对应的位置(第fd+1位 因为fd是从0开始的) 是0还是1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//是0返回0 是1返回1
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>FD_SET</span>(<span style=color:#66d9ef>int</span> fd,fd_set <span style=color:#f92672>*</span>set);
+</span></span><span style=display:flex><span><span style=color:#75715e>//将set中fd值对应的位置(第fd+1位 因为fd是从0开始的) 置1
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>FD_ZERO</span>(fd_set <span style=color:#f92672>*</span>set);
+</span></span><span style=display:flex><span><span style=color:#75715e>//将set的所有位清0
+</span></span></span></code></pre></div><p>举个例子 说明select的工作流程</p><p>客户端A B C D连接到服务器分别对应文件描述符3,4,100,101</p><p>下面设置一个fd集合reads,并且调用select进行监听。虽然只有4个文件描述符要监听但是<strong>内核依旧会线性扫描0-nfds(101+1)中所有fd，如果在set中此fd+1值对应的位为1才会去检测这个文件描述符是否有数据。</strong></p><p>| <img alt=1647918004313-71604066-fc42-4c0d-979e-6d2d723e8a16.png loading=lazy src=/images/DD6oWGdPpT6JwrgQ/1647918004313-71604066-fc42-4c0d-979e-6d2d723e8a16-720781.png> |</p><p>| &mdash; |</p><p>| <img alt=1647918005874-3bcc048e-3102-412a-b7bf-dcee468802ad.png loading=lazy src=/images/DD6oWGdPpT6JwrgQ/1647918005874-3bcc048e-3102-412a-b7bf-dcee468802ad-902480.png> |</p><p>做过reads这个fdset将内核中检测到的结果set传出 拷贝到用户态</p><p><strong>select代码举例</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>//io多路复用之select
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/time.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;arpa/inet.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/select.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建监听socket
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> lfd <span style=color:#f92672>=</span> socket(PF_INET, SOCK_STREAM, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> saddr;
+</span></span><span style=display:flex><span>    saddr.sin_port <span style=color:#f92672>=</span> htons(<span style=color:#ae81ff>9999</span>);
+</span></span><span style=display:flex><span>    saddr.sin_family <span style=color:#f92672>=</span> AF_INET;
+</span></span><span style=display:flex><span>    saddr.sin_addr.s_addr <span style=color:#f92672>=</span> INADDR_ANY; <span style=color:#75715e>//服务器要绑定的地址 服务器任一网卡的ip
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//绑定
+</span></span></span><span style=display:flex><span>    bind(lfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>saddr, <span style=color:#66d9ef>sizeof</span>(saddr));
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//监听
+</span></span></span><span style=display:flex><span>    listen(lfd, <span style=color:#ae81ff>8</span>); <span style=color:#75715e>//等待连接的最大队列长度为8
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//原BIO accept 接收连接 + while死循环与客户端通信
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//IOM 多路复用
+</span></span></span><span style=display:flex><span>    fd_set reads, reads_temp; <span style=color:#75715e>//fd_set本质上是个数组存了1024位(128个字节) long int(8字节)  long int [1024/64]
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//需要检测的是reads 交给内核去修改的是reads_temp
+</span></span></span><span style=display:flex><span>    FD_ZERO(<span style=color:#f92672>&amp;</span>reads); <span style=color:#75715e>//清空 所有位置为0
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//添加要监听的文件描述符到set中
+</span></span></span><span style=display:flex><span>    FD_SET(lfd, <span style=color:#f92672>&amp;</span>reads); <span style=color:#75715e>//监听连接的这个fd 是肯定要读的
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> maxfd <span style=color:#f92672>=</span> lfd;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        reads_temp <span style=color:#f92672>=</span> reads;
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//调用select 让内核帮助监听文件描述符
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> select(maxfd <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>, <span style=color:#f92672>&amp;</span>reads_temp, NULL, NULL, NULL); <span style=color:#75715e>//只辅助监听 不检测是否能写 不检测是否有一样 永久阻塞
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;select:&#34;</span>);
+</span></span><span style=display:flex><span>            exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//超时时间到了 并且在这段时间内要检测的fd的状态没有改变(没有新的可读信息)
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>continue</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//ret&gt;0 ret中保存我们监听的fd中有几个的状态发生改变(有几个fd的读缓冲区数据发生变化--即有新的可读信息)
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//reads为传入传出参数 传出有新可读信息fd+1位为1
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (FD_ISSET(lfd, <span style=color:#f92672>&amp;</span>reads_temp))
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//判断服务器监听描述符的读缓冲区是否有新的数据
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//如果有则 ISSET返回1 其实就是表示有新的客户端连接进来了！！！！！！！
+</span></span></span><span style=display:flex><span>                <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> client_addr;
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> <span style=color:#66d9ef>sizeof</span>(client_addr);
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>int</span> cfd <span style=color:#f92672>=</span> accept(lfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>client_addr, <span style=color:#f92672>&amp;</span>len); <span style=color:#75715e>//接收这个新的连接  这里因为提前直到有新连接到来 调用accept不会阻塞 而是直接接收到那个连接请求
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//返回的新的用于和连接进来的客户端通信的cfd
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//我们需要将这个通信fd也加入select监听的fd集合中
+</span></span></span><span style=display:flex><span>                FD_SET(cfd, <span style=color:#f92672>&amp;</span>reads);
+</span></span><span style=display:flex><span>                maxfd <span style=color:#f92672>=</span> maxfd <span style=color:#f92672>&gt;</span> cfd <span style=color:#f92672>?</span> maxfd : cfd;
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//遍历其他集合中的文件描述符
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//lfd是最早申请的 所以他的值也一定比后面新建的fd值小
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> lfd <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>; i <span style=color:#f92672>&lt;=</span> maxfd; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>if</span> (FD_ISSET(i, <span style=color:#f92672>&amp;</span>reads_temp))
+</span></span><span style=display:flex><span>                {
+</span></span><span style=display:flex><span>                    <span style=color:#75715e>//fd = i对应的连接的客户端发来了数据
+</span></span></span><span style=display:flex><span>                    <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>1024</span>] <span style=color:#f92672>=</span> {};
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> read(i, buf, <span style=color:#66d9ef>sizeof</span>(buf)); <span style=color:#75715e>//调用read 因为缓冲区有数据 所以不会阻塞可以直接读
+</span></span></span><span style=display:flex><span>                    <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>                    {
+</span></span><span style=display:flex><span>                        perror(<span style=color:#e6db74>&#34;read:&#34;</span>);
+</span></span><span style=display:flex><span>                        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>                    {
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//对方断开连接
+</span></span></span><span style=display:flex><span>                        printf(<span style=color:#e6db74>&#34;client closed</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//将这个通信fd移除
+</span></span></span><span style=display:flex><span>                        close(i);
+</span></span><span style=display:flex><span>                        FD_CLR(i, <span style=color:#f92672>&amp;</span>reads);
+</span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//读到了数据
+</span></span></span><span style=display:flex><span>                    {
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//数据处理
+</span></span></span><span style=display:flex><span>                        printf(<span style=color:#e6db74>&#34;from client: %s </span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buf);
+</span></span><span style=display:flex><span>                        write(i, buf, strlen(buf) <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>); <span style=color:#75715e>//回写
+</span></span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    close(lfd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

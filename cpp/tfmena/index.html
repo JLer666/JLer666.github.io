@@ -1,0 +1,474 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux多线程开发1 线程概述,线程相关函数 | CantBlog</title><meta name=keywords content><meta name=description content="线程概述
+与进程(process)类似，线程(thread)是允许应用程序并发执行多个任务的一种机制。
+一个进程可以包含多个线程。同一个程序中的所有线程均会独立执行相同的程序，且共享同一份全局内存区域，其中包括初始化数据段、未初始化数据段，以及堆内存段。
+(传统意义上的unix进程只是多线程的一个特例 该进程只包含一个线程)
+进程是cpu分配资源的最小单位，线程是OS调度执行的最小单位。
+线程是轻量级的进程LWP(light weight process)在linux环境下线程的本质仍是进程。
+查看指定进程的LWP号 ps -Lf 指定进程的pid  (PID都一样 但每个线程都有自己的LWP号)
+为什么有了进程后还有有线程
+进程间的信息难以共享。对于父子进程来说除去只读代码区外，父子进程并未共享内存，因此必须采用一些进程间通信方式，在进程间进行信息交换。
+调用fork()来创建进程的代价相对较高，即使利用写时拷贝技术，仍需要复制诸如内存页表和文件描述符表之类的多种进程属性，这意味着fork()调用在时间上的开销依然不菲。
+线程之间能够方便、快速地共享信息。只需将数据复制到共享(全局或堆malloc)变量中即可。
+创建线程比创建进程通常要快10倍甚至更多。线程间是共享虚拟地址空间的，无需采用写时拷贝来复制内存也无需复制页表。
+所有线程共用同一块虚拟地址空间，但是会给不同线程划分栈空间和.text代码段的空间(将栈空间和.text分成小块分给这些线程)，main线程(主线程)的栈、线程1的栈&mldr; main线程的代码，线程1的代码&mldr;，其他部分都是共享相同的。
+
+线程间共享的资源
+进程PID 父进程ID PPID
+进程组ID 会话ID
+用户ID 用户组ID
+文件描述符表
+信号处置 (信号处理)
+文件系统相关信息：文件权限掩码(mask)、当前工作目录
+虚拟地址空间(除栈和.text段)
+非共享资源
+线程ID
+信号掩码 (阻塞信号集)
+线程特有数据
+error变量
+实时调度策略和优先级
+栈、本地变量和函数的调用链接信息
+查看当前pthread库(NPTL)版本 getconf GNU_LIBPTHREAD_VERSION
+创建线程
+man pthread_加tab可以查看基本上所有线程相关的函数
+#include <pthread.h>
+int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+void *(*start_routine) (void *), void *arg);
+pthread_t pthread_self(void);
+int pthread_equal(pthread_t t1, pthread_t t2);"><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/tfmena/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/tfmena/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/tfmena/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux多线程开发1 线程概述,线程相关函数"><meta property="og:description" content="线程概述
+与进程(process)类似，线程(thread)是允许应用程序并发执行多个任务的一种机制。
+一个进程可以包含多个线程。同一个程序中的所有线程均会独立执行相同的程序，且共享同一份全局内存区域，其中包括初始化数据段、未初始化数据段，以及堆内存段。
+(传统意义上的unix进程只是多线程的一个特例 该进程只包含一个线程)
+进程是cpu分配资源的最小单位，线程是OS调度执行的最小单位。
+线程是轻量级的进程LWP(light weight process)在linux环境下线程的本质仍是进程。
+查看指定进程的LWP号 ps -Lf 指定进程的pid (PID都一样 但每个线程都有自己的LWP号)
+为什么有了进程后还有有线程
+进程间的信息难以共享。对于父子进程来说除去只读代码区外，父子进程并未共享内存，因此必须采用一些进程间通信方式，在进程间进行信息交换。
+调用fork()来创建进程的代价相对较高，即使利用写时拷贝技术，仍需要复制诸如内存页表和文件描述符表之类的多种进程属性，这意味着fork()调用在时间上的开销依然不菲。
+线程之间能够方便、快速地共享信息。只需将数据复制到共享(全局或堆malloc)变量中即可。
+创建线程比创建进程通常要快10倍甚至更多。线程间是共享虚拟地址空间的，无需采用写时拷贝来复制内存也无需复制页表。
+所有线程共用同一块虚拟地址空间，但是会给不同线程划分栈空间和.text代码段的空间(将栈空间和.text分成小块分给这些线程)，main线程(主线程)的栈、线程1的栈… main线程的代码，线程1的代码…，其他部分都是共享相同的。
+线程间共享的资源
+进程PID 父进程ID PPID
+进程组ID 会话ID
+用户ID 用户组ID
+文件描述符表
+信号处置 (信号处理)
+文件系统相关信息：文件权限掩码(mask)、当前工作目录
+虚拟地址空间(除栈和.text段)
+非共享资源
+线程ID
+信号掩码 (阻塞信号集)
+线程特有数据
+error变量
+实时调度策略和优先级
+栈、本地变量和函数的调用链接信息
+查看当前pthread库(NPTL)版本 getconf GNU_LIBPTHREAD_VERSION
+创建线程
+man pthread_加tab可以查看基本上所有线程相关的函数
+#include <pthread.h>
+int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+void *(*start_routine) (void *), void *arg);
+pthread_t pthread_self(void);
+int pthread_equal(pthread_t t1, pthread_t t2);"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-18T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux多线程开发1 线程概述,线程相关函数"><meta name=twitter:description content="线程概述
+与进程(process)类似，线程(thread)是允许应用程序并发执行多个任务的一种机制。
+一个进程可以包含多个线程。同一个程序中的所有线程均会独立执行相同的程序，且共享同一份全局内存区域，其中包括初始化数据段、未初始化数据段，以及堆内存段。
+(传统意义上的unix进程只是多线程的一个特例 该进程只包含一个线程)
+进程是cpu分配资源的最小单位，线程是OS调度执行的最小单位。
+线程是轻量级的进程LWP(light weight process)在linux环境下线程的本质仍是进程。
+查看指定进程的LWP号 ps -Lf 指定进程的pid (PID都一样 但每个线程都有自己的LWP号)
+为什么有了进程后还有有线程
+进程间的信息难以共享。对于父子进程来说除去只读代码区外，父子进程并未共享内存，因此必须采用一些进程间通信方式，在进程间进行信息交换。
+调用fork()来创建进程的代价相对较高，即使利用写时拷贝技术，仍需要复制诸如内存页表和文件描述符表之类的多种进程属性，这意味着fork()调用在时间上的开销依然不菲。
+线程之间能够方便、快速地共享信息。只需将数据复制到共享(全局或堆malloc)变量中即可。
+创建线程比创建进程通常要快10倍甚至更多。线程间是共享虚拟地址空间的，无需采用写时拷贝来复制内存也无需复制页表。
+所有线程共用同一块虚拟地址空间，但是会给不同线程划分栈空间和.text代码段的空间(将栈空间和.text分成小块分给这些线程)，main线程(主线程)的栈、线程1的栈… main线程的代码，线程1的代码…，其他部分都是共享相同的。
+线程间共享的资源
+进程PID 父进程ID PPID
+进程组ID 会话ID
+用户ID 用户组ID
+文件描述符表
+信号处置 (信号处理)
+文件系统相关信息：文件权限掩码(mask)、当前工作目录
+虚拟地址空间(除栈和.text段)
+非共享资源
+线程ID
+信号掩码 (阻塞信号集)
+线程特有数据
+error变量
+实时调度策略和优先级
+栈、本地变量和函数的调用链接信息
+查看当前pthread库(NPTL)版本 getconf GNU_LIBPTHREAD_VERSION
+创建线程
+man pthread_加tab可以查看基本上所有线程相关的函数
+#include <pthread.h>
+int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+void *(*start_routine) (void *), void *arg);
+pthread_t pthread_self(void);
+int pthread_equal(pthread_t t1, pthread_t t2);"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux多线程开发1 线程概述,线程相关函数","item":"https://jler666.github.io/cpp/tfmena/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux多线程开发1 线程概述,线程相关函数","name":"Linux多线程开发1 线程概述,线程相关函数","description":"线程概述\n与进程(process)类似，线程(thread)是允许应用程序并发执行多个任务的一种机制。\n一个进程可以包含多个线程。同一个程序中的所有线程均会独立执行相同的程序，且共享同一份全局内存区域，其中包括初始化数据段、未初始化数据段，以及堆内存段。\n(传统意义上的unix进程只是多线程的一个特例 该进程只包含一个线程)\n进程是cpu分配资源的最小单位，线程是OS调度执行的最小单位。\n线程是轻量级的进程LWP(light weight process)在linux环境下线程的本质仍是进程。\n查看指定进程的LWP号 ps -Lf 指定进程的pid (PID都一样 但每个线程都有自己的LWP号)\n为什么有了进程后还有有线程\n进程间的信息难以共享。对于父子进程来说除去只读代码区外，父子进程并未共享内存，因此必须采用一些进程间通信方式，在进程间进行信息交换。\n调用fork()来创建进程的代价相对较高，即使利用写时拷贝技术，仍需要复制诸如内存页表和文件描述符表之类的多种进程属性，这意味着fork()调用在时间上的开销依然不菲。\n线程之间能够方便、快速地共享信息。只需将数据复制到共享(全局或堆malloc)变量中即可。\n创建线程比创建进程通常要快10倍甚至更多。线程间是共享虚拟地址空间的，无需采用写时拷贝来复制内存也无需复制页表。\n所有线程共用同一块虚拟地址空间，但是会给不同线程划分栈空间和.text代码段的空间(将栈空间和.text分成小块分给这些线程)，main线程(主线程)的栈、线程1的栈\u0026hellip; main线程的代码，线程1的代码\u0026hellip;，其他部分都是共享相同的。\n线程间共享的资源\n进程PID 父进程ID PPID\n进程组ID 会话ID\n用户ID 用户组ID\n文件描述符表\n信号处置 (信号处理)\n文件系统相关信息：文件权限掩码(mask)、当前工作目录\n虚拟地址空间(除栈和.text段)\n非共享资源\n线程ID\n信号掩码 (阻塞信号集)\n线程特有数据\nerror变量\n实时调度策略和优先级\n栈、本地变量和函数的调用链接信息\n查看当前pthread库(NPTL)版本 getconf GNU_LIBPTHREAD_VERSION\n创建线程\nman pthread_加tab可以查看基本上所有线程相关的函数\n#include \u0026lt;pthread.h\u0026gt;\nint pthread_create(pthread_t *thread, const pthread_attr_t *attr,\nvoid *(*start_routine) (void *), void *arg);\npthread_t pthread_self(void);\nint pthread_equal(pthread_t t1, pthread_t t2);\n","keywords":[],"articleBody":"线程概述\n与进程(process)类似，线程(thread)是允许应用程序并发执行多个任务的一种机制。\n一个进程可以包含多个线程。同一个程序中的所有线程均会独立执行相同的程序，且共享同一份全局内存区域，其中包括初始化数据段、未初始化数据段，以及堆内存段。\n(传统意义上的unix进程只是多线程的一个特例 该进程只包含一个线程)\n进程是cpu分配资源的最小单位，线程是OS调度执行的最小单位。\n线程是轻量级的进程LWP(light weight process)在linux环境下线程的本质仍是进程。\n查看指定进程的LWP号 ps -Lf 指定进程的pid (PID都一样 但每个线程都有自己的LWP号)\n为什么有了进程后还有有线程\n进程间的信息难以共享。对于父子进程来说除去只读代码区外，父子进程并未共享内存，因此必须采用一些进程间通信方式，在进程间进行信息交换。\n调用fork()来创建进程的代价相对较高，即使利用写时拷贝技术，仍需要复制诸如内存页表和文件描述符表之类的多种进程属性，这意味着fork()调用在时间上的开销依然不菲。\n线程之间能够方便、快速地共享信息。只需将数据复制到共享(全局或堆malloc)变量中即可。\n创建线程比创建进程通常要快10倍甚至更多。线程间是共享虚拟地址空间的，无需采用写时拷贝来复制内存也无需复制页表。\n所有线程共用同一块虚拟地址空间，但是会给不同线程划分栈空间和.text代码段的空间(将栈空间和.text分成小块分给这些线程)，main线程(主线程)的栈、线程1的栈… main线程的代码，线程1的代码…，其他部分都是共享相同的。\n线程间共享的资源\n进程PID 父进程ID PPID\n进程组ID 会话ID\n用户ID 用户组ID\n文件描述符表\n信号处置 (信号处理)\n文件系统相关信息：文件权限掩码(mask)、当前工作目录\n虚拟地址空间(除栈和.text段)\n非共享资源\n线程ID\n信号掩码 (阻塞信号集)\n线程特有数据\nerror变量\n实时调度策略和优先级\n栈、本地变量和函数的调用链接信息\n查看当前pthread库(NPTL)版本 getconf GNU_LIBPTHREAD_VERSION\n创建线程\nman pthread_加tab可以查看基本上所有线程相关的函数\n#include int pthread_create(pthread_t *thread, const pthread_attr_t *attr,\nvoid *(*start_routine) (void *), void *arg);\npthread_t pthread_self(void);\nint pthread_equal(pthread_t t1, pthread_t t2);\nvoid pthread_exit(void *retval);\nint pthread_join(pthread_t thread, void **retval);\nint pthread_detach(pthread_t thread);\nint pthread_cancel(pthread_t thread);\n/* #include int pthread_create(pthread_t *thread, const pthread_attr_t *attr, void *(*start_routine) (void *), void *arg); 创建一个子线程(main为主线程) thread 传出参数，当子线程创建成功后线程id会由这个指针传出 attr 设置的线程属性 使用默认值 传入null start_routine 子线程所要处理的代码的函数的指针 arg 为start_routine传参 返回值 成功返回0 失败返回错误号(man3中查看) 这个错误号和之前errno不太一样 不能通过perror输出 获取出错误号的信息 在string.h中char* strerror(int errnum)来获得这个错误号对应的错误信息 注意线程pthread库并非linux gcc自带库 libpthread.so 在编译时需要指定-pthread gcc learn_pthread_create.c -0 create -pthread gcc learn_pthread_create.c -0 create -l pthread 都对 \\*/ #include #include #include #include void *callback(void *arg); int main() { // 创建一个子线程 pthread_t tid; int num = 10; //可以搞个结构体将函数的参数全部放在那个结构体里 再往回调函数内传 int ret = pthread_create(\u0026tid, NULL, callback, (void *)\u0026num); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } for (int i = 0; i \u003c 5; i++) { printf(\"parent thread\\n\"); } sleep(1); //防止主线程结束了 子线程的callback还没执行 //当主线程return 相当于进程exit所有子线程全部结束！！！ return 0; } void *callback(void *arg) { printf(\"child thread\\n\"); printf(\"arg value %d\\n\", *(int *)arg); return NULL; } 终止线程\n/* #include void pthread_exit(void *retval); 终止一个线程 在哪个线程中调用 就是终止哪个线程 retval 传出参数 可被pthread_join函数获取该线程的返回值 pthread_t pthread_self(void) 获取当前线程的线程ID int pthread_equal(pthread_t t1, pthread_t t2); 判断t1与t2的线程号是否相等 为什么不用==判断呢 因为不同OS pthread_t类型的实现不一样 有的是无符号长整型(当前Linux系统中是这种类型) 有的是结构体实现的 结构体就不能==了 注意线程pthread库并非linux gcc自带库 libpthread.so 在编译时需要指定-pthread gcc learn_pthread_create.c -0 create -pthread gcc learn_pthread_create.c -0 create -l pthread 都对 \\*/ #include #include #include #include void *callback(void *arg); int main() { // 创建一个子线程 pthread_t tid; int num = 10; //可以搞个结构体将函数的参数全部放在那个结构体里 再往回调函数内传 int ret = pthread_create(\u0026tid, NULL, callback, (void *)\u0026num); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } for (int i = 0; i \u003c 5; i++) { printf(\"parent thread\\n\"); } pthread_exit(NULL); //让子线程退出 当主线程退出时 不会影响其他正常运行的线程 //主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit printf(\"main thread exsit\\n\"); //不会执行 //当主线程return 相当于进程exit所有子线程全部结束！！！ return 0; //不会执行 // 主线程、子线程调用exit， pthread_exit，互相产生的影响。 // 1、在主线程中，在main函数中return了或是调用了exit函数，则主线程退出，且整个进程也会终止， // 此时进程中的所有线程也将终止。因此要避免main函数过早结束。 // 2、在主线程中调用pthread_exit, 则仅仅是主线程结束，进程不会结束，进程内的其他线程也不会结束， // 直到所有线程结束，进程才会终止。 // 3、在任何一个线程中调用exit函数都会导致进程结束。进程一旦结束，那么进程中的所有线程都将结束。 /** * 1: 线程使用return (这种方法对线程还适用，从main函数return 相当于调用exit 但是在子线程中return 相当于调用pthread_exit 除了最后一个子线程return 那也相当于exit) * 2: 调用pthread_cancel (一个线程可以调用pthread_cancel终止同一进程中的另一个线程) * 3: 调用pthread_exit(线程可以调用pthread_exit终止自己,有两种情况需要注意： * 一种情况是，在主线程中，如果从main函数返回或是调用了exit函数退出主线程， * 则整个进程将终止，此时进程中有线程也将终止，因此在主线程中不能过早地从main * 函数返回； * 另外一种情况：如果主线程调用pthread_exit函数，则仅仅是主线程消亡， * 进程不会结束，进程内的其他子线程也不会终止，直到所有线程结束，进程才会结束； * 线程终止最重要的问题是资源释放问题，特别是一些临界资源在一段时间内只能被 * 一个线程所持有，当线程要使用临界资源需提出请求，如果该资源未被使用则申请 * 成功，否则等待。临界资源使用完毕后要释放以便其它线程可以使用。 **/ } void *callback(void *arg) { printf(\"child thread\\n\"); printf(\"arg value %d\\n\", *(int *)arg); pthread_t id = pthread_self(); printf(\"id: %ld\\n\", id); return NULL; //相当于pthread_exit(NULL) } 连接已终止的线程\n/* #include int pthread_join(pthread_t thread, void **retval); 连接已经终止的线程 回收子线程的资源 此函数阻塞 没有线程结束这个函数一直阻塞 直到有线程结束此函数回收后才能运行下面的语句 调用一次只能回收一个线程 一般在主线程中使用 参数 thread需要回收的线程ID retval 接收子线程退出时的返回值 二级指针 线程结束时(通过pthread_exit退出传入返回值)这个返回值可被retval得到 返回值 成功返回0 失败返回错误号(man3中查看) 这个错误号和之前errno不太一样 不能通过perror输出 获取出错误号的信息 在string.h中char* strerror(int errnum)来获得这个错误号对应的错误信息 类比进程，子进程结束父进程有责任wait or waitpid去回收子进程的PCB资源 如果不回收子进程将变为僵尸进程 子线程结束后不会收将会产生僵尸线程 子线程不需要一定要主线程(main线程)去回收 任何线程都可以去回收其他已经结束的线程 注意线程pthread库并非linux gcc自带库 libpthread.so 在编译时需要指定-pthread gcc learn_pthread_create.c -0 create -pthread gcc learn_pthread_create.c -0 create -l pthread 都对 \\*/ #include #include #include #include void *callback(void *arg); int main() { // 创建一个子线程 pthread_t tid; int num = 10; //可以搞个结构体将函数的参数全部放在那个结构体里 再往回调函数内传 int ret = pthread_create(\u0026tid, NULL, callback, (void *)\u0026num); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } for (int i = 0; i \u003c 5; i++) { printf(\"parent thread\\n\"); } int *t_return; //返回值是二级指针 是因为callback的返回值类型被规定为一级指针void* pthread_join(tid, (void **)\u0026t_return); //阻塞回收子线程资源 //子线程的返回值保存在 t_return中 printf(\"son thread return %d\\n\", *t_return); pthread_exit(NULL); //让子线程退出 当主线程退出时 不会影响其他正常运行的线程 //主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit printf(\"main thread exsit\\n\"); //不会执行 //当主线程return 相当于进程exit所有子线程全部结束！！！ return 0; //不会执行 } void *callback(void *arg) { printf(\"child thread\\n\"); printf(\"arg value %d\\n\", *(int *)arg); pthread_t id = pthread_self(); printf(\"id: %ld\\n\", id); // int val = 100; //局部变量 返回的还是这个变量的地址 //主线程拿去的时候这个变量已经销毁了(子线程栈释放了) 主线程得到的是野内存随机值 static int val = 100; //全局存储区 //通过pthread_exit结束子进程 并返回值 pthread_exit((void *)\u0026val); //与return (void *)\u0026val是一样的!!!!!! 返回一个局部变量是没有意义的 // return NULL; //相当于pthread_exit(NULL) } 线程的分离\n/* #include int pthread_detach(pthread_t thread); 标记传入的线程thread为detach分离状态 当分离状态的线程终止 其资源会自动释放还给系统 不再需要其他线程join来回收此线程的资源！！！！ 当去分离一个已经是分离状态的线程将会导致位未知的结果 不能去连接(join)一个已经分离(detach)的线程 成功返回0 失败返回strerror的错误号 注意线程pthread库并非linux gcc自带库 libpthread.so 在编译时需要指定-pthread gcc learn_pthread_create.c -0 create -pthread gcc learn_pthread_create.c -0 create -l pthread 都对 \\*/ #include #include #include #include void * callback(void *arg); int main() { // 创建一个子线程 pthread_t tid; int num = 10; //可以搞个结构体将函数的参数全部放在那个结构体里 再往回调函数内传 int ret = pthread_create(\u0026tid, NULL, callback, (void *)\u0026num); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } for (int i = 0; i \u003c 5; i++) { printf(\"parent thread\\n\"); } pthread_detach(tid); //设置子线程分离 当分离状态的线程终止 其资源会自动释放还给系统 不再需要其他线程join来回收此线程的资源！！！！ pthread_exit(NULL); //让子线程退出 当主线程退出时 不会影响其他正常运行的线程 //主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit printf(\"main thread exsit\\n\"); //不会执行 //当主线程return 相当于进程exit所有子线程全部结束！！！ return 0; //不会执行 } void *callback(void *arg) { printf(\"child thread\\n\"); printf(\"arg value %d\\n\", *(int *)arg); pthread_t id = pthread_self(); printf(\"id: %ld\\n\", id); // int val = 100; //局部变量 返回的还是这个变量的地址 //主线程拿去的时候这个变量已经销毁了(子线程栈释放了) 主线程得到的是野内存随机值 static int val = 100; //全局存储区 //通过pthread_exit结束子进程 并返回值 pthread_exit((void *)\u0026val); //与return (void *)\u0026val是一样的!!!!!! 返回一个局部变量是没有意义的 // return NULL; //相当于pthread_exit(NULL) } 线程取消\n/* #include int pthread_cancel(pthread_t thread); 给传入的thread号线程发送取消请求(终止线程) 对应线程是否以及合适终止 取决于对应线程的两个参数 他的cancelabilityd的state以及type 在pthread_create创建线程的第二个参数可以传入一个结构体来设置这两个属性 系统并不能保证在调用pthread_cancel后立即取消线程 只有当线程运行到cancellation point取消点函数 线程会才会取消！！！！！！！ 取消点函数可以在man pthreads中查看有很多 一般是系统调用 所以我们可以粗略地人为一般的系统调用是取消点函数 如果子线程中没有取消点的话，子线程会一直运行到结束(return or pthread_exit) 或者可以通过 pthread_setcanceltype 成功返回0 失败返回strerror的错误号 注意线程pthread库并非linux gcc自带库 libpthread.so 在编译时需要指定-pthread gcc learn_pthread_create.c -0 create -pthread gcc learn_pthread_create.c -0 create -l pthread 都对 \\*/ #include #include #include #include void * callback(void *arg); int main() { // 创建一个子线程 pthread_t tid; int num = 10; //可以搞个结构体将函数的参数全部放在那个结构体里 再往回调函数内传 int ret = pthread_create(\u0026tid, NULL, callback, (void *)\u0026num); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } //取消子线程 pthread_cancel(tid); //子线程中的printf是取消点 for (int i = 0; i \u003c 5; i++) { printf(\"parent thread\\n\"); } pthread_exit(NULL); //让子线程退出 当主线程退出时 不会影响其他正常运行的线程 //主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit printf(\"main thread exsit\\n\"); //不会执行 //当主线程return 相当于进程exit所有子线程全部结束！！！ return 0; //不会执行 } void *callback(void *arg) { printf(\"child thread\\n\"); printf(\"arg value %d\\n\", *(int *)arg); pthread_t id = pthread_self(); printf(\"id: %ld\\n\", id); // int val = 100; //局部变量 返回的还是这个变量的地址 //主线程拿去的时候这个变量已经销毁了(子线程栈释放了) 主线程得到的是野内存随机值 static int val = 100; //全局存储区 //通过pthread_exit结束子进程 并返回值 pthread_exit((void *)\u0026val); //与return (void *)\u0026val是一样的!!!!!! 返回一个局部变量是没有意义的 // return NULL; //相当于pthread_exit(NULL) } 线程属性\npthread_create的第二个参数pthread_attr_t* attr 设置线程属性\npthread_attr_t为线程属性类型\nman pthread_attr_ 加两次tab可以看到所有attr相关函数\nint pthread_attr_init(pthread_attr_t* attr);\nint pthread_attr_destroy(pthread_attr_t* attr);\nint pthread_attr_getdetachstate(const pthread_attr_t* attr,int *detachstate);\nint pthread_attr_setdetachstate(pthread_attr_t* attr,int *detachstate);\n线程栈的相关设置函数\npthread_attr_setstack pthread_attr_setstackaddr pthread_attr_setstacksize\n/* int pthread_attr_init(pthread_attr_t* attr); 初始化线程属性变量 线程属性不止一些标志位还有一些复杂的变量 所以在pthread_attr_t创建出来后 不能简单地 显式地设置一些属性 需要调用init函数来将这个变量清空 int pthread_attr_destroy(pthread_attr_t* attr); 释放线程属性的资源 int pthread_attr_getdetachstate(const pthread_attr_t* attr,int *detachstate); 获取线程分离状态的属性 detachstate为传出参数 创建线程时可以直接指定线程是detached状态还是joinable状态(其实就是不分离的状态) PTHREAD_CREATE_DETACHED 线程结束后不需要其他线程去join回收资源 系统会回收这个线程的资源 PTHREAD_CREATE_JOINABLE(默认的线程的状态) int pthread_attr_setdetachstate(pthread_attr_t* attr,int *detachstate); 设置线程分离状态的属性 int pthread_attr_getstacksize(const pthread_attr_t* attr,size_t *stacksize); stacksize为传出参数是线程栈的大小 \\*/ #include #include #include #include void * callback(void *arg); int main() { //创建线程属性变量 pthread_attr_t attr; //线程属性不止一些标志位还有一些复杂的变量 所以在pthread_attr_t创建出来后 //不能简单地 显式地设置一些属性 需要调用init函数来将这个变量清空 pthread_attr_init(\u0026attr); //设置线程创建后的分离状态的属性 pthread_attr_setdetachstate(\u0026attr, PTHREAD_CREATE_DETACHED); //使用attr创建后就是分离状态 //获取线程栈的大小(因为我们没有设置过线程栈的大小 所以这里获取到的是线程栈的默认大小) size_t *size; pthread_attr_getstacksize(\u0026attr, \u0026size); printf(\"thread default stacksize is %ld\\n\", size); //8388608B = 8MB 默认线程栈大小为8MB // 创建一个子线程 pthread_t tid; int num = 10; //可以搞个结构体将函数的参数全部放在那个结构体里 再往回调函数内传 int ret = pthread_create(\u0026tid, \u0026attr, callback, (void *)\u0026num); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } for (int i = 0; i \u003c 5; i++) { printf(\"parent thread\\n\"); } //释放子线程属性资源 pthread_attr_destroy(\u0026attr); pthread_exit(NULL); //让子线程退出 当主线程退出时 不会影响其他正常运行的线程 //主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit printf(\"main thread exsit\\n\"); //不会执行 //当主线程return 相当于进程exit所有子线程全部结束！！！ return 0; //不会执行 } void *callback(void *arg) { printf(\"child thread\\n\"); printf(\"arg value %d\\n\", *(int *)arg); pthread_t id = pthread_self(); printf(\"id: %ld\\n\", id); // int val = 100; //局部变量 返回的还是这个变量的地址 //主线程拿去的时候这个变量已经销毁了(子线程栈释放了) 主线程得到的是野内存随机值 static int val = 100; //全局存储区 //通过pthread_exit结束子进程 并返回值 pthread_exit((void *)\u0026val); //与return (void *)\u0026val是一样的!!!!!! 返回一个局部变量是没有意义的 // return NULL; //相当于pthread_exit(NULL) } ","wordCount":"1123","inLanguage":"en","datePublished":"2022-03-18T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/tfmena/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux多线程开发1 线程概述,线程相关函数</h1><div class=post-meta><span title=2022-03-18T00:00:00+00:00>创建于 2022-03-18</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>线程概述</strong></p><p>与进程(process)类似，线程(thread)是允许应用程序并发执行多个任务的一种机制。</p><p><strong>一个进程可以包含多个线程。同一个程序中的所有线程均会独立执行相同的程序，且共享同一份全局内存区域，其中包括初始化数据段、未初始化数据段，以及堆内存段。</strong></p><p>(传统意义上的unix进程只是多线程的一个特例 该进程只包含一个线程)</p><p><strong>进程是cpu分配资源的最小单位，线程是OS调度执行的最小单位。</strong></p><p><strong>线程是轻量级的进程LWP(light weight process)在linux环境下线程的本质仍是进程。</strong></p><p>查看指定进程的LWP号 ps -Lf 指定进程的pid (PID都一样 但每个线程都有自己的LWP号)</p><p>为什么有了进程后还有有线程</p><p>进程间的信息难以共享。对于父子进程来说除去只读代码区外，父子进程并未共享内存，因此必须采用一些进程间通信方式，在进程间进行信息交换。</p><p>调用fork()来创建进程的代价相对较高，即使利用写时拷贝技术，仍需要复制诸如内存页表和文件描述符表之类的多种进程属性，这意味着fork()调用在时间上的开销依然不菲。</p><p>线程之间能够方便、快速地共享信息。只需将数据复制到共享(全局或堆malloc)变量中即可。</p><p>创建线程比创建进程通常要快10倍甚至更多。线程间是共享虚拟地址空间的，无需采用写时拷贝来复制内存也无需复制页表。</p><p><strong>所有线程共用同一块虚拟地址空间，但是会给不同线程划分栈空间和.text代码段的空间(将栈空间和.text分成小块分给这些线程)</strong>，main线程(主线程)的栈、线程1的栈&mldr; main线程的代码，线程1的代码&mldr;，其他部分都是共享相同的。</p><p><img alt=1647572723744-6b81bd27-1ac7-4017-9ccf-9e894464a8a9.png loading=lazy src=/images/AslGzjifEh5Vclx1/1647572723744-6b81bd27-1ac7-4017-9ccf-9e894464a8a9-779780.png></p><p>线程间共享的资源</p><p>进程PID 父进程ID PPID</p><p>进程组ID 会话ID</p><p>用户ID 用户组ID</p><p>文件描述符表</p><p>信号处置 (信号处理)</p><p>文件系统相关信息：文件权限掩码(mask)、当前工作目录</p><p>虚拟地址空间(除栈和.text段)</p><p>非共享资源</p><p>线程ID</p><p>信号掩码 (阻塞信号集)</p><p>线程特有数据</p><p>error变量</p><p>实时调度策略和优先级</p><p>栈、本地变量和函数的调用链接信息</p><p>查看当前pthread库(NPTL)版本 getconf GNU_LIBPTHREAD_VERSION</p><p><strong>创建线程</strong></p><p><strong>man pthread_加tab可以查看基本上所有线程相关的函数</strong></p><p>#include &lt;pthread.h></p><p>int pthread_create(pthread_t *thread, const pthread_attr_t *attr,</p><p>void *(*start_routine) (void *), void *arg);</p><p>pthread_t pthread_self(void);</p><p>int pthread_equal(pthread_t t1, pthread_t t2);</p><p>void pthread_exit(void *retval);</p><p>int pthread_join(pthread_t thread, void **retval);</p><p>int pthread_detach(pthread_t thread);</p><p>int pthread_cancel(pthread_t thread);</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include &lt;pthread.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                void *(*start_routine) (void *), void *arg);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                创建一个子线程(main为主线程)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    thread 传出参数，当子线程创建成功后线程id会由这个指针传出
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    attr 设置的线程属性 使用默认值 传入null
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    start_routine 子线程所要处理的代码的函数的指针
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    arg 为start_routine传参
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    返回值 成功返回0 失败返回错误号(man3中查看) 这个错误号和之前errno不太一样 不能通过perror输出
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    获取出错误号的信息  在string.h中char* strerror(int errnum)来获得这个错误号对应的错误信息
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    注意线程pthread库并非linux gcc自带库 libpthread.so 在编译时需要指定-pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    gcc learn_pthread_create.c -0 create -pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    gcc learn_pthread_create.c -0 create -l pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    都对
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;pthread.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>callback</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//  创建一个子线程
+</span></span></span><span style=display:flex><span>    pthread_t tid;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> num <span style=color:#f92672>=</span> <span style=color:#ae81ff>10</span>; <span style=color:#75715e>//可以搞个结构体将函数的参数全部放在那个结构体里 再往回调函数内传
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>tid, NULL, callback, (<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>num);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>5</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;parent thread</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    sleep(<span style=color:#ae81ff>1</span>); <span style=color:#75715e>//防止主线程结束了 子线程的callback还没执行
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//当主线程return 相当于进程exit所有子线程全部结束！！！
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>callback</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;child thread</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;arg value %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, <span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)arg);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> NULL;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>终止线程</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include &lt;pthread.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>void pthread_exit(void *retval);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>终止一个线程 在哪个线程中调用 就是终止哪个线程
+</span></span></span><span style=display:flex><span><span style=color:#75715e>retval 传出参数 可被pthread_join函数获取该线程的返回值
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>pthread_t pthread_self(void)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>获取当前线程的线程ID
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_equal(pthread_t t1, pthread_t t2);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>判断t1与t2的线程号是否相等 为什么不用==判断呢
+</span></span></span><span style=display:flex><span><span style=color:#75715e>因为不同OS pthread_t类型的实现不一样 有的是无符号长整型(当前Linux系统中是这种类型) 有的是结构体实现的 结构体就不能==了
+</span></span></span><span style=display:flex><span><span style=color:#75715e>注意线程pthread库并非linux gcc自带库 libpthread.so 在编译时需要指定-pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>gcc learn_pthread_create.c -0 create -pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>gcc learn_pthread_create.c -0 create -l pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>都对
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;pthread.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>callback</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//  创建一个子线程
+</span></span></span><span style=display:flex><span>    pthread_t tid;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> num <span style=color:#f92672>=</span> <span style=color:#ae81ff>10</span>; <span style=color:#75715e>//可以搞个结构体将函数的参数全部放在那个结构体里 再往回调函数内传
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>tid, NULL, callback, (<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>num);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>5</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;parent thread</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    pthread_exit(NULL); <span style=color:#75715e>//让子线程退出 当主线程退出时 不会影响其他正常运行的线程
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit
+</span></span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;main thread exsit</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>); <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//当主线程return 相当于进程exit所有子线程全部结束！！！
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 主线程、子线程调用exit， pthread_exit，互相产生的影响。
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 1、在主线程中，在main函数中return了或是调用了exit函数，则主线程退出，且整个进程也会终止，
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     此时进程中的所有线程也将终止。因此要避免main函数过早结束。
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 2、在主线程中调用pthread_exit,   则仅仅是主线程结束，进程不会结束，进程内的其他线程也不会结束，
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     直到所有线程结束，进程才会终止。
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 3、在任何一个线程中调用exit函数都会导致进程结束。进程一旦结束，那么进程中的所有线程都将结束。
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>/**
+</span></span></span><span style=display:flex><span><span style=color:#75715e> * 1: 线程使用return  (这种方法对线程还适用，从main函数return 相当于调用exit
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    但是在子线程中return 相当于调用pthread_exit  除了最后一个子线程return 那也相当于exit)
+</span></span></span><span style=display:flex><span><span style=color:#75715e> * 2: 调用pthread_cancel (一个线程可以调用pthread_cancel终止同一进程中的另一个线程)
+</span></span></span><span style=display:flex><span><span style=color:#75715e> * 3: 调用pthread_exit(线程可以调用pthread_exit终止自己,有两种情况需要注意：
+</span></span></span><span style=display:flex><span><span style=color:#75715e> *      一种情况是，在主线程中，如果从main函数返回或是调用了exit函数退出主线程，
+</span></span></span><span style=display:flex><span><span style=color:#75715e> *      则整个进程将终止，此时进程中有线程也将终止，因此在主线程中不能过早地从main
+</span></span></span><span style=display:flex><span><span style=color:#75715e> *      函数返回；
+</span></span></span><span style=display:flex><span><span style=color:#75715e> *      另外一种情况：如果主线程调用pthread_exit函数，则仅仅是主线程消亡，
+</span></span></span><span style=display:flex><span><span style=color:#75715e> *      进程不会结束，进程内的其他子线程也不会终止，直到所有线程结束，进程才会结束；
+</span></span></span><span style=display:flex><span><span style=color:#75715e> *      线程终止最重要的问题是资源释放问题，特别是一些临界资源在一段时间内只能被
+</span></span></span><span style=display:flex><span><span style=color:#75715e> *      一个线程所持有，当线程要使用临界资源需提出请求，如果该资源未被使用则申请
+</span></span></span><span style=display:flex><span><span style=color:#75715e> *      成功，否则等待。临界资源使用完毕后要释放以便其它线程可以使用。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>**/</span>
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>callback</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;child thread</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;arg value %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, <span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)arg);
+</span></span><span style=display:flex><span>    pthread_t id <span style=color:#f92672>=</span> pthread_self();
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;id: %ld</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, id);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> NULL; <span style=color:#75715e>//相当于pthread_exit(NULL)
+</span></span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>连接已终止的线程</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include &lt;pthread.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_join(pthread_t thread, void **retval);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>连接已经终止的线程 回收子线程的资源  此函数阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>没有线程结束这个函数一直阻塞 直到有线程结束此函数回收后才能运行下面的语句
+</span></span></span><span style=display:flex><span><span style=color:#75715e>调用一次只能回收一个线程 一般在主线程中使用
+</span></span></span><span style=display:flex><span><span style=color:#75715e>参数 thread需要回收的线程ID retval 接收子线程退出时的返回值 二级指针
+</span></span></span><span style=display:flex><span><span style=color:#75715e>线程结束时(通过pthread_exit退出传入返回值)这个返回值可被retval得到
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>返回值 成功返回0 失败返回错误号(man3中查看) 这个错误号和之前errno不太一样 不能通过perror输出
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    获取出错误号的信息  在string.h中char* strerror(int errnum)来获得这个错误号对应的错误信息
+</span></span></span><span style=display:flex><span><span style=color:#75715e>类比进程，子进程结束父进程有责任wait or waitpid去回收子进程的PCB资源 如果不回收子进程将变为僵尸进程
+</span></span></span><span style=display:flex><span><span style=color:#75715e>子线程结束后不会收将会产生僵尸线程
+</span></span></span><span style=display:flex><span><span style=color:#75715e>子线程不需要一定要主线程(main线程)去回收 任何线程都可以去回收其他已经结束的线程
+</span></span></span><span style=display:flex><span><span style=color:#75715e>注意线程pthread库并非linux gcc自带库 libpthread.so 在编译时需要指定-pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>gcc learn_pthread_create.c -0 create -pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>gcc learn_pthread_create.c -0 create -l pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>都对
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;pthread.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>callback</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//  创建一个子线程
+</span></span></span><span style=display:flex><span>    pthread_t tid;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> num <span style=color:#f92672>=</span> <span style=color:#ae81ff>10</span>; <span style=color:#75715e>//可以搞个结构体将函数的参数全部放在那个结构体里 再往回调函数内传
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>tid, NULL, callback, (<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>num);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>5</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;parent thread</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>t_return;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//返回值是二级指针 是因为callback的返回值类型被规定为一级指针void*
+</span></span></span><span style=display:flex><span>    pthread_join(tid, (<span style=color:#66d9ef>void</span> <span style=color:#f92672>**</span>)<span style=color:#f92672>&amp;</span>t_return); <span style=color:#75715e>//阻塞回收子线程资源
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//子线程的返回值保存在 t_return中
+</span></span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;son thread return %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, <span style=color:#f92672>*</span>t_return);
+</span></span><span style=display:flex><span>    pthread_exit(NULL); <span style=color:#75715e>//让子线程退出 当主线程退出时 不会影响其他正常运行的线程
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit
+</span></span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;main thread exsit</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>); <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//当主线程return 相当于进程exit所有子线程全部结束！！！
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>callback</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;child thread</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;arg value %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, <span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)arg);
+</span></span><span style=display:flex><span>    pthread_t id <span style=color:#f92672>=</span> pthread_self();
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;id: %ld</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, id);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// int val = 100; //局部变量 返回的还是这个变量的地址
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//主线程拿去的时候这个变量已经销毁了(子线程栈释放了) 主线程得到的是野内存随机值
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> val <span style=color:#f92672>=</span> <span style=color:#ae81ff>100</span>; <span style=color:#75715e>//全局存储区
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//通过pthread_exit结束子进程 并返回值
+</span></span></span><span style=display:flex><span>    pthread_exit((<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>val); <span style=color:#75715e>//与return (void *)&amp;val是一样的!!!!!! 返回一个局部变量是没有意义的
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// return NULL; //相当于pthread_exit(NULL)
+</span></span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>线程的分离</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include &lt;pthread.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_detach(pthread_t thread);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>标记传入的线程thread为detach分离状态
+</span></span></span><span style=display:flex><span><span style=color:#75715e>当分离状态的线程终止 其资源会自动释放还给系统 不再需要其他线程join来回收此线程的资源！！！！
+</span></span></span><span style=display:flex><span><span style=color:#75715e>当去分离一个已经是分离状态的线程将会导致位未知的结果  不能去连接(join)一个已经分离(detach)的线程
+</span></span></span><span style=display:flex><span><span style=color:#75715e>成功返回0 失败返回strerror的错误号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>注意线程pthread库并非linux gcc自带库 libpthread.so 在编译时需要指定-pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>gcc learn_pthread_create.c -0 create -pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>gcc learn_pthread_create.c -0 create -l pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>都对
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;pthread.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>
+</span></span><span style=display:flex><span><span style=color:#a6e22e>callback</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//  创建一个子线程
+</span></span></span><span style=display:flex><span>    pthread_t tid;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> num <span style=color:#f92672>=</span> <span style=color:#ae81ff>10</span>; <span style=color:#75715e>//可以搞个结构体将函数的参数全部放在那个结构体里 再往回调函数内传
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>tid, NULL, callback, (<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>num);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>5</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;parent thread</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    pthread_detach(tid); <span style=color:#75715e>//设置子线程分离 当分离状态的线程终止 其资源会自动释放还给系统 不再需要其他线程join来回收此线程的资源！！！！
+</span></span></span><span style=display:flex><span>    pthread_exit(NULL); <span style=color:#75715e>//让子线程退出 当主线程退出时 不会影响其他正常运行的线程
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit
+</span></span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;main thread exsit</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>); <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//当主线程return 相当于进程exit所有子线程全部结束！！！
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>callback</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;child thread</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;arg value %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, <span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)arg);
+</span></span><span style=display:flex><span>    pthread_t id <span style=color:#f92672>=</span> pthread_self();
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;id: %ld</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, id);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// int val = 100; //局部变量 返回的还是这个变量的地址
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//主线程拿去的时候这个变量已经销毁了(子线程栈释放了) 主线程得到的是野内存随机值
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> val <span style=color:#f92672>=</span> <span style=color:#ae81ff>100</span>; <span style=color:#75715e>//全局存储区
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//通过pthread_exit结束子进程 并返回值
+</span></span></span><span style=display:flex><span>    pthread_exit((<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>val); <span style=color:#75715e>//与return (void *)&amp;val是一样的!!!!!! 返回一个局部变量是没有意义的
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// return NULL; //相当于pthread_exit(NULL)
+</span></span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>线程取消</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include &lt;pthread.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_cancel(pthread_t thread);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>给传入的thread号线程发送取消请求(终止线程)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>对应线程是否以及合适终止 取决于对应线程的两个参数 他的cancelabilityd的state以及type
+</span></span></span><span style=display:flex><span><span style=color:#75715e>在pthread_create创建线程的第二个参数可以传入一个结构体来设置这两个属性
+</span></span></span><span style=display:flex><span><span style=color:#75715e>系统并不能保证在调用pthread_cancel后立即取消线程
+</span></span></span><span style=display:flex><span><span style=color:#75715e>只有当线程运行到cancellation point取消点函数 线程会才会取消！！！！！！！
+</span></span></span><span style=display:flex><span><span style=color:#75715e>取消点函数可以在man pthreads中查看有很多 一般是系统调用 所以我们可以粗略地人为一般的系统调用是取消点函数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>如果子线程中没有取消点的话，子线程会一直运行到结束(return or pthread_exit)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>或者可以通过 pthread_setcanceltype
+</span></span></span><span style=display:flex><span><span style=color:#75715e>成功返回0 失败返回strerror的错误号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>注意线程pthread库并非linux gcc自带库 libpthread.so 在编译时需要指定-pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>gcc learn_pthread_create.c -0 create -pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>gcc learn_pthread_create.c -0 create -l pthread
+</span></span></span><span style=display:flex><span><span style=color:#75715e>都对
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;pthread.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>
+</span></span><span style=display:flex><span><span style=color:#a6e22e>callback</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//  创建一个子线程
+</span></span></span><span style=display:flex><span>    pthread_t tid;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> num <span style=color:#f92672>=</span> <span style=color:#ae81ff>10</span>; <span style=color:#75715e>//可以搞个结构体将函数的参数全部放在那个结构体里 再往回调函数内传
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>tid, NULL, callback, (<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>num);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//取消子线程
+</span></span></span><span style=display:flex><span>    pthread_cancel(tid); <span style=color:#75715e>//子线程中的printf是取消点
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>5</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;parent thread</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    pthread_exit(NULL); <span style=color:#75715e>//让子线程退出 当主线程退出时 不会影响其他正常运行的线程
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit
+</span></span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;main thread exsit</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>); <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//当主线程return 相当于进程exit所有子线程全部结束！！！
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>callback</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;child thread</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;arg value %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, <span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)arg);
+</span></span><span style=display:flex><span>    pthread_t id <span style=color:#f92672>=</span> pthread_self();
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;id: %ld</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, id);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// int val = 100; //局部变量 返回的还是这个变量的地址
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//主线程拿去的时候这个变量已经销毁了(子线程栈释放了) 主线程得到的是野内存随机值
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> val <span style=color:#f92672>=</span> <span style=color:#ae81ff>100</span>; <span style=color:#75715e>//全局存储区
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//通过pthread_exit结束子进程 并返回值
+</span></span></span><span style=display:flex><span>    pthread_exit((<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>val); <span style=color:#75715e>//与return (void *)&amp;val是一样的!!!!!! 返回一个局部变量是没有意义的
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// return NULL; //相当于pthread_exit(NULL)
+</span></span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>线程属性</strong></p><p>pthread_create的第二个参数pthread_attr_t* attr 设置线程属性</p><p>pthread_attr_t为线程属性类型</p><p>man pthread_attr_ 加两次tab可以看到所有attr相关函数</p><p>int pthread_attr_init(pthread_attr_t* attr);</p><p>int pthread_attr_destroy(pthread_attr_t* attr);</p><p>int pthread_attr_getdetachstate(const pthread_attr_t* attr,int *detachstate);</p><p>int pthread_attr_setdetachstate(pthread_attr_t* attr,int *detachstate);</p><p>线程栈的相关设置函数</p><p>pthread_attr_setstack pthread_attr_setstackaddr pthread_attr_setstacksize</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_attr_init(pthread_attr_t* attr);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>初始化线程属性变量
+</span></span></span><span style=display:flex><span><span style=color:#75715e>线程属性不止一些标志位还有一些复杂的变量 所以在pthread_attr_t创建出来后
+</span></span></span><span style=display:flex><span><span style=color:#75715e>不能简单地 显式地设置一些属性 需要调用init函数来将这个变量清空
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_attr_destroy(pthread_attr_t* attr);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>释放线程属性的资源
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_attr_getdetachstate(const pthread_attr_t* attr,int *detachstate);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>获取线程分离状态的属性
+</span></span></span><span style=display:flex><span><span style=color:#75715e>detachstate为传出参数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>创建线程时可以直接指定线程是detached状态还是joinable状态(其实就是不分离的状态)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>PTHREAD_CREATE_DETACHED  线程结束后不需要其他线程去join回收资源 系统会回收这个线程的资源
+</span></span></span><span style=display:flex><span><span style=color:#75715e>PTHREAD_CREATE_JOINABLE(默认的线程的状态)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_attr_setdetachstate(pthread_attr_t* attr,int *detachstate);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>设置线程分离状态的属性
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_attr_getstacksize(const pthread_attr_t* attr,size_t *stacksize);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>stacksize为传出参数是线程栈的大小
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;pthread.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>
+</span></span><span style=display:flex><span><span style=color:#a6e22e>callback</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建线程属性变量
+</span></span></span><span style=display:flex><span>    pthread_attr_t attr;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//线程属性不止一些标志位还有一些复杂的变量 所以在pthread_attr_t创建出来后
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//不能简单地 显式地设置一些属性 需要调用init函数来将这个变量清空
+</span></span></span><span style=display:flex><span>    pthread_attr_init(<span style=color:#f92672>&amp;</span>attr);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//设置线程创建后的分离状态的属性
+</span></span></span><span style=display:flex><span>    pthread_attr_setdetachstate(<span style=color:#f92672>&amp;</span>attr, PTHREAD_CREATE_DETACHED); <span style=color:#75715e>//使用attr创建后就是分离状态
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//获取线程栈的大小(因为我们没有设置过线程栈的大小 所以这里获取到的是线程栈的默认大小)
+</span></span></span><span style=display:flex><span>    size_t <span style=color:#f92672>*</span>size;
+</span></span><span style=display:flex><span>    pthread_attr_getstacksize(<span style=color:#f92672>&amp;</span>attr, <span style=color:#f92672>&amp;</span>size);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;thread default stacksize is %ld</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, size); <span style=color:#75715e>//8388608B = 8MB   默认线程栈大小为8MB
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//  创建一个子线程
+</span></span></span><span style=display:flex><span>    pthread_t tid;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> num <span style=color:#f92672>=</span> <span style=color:#ae81ff>10</span>; <span style=color:#75715e>//可以搞个结构体将函数的参数全部放在那个结构体里 再往回调函数内传
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>tid, <span style=color:#f92672>&amp;</span>attr, callback, (<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>num);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>5</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;parent thread</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//释放子线程属性资源
+</span></span></span><span style=display:flex><span>    pthread_attr_destroy(<span style=color:#f92672>&amp;</span>attr);
+</span></span><span style=display:flex><span>    pthread_exit(NULL); <span style=color:#75715e>//让子线程退出 当主线程退出时 不会影响其他正常运行的线程
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//主线程结束 pthread_exit下面的代码是不会执行的 即不会打印main thread exsit
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;main thread exsit</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>); <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//当主线程return 相当于进程exit所有子线程全部结束！！！
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>callback</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;child thread</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;arg value %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, <span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)arg);
+</span></span><span style=display:flex><span>    pthread_t id <span style=color:#f92672>=</span> pthread_self();
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;id: %ld</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, id);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// int val = 100; //局部变量 返回的还是这个变量的地址
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//主线程拿去的时候这个变量已经销毁了(子线程栈释放了) 主线程得到的是野内存随机值
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> val <span style=color:#f92672>=</span> <span style=color:#ae81ff>100</span>; <span style=color:#75715e>//全局存储区
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//通过pthread_exit结束子进程 并返回值
+</span></span></span><span style=display:flex><span>    pthread_exit((<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>val); <span style=color:#75715e>//与return (void *)&amp;val是一样的!!!!!! 返回一个局部变量是没有意义的
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// return NULL; //相当于pthread_exit(NULL)
+</span></span></span><span style=display:flex><span>}
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

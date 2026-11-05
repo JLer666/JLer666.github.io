@@ -1,0 +1,148 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>开发工具 | CantBlog</title><meta name=keywords content><meta name=description content="开发环境与工具链笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/tools/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/tools/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/tools/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/tools/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="开发工具"><meta property="og:description" content="开发环境与工具链笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="开发工具"><meta name=twitter:description content="开发环境与工具链笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"开发工具","item":"https://jler666.github.io/tools/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>开发工具</h1><div class=post-description>开发环境与工具链笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>命令</h2></header><div class=entry-content><p>tar
+tar -zcvf 压缩文件名 .tar.gz 被压缩文件名 tar -zxvf 压缩文件名.tar.gz
+whl安装
+python -m pip install *.whl</p></div><footer class=entry-footer><span title=2023-06-29T00:00:00+00:00>创建于 2023-06-29</span>&nbsp;·&nbsp;<span title=2023-06-30T00:00:00+00:00>最后修改于 2023-06-30</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 命令" href=https://jler666.github.io/tools/bpf0vfgbcrtgtpl3/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>代码中C++相关</h2></header><div class=entry-content><p>unique_lock – 互斥锁（mutex）的封装类
+互斥锁mutex
+互斥：在任意时刻只能有一个线程持有互斥锁并访问共享资源。当一个线程已经获得了互斥锁，其他线程对该互斥锁的请求将会被阻塞，直到持有互斥锁的线程将其释放。
+可重入性：同一个线程可以多次获取同一个互斥锁而不会导致死锁（deadlock），也就是说，互斥锁可以被递归地加锁和解锁。
+公平性：互斥锁通常采用先到先得的策略来分配锁的使用权，**即等待时间最长的线程优先获得锁的使用权，**这样可以避免饥饿（starvation）情况的发生。
+死锁风险：如果不正确地使用互斥锁，就可能会出现死锁的情况。例如，当一个线程在持有一个互斥锁的同时试图获取另一个互斥锁，而另一个线程正好持有这个互斥锁，那么两个线程都无法继续执行下去，从而导致死锁。
+性能开销：由于互斥锁需要进行加锁和解锁操作，所以会带来一定的性能开销，尤其是在高并发的场景中。因此，在编写代码时应该尽可能地减少锁的使用，并且保证锁的作用范围尽可能小，以提高程序的并发性能。
+std::recursive_mutex – 可重入互斥锁（recursive mutex）
+继承自std::mutex，并添加了可重入性（即同一个线程可以多次获取该锁 – mutex中说的可递归地加锁和解锁）的支持。与普通的互斥锁不同，当一个线程多次尝试获取std::recursive_mutex时，只有第一次获得锁才会阻塞，后面的请求会累积在该线程上，并通过解锁操作来依次释放锁。
+使用std::recursive_mutex可以避免死锁和其他竞争条件（race condition）的出现，尤其是在递归调用的情况下非常有用。例如，在一个递归函数中，可能需要多次获取同一个锁来保护共享资源。如果使用普通的互斥锁，则在递归过程中可能会出现死锁的情况，因为线程在持有锁的同时又试图获取同一个锁。而使用std::recursive_mutex则可以避免这种情况的发生，从而提高程序的鲁棒性和可靠性。
+与std::mutex类似，std::recursive_mutex也提供了lock()、unlock()等方法来控制锁的获取和释放，以及try_lock()方法来尝试获取锁。此外，std::recursive_mutex还支持std::lock_guard和std::unique_lock等RAII（资源获取即初始化）类型的封装，使得锁的管理更加方便和安全。
+需要注意的是，由于std::recursive_mutex支持递归调用，所以在使用时应该确保每次加锁和解锁成对出现，否则可能会导致严重的竞态条件和内存泄漏等问题。
+std::unique_lockstd::recursive_mutex lock(mutex_); 锁局部变量在函数结束后自动释放
+宏单例
+#define DECLARE_SINGLETON(classname) \ public: \ static classname *Instance() { \ static std::atomic&lt;classname*> instance = { nullptr }; \ if (!instance) { \ static std::once_flag flag; \ std::call_once(flag, \ [&] { instance.store(new (std::nothrow) classname()); }); \ } \ return instance.load(); \ } \ private: \ classname(); \ classname(const classname &) = delete; \ classname &amp;operator=(const classname &) = delete; std::async与furture对象
+...</p></div><footer class=entry-footer><span title=2023-06-29T00:00:00+00:00>创建于 2023-06-29</span>&nbsp;·&nbsp;<span title=2023-08-30T00:00:00+00:00>最后修改于 2023-08-30</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 代码中C++相关" href=https://jler666.github.io/tools/rrqqgb2xc45xthmg/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>仿真</h2></header><div class=entry-content><p>重启后需要重新赋予权限
+sudo chmod a+rw /var/run/docker.sock
+才能./docker.py进入容器
+指定根据名字进自己的docker
+crpilot2-( x86.CRPilot-1.0 name)-( 2.4 version)
+改docker.py内容
+args.name = ‘crpilot2-%s-%s’%(args.version,args.name)
+./docker.py –name rember
+args.name = ‘crpilot2-x86-2.4-remember’
+./docker.py
+改了名字后进入docker没有root权限，直接将Docker中attach的USER改为’root’
+def attach(self):
+print(“USER:",USER)
+self.run([‘chmod -R 777 /var/log/’], user=‘root’)
+if os.path.exists(DIR+’/setup.bash’):
+os.system(‘docker exec -u %s -it %s /bin/bash –rcfile /cowarobot/setup.bash’%(‘root’, self.name))
+else:
+os.system(‘docker exec -u %s -it %s /bin/bash’%(‘root’, self.name)) def attach(self):
+print(“USER:",USER)
+self.run([‘chmod -R 777 /var/log/’], user=‘root’)
+if os.path.exists(DIR+’/setup.bash’):
+os.system(‘docker exec -u %s -it %s /bin/bash –rcfile /cowarobot/setup.bash’%(‘root’, self.name))
+...</p></div><footer class=entry-footer><span title=2023-06-29T00:00:00+00:00>创建于 2023-06-29</span>&nbsp;·&nbsp;<span title=2023-12-28T00:00:00+00:00>最后修改于 2023-12-28</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 仿真" href=https://jler666.github.io/tools/mz13i49kr7wtqwia/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>git 命令</h2></header><div class=entry-content><p>拉远程分支
+1 进入docker(注意git lab中填写的key要是在docker容器中生成的)
+注意docker中的命令要加sudo才可行
+当仓库变化 记得经常性地sudo chmod -R 777 CRPilot-1.0/
+2 git config –global –add safe.directory /cowarobot/src/deciding'
+git config –global –add safe.directory “*”
+3 git remote add origin https://远程仓库地址/xxx.git
+4 git pull origin 远程分支名
+5 设置远程为上游
+git branch –set-upstream-to=origin/&lt;远程分支名> &lt;本地分支>
+使用commit哈希创建本地新分支
+git branch []
+拉远程分支后自己要修改，新建一个分支
+** git checkout -b 新分支名 基于哪个分支名(父分支 可以是远程分支) or 某次提交commit的哈希值 # 创建新分支**
+删除分支 git branch -D 本地分支名
+...</p></div><footer class=entry-footer><span title=2023-06-28T00:00:00+00:00>创建于 2023-06-28</span>&nbsp;·&nbsp;<span title=2025-05-22T00:00:00+00:00>最后修改于 2025-05-22</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to git 命令" href=https://jler666.github.io/tools/hx7cai1wxzxgrrw5/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>docker</h2></header><div class=entry-content><p>查看docker向外的port
+docker port docker镜像名
+在本地拿到容器id
+docker ps -a
+在本地传文件到指定容器内路径
+docker cp 本地文件路径 ID全称:容器内绝对路径</p></div><footer class=entry-footer><span title=2022-06-17T00:00:00+00:00>创建于 2022-06-17</span>&nbsp;·&nbsp;<span title=2023-06-29T00:00:00+00:00>最后修改于 2023-06-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to docker" href=https://jler666.github.io/tools/tkw53w/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>vim</h2></header><div class=entry-content><p>1 安装vim-plug
+不要用他github主页上提供的方法下载，没翻q下不了。直接在home目录下
+git clone https://github.com/junegunn/vim-plug
+mkdir -p ~/.vim/autoload/
+cp ~/vim-plug/plug.vim ~/.vim/autoload/plug.vim
+2 安装插件
+在下面网站查找需要的vim插件
+https://vimawesome.com/
+编辑 ~/.vimrc 文件中的内容，比如安装“vim-cpp-enhanced-highlight” 插件
+set number
+call plug#begin(’~/.vim/plugged')
+Plug ‘octol/vim-cpp-enhanced-highlight’
+call plug#end()
+更新后,打开一个新的vim窗口在其中输入命令
+:source ~/.vimrc
+:PlugStatus #查看插件状态
+:PlugInstall #安装之前在配置文件中声明的插件
+打开 vim 使用命令 :PlugInstall 插件
+打开 vim 使用命令 :PlugClean 插件
+所有插件的都是在Github上面获取的 https://blog.51cto.com/u_11555417/2150626 https://zhuanlan.zhihu.com/p/360981919
+vscode安装
+去官网获取下载的链接地址，如：
+https://az764295.vo.msecnd.net/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb
+改为用国内的镜像下载
+修改其中的主机域名：az764295.vo.msecnd.net为 vscode.cdn.azure.cn，即
+https://vscode.cdn.azure.cn/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb
+可以直接命令在ubuntu中vscode叫code
+sudo snap install code –classic
+snap商店中下载的有问题 无法使用中文输入法 卸载重新安装官方版本
+sudo snap remove –purge code
+插件安装，在vim中执行
+:PlugInstall</p></div><footer class=entry-footer><span title=2022-06-17T00:00:00+00:00>创建于 2022-06-17</span>&nbsp;·&nbsp;<span title=2025-06-27T00:00:00+00:00>最后修改于 2025-06-27</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to vim" href=https://jler666.github.io/tools/nbpxgl/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Git2</h2></header><div class=entry-content><p>1 配置公私钥
+生成ssh key并加到github 账号中
+https://docs.github.com/cn/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account
+ls -al ~/.ssh中查看是否以及存在ssh key
+生成key的命令会更新，可以去下面网站中查看
+https://docs.github.com/cn/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent
+ssh-keygen -t ed25519 -C “xxxxx@163.com”
+ssh-keygen -t rsa -b 4096 -C “xxxxx@163.com”
+一路回车
+因为之前有用rsa生成过钥匙，这次又用ed25519 不同加密算法 生成钥匙，所以有两对。
+.pub后缀的是公钥，要加到github的账号中。
+在我们账号的profile–edit profile–ssh and GPGkeys。
+2 创建个人仓库
+在new Repositories后
+在本地仓库目录下
+git remote -v
+发现为空，即当前仓库没有和任何远程仓库产生联系，所以要先进行remote配置
+git remote add github(远程端名称，以后用这个名字代替远程仓库) git@github.xxx/xxxxxx.git(采用ssh协议，去新的建的仓库中复制这个链接) git remote add github git@github.com:xxx/xxxxxr.git
+在添加完后，再git remote -v，可以看到了两个远端push fetech一个用于上传一个用于下载
+git push github(远端仓库代指名) –all(push所有当前分支)
+注意如果远端的一些文件，本地没有(比如创建工程时的readme .gitignore license)，在push的时候会报错，git会提示你先fetch把这些文件先下载 (远端分支和本地分支同名会出现这种情况)
+git pull (先fetch远端，将同名分支merge)
+git fetch github(远端仓库) main(指定fetch的分支)
+...</p></div><footer class=entry-footer><span title=2022-06-04T00:00:00+00:00>创建于 2022-06-04</span>&nbsp;·&nbsp;<span title=2022-06-25T00:00:00+00:00>最后修改于 2022-06-25</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Git2" href=https://jler666.github.io/tools/iyz0p1/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Git1</h2></header><div class=entry-content><p>极客时间
+分布式 版本管理服务器
+服务端和客户端都有完整的版本库，脱离服务端客户端依旧可以管理版本。查看历史和版本比较等操作，都不需要访问服务器。
+https://git-scm.com/book/zh/v2
+1 git的最小配置
+配置user信息
+git config –global user.name ‘Tou’
+git config –global user.email ‘wzl890123@163.com’
+配置后，如果你变更版本信息将会记录并显示是谁变更了信息
+global – 对当前用户所有仓库有效
+local – 只对某个仓库有效
+system – 对系统所有登录的用户有效
+显示当前git的config配置
+git config –list –local
+git config –list –global
+git config –list –system
+对某个仓库设置特定的用户，而不用上面设置的全局用户
+在仓库路径下
+git config –add –local user.name ‘用户名’
+git config –add –local user.email ‘邮箱’
+对于重复配置出现多个name和email的情况，可以直接edit .git/config 文件对config信息直接做修改
+2 建git仓库
+把已有的项目代码纳入Git管理 cd 项目代码
+git init
+2)新建的项目直接用Git管理
+cd 文件夹
+git init 新项目的名称
+...</p></div><footer class=entry-footer><span title=2022-05-23T00:00:00+00:00>创建于 2022-05-23</span>&nbsp;·&nbsp;<span title=2022-08-03T00:00:00+00:00>最后修改于 2022-08-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Git1" href=https://jler666.github.io/tools/ofqick/></a></article><footer class=page-footer><nav class=pagination><a class=prev href=https://jler666.github.io/tools/>«&nbsp;Prev&nbsp;</a></nav></footer></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

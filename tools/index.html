@@ -1,0 +1,119 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>开发工具 | CantBlog</title><meta name=keywords content><meta name=description content="开发环境与工具链笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/tools/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/tools/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/tools/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/tools/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="开发工具"><meta property="og:description" content="开发环境与工具链笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="开发工具"><meta name=twitter:description content="开发环境与工具链笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"开发工具","item":"https://jler666.github.io/tools/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>开发工具</h1><div class=post-description>开发环境与工具链笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>ubuntu代理</h2></header><div class=entry-content><p>https://github.com/JLer666/clash-for-linux-backup
+安装clash for linux
+https://shadowsocks5.github.io/en/download/clients.html
+https://github.com/TgfishVpn/clash-for-linux
+sudo update-alternatives –config gcc
+sudo update-alternatives –install /usr/bin/gcc gcc /usr/bin/gcc-12 3 –slave /usr/bin/g++ g++ /usr/bin/g++-12
+sudo update-alternatives –install /usr/bin/gcc gcc /usr/bin/gcc-11 3 –slave /usr/bin/g++ g++ /usr/bin/g++-11
+NVIDIA-Linux-x86_64-550.107.02
+clash-for-linux
+运行本项目建议使用root用户，或者使用 sudo 提权。
+使用过程中如遇到问题，请优先查已有的 issues。
+在进行issues提交前，请替换提交内容中是敏感信息（例如：订阅地址）。
+本项目是基于 clash（已跑路） 、yacd 进行的配置整合，关于clash、yacd的详细配置请去原项目查看。
+此项目不提供任何订阅信息，请自行准备Clash订阅地址。
+运行前请手动更改.env文件中的CLASH_URL变量值，否则无法正常运行。ps.CLASH_URL=您在飞鱼的订阅地址
+当前在RHEL系列和Debian,Kali Linux,ubuntu以及Linux系统中测试过，其他系列可能需要适当修改脚本。
+支持 x86_64/aarch64 平台
+【注意：部分带有桌面端Linux系统的需要在浏览器设置代理！否则有可能无法使用！】
+【若系统代理无法使用，但是想要系统代理，请修改尝试修改start.sh中的端口后执行环境变量命令！】
+【还是无法使用请更换当前网络环境（也是其中一个因素！）】
+谷歌，twitter，youtube等可能无法ping通，正常现象！
+开启系统代理 function proxy_on() {
+export http_proxy=http://127.0.0.1:修改这里
+export https_proxy=http://127.0.0.1:修改这里
+export no_proxy=127.0.0.1,localhost
+export HTTP_PROXY=http://127.0.0.1:修改这里
+export HTTPS_PROXY=http://127.0.0.1:修改这里
+export NO_PROXY=127.0.0.1,localhost
+...</p></div><footer class=entry-footer><span title=2025-09-08T00:00:00+00:00>创建于 2025-09-08</span>&nbsp;·&nbsp;<span title=2025-09-08T00:00:00+00:00>最后修改于 2025-09-08</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to ubuntu代理" href=https://jler666.github.io/tools/zasqzxw8qno8hdnx/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Routing代码阅读</h2></header><div class=entry-content><p></p></div><footer class=entry-footer><span title=2023-06-29T00:00:00+00:00>创建于 2023-06-29</span>&nbsp;·&nbsp;<span title=2023-06-29T00:00:00+00:00>最后修改于 2023-06-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Routing代码阅读" href=https://jler666.github.io/tools/routing%E4%BB%A3%E7%A0%81%E9%98%85%E8%AF%BB/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>本地部署流程</h2></header><div class=entry-content><p>gcloud CLI安装 https://cloud.google.com/sdk/docs/install
+我是用的ubuntu software查google cloud platform安装的
+由于使用vpn访问gcp需要 https://cloud.google.com/sdk/docs/proxy-settings
+# 根据clash配置设置相应参数 gcloud config set proxy/type [PROXY_TYPE] gcloud config set proxy/address [PROXY_IP_ADDRESS] gcloud config set proxy/address 127.0.0.1 gcloud config set proxy/port [PROXY_PORT] gcloud config set proxy/port 7890 # 或者开启终端的代理！！！！ source /etc/profile.d/clash.sh proxy_on gcloud init gcloud config set project infra-433003 gcloud auth configure-docker asia-northeast1-docker.pkg.dev # 可以执行如下命令关闭 gcloud CLI 的组件自动更新， 否则会遇到第一次启动gcloud命令等待时间长的问题 gcloud config set component_manager/disable_update_check true docker安装 https://docs.docker.com/engine/install/ubuntu/
+# Add Docker's official GPG key: sudo apt-get update sudo apt-get install ca-certificates curl sudo install -m 0755 -d /etc/apt/keyrings sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc sudo chmod a+r /etc/apt/keyrings/docker.asc # Add the repository to Apt sources: echo \ "deb [arch=$ (dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \ $(. /etc/os-release && echo "$ {UBUNTU_CODENAME:- $VERSION_CODENAME}") stable" | \ sudo tee /etc/apt/sources.list.d/docker.list > /dev/null sudo apt-get update # Install the Docker packages sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin # Create the docker group sudo groupadd docker sudo usermod -aG docker $ USER newgrp docker ``` ### 从gcp上拉docker ```bash gcloud auth login --no-launch-browser gcloud auth application-default login --no-launch-browser # Configure Docker to use Google Artifact Registry gcloud auth configure-docker asia-northeast1-docker.pkg.dev # 配置docker代理，否则拉取会timeout sudo mkdir -p /etc/systemd/system/docker.service.d sudo vim /etc/systemd/system/docker.service.d/http-proxy.conf # docker pull / docker push 的代理被 systemd 接管，需要在 systemd 里设置代理 # 在http-proxy.conf里 [Service] Environment="HTTP_PROXY=http://127.0.0.1:your_port" Environment="HTTPS_PROXY=http://127.0.0.1:your_port" # 重启服务 sudo systemctl daemon-reload sudo systemctl restart docker # 配置docker build/run代理 在本地~/.docker/config.json如果配置好gcloud因该长下面这样 # 172.17.0.1是ifconfig docker0的ip { "credHelpers": { "asia-northeast1-docker.pkg.dev": "gcloud" }, "proxies": { "default": { "httpProxy": "http://172.17.0.1:your_port", "httpsProxy": "http://172.17.0.1:your_port", "noProxy": "localhost" } } } # For example: pull mantastyle latest docker image docker pull asia-northeast1-docker.pkg.dev/infra-433003/mantastyle/mantastyle:latest ``` docker内的bazel会从gcp上拉取一些提前编译好的东西，所以需要再docker内设置网络代理，在项目根目录下创建user_custom.sh ，从而实现在配置 docker 容器环境之前运行用户自定义的脚本逻辑；例如：国内的小伙伴设置 docker 容器中的网络代理以及 go 代理： ```bash #!/bin/bash export GO111MODULE=on export GOPROXY=https://goproxy.cn echo "export HTTP_PROXY=http://localhost:your_vpn_port/" \gt \gt $HOME/.bashrc echo "export HTTPS_PROXY=http://localhost:your_vpn_port/" >> $ HOME/.bashrc export HTTPS_PROXY=http://localhost:your_vpn_port/ export HTTP_PROXY=http://localhost:your_vpn_port/ ``` ![1751463524118-edecd6c1-324b-4704-84af-4e5575d835e9.png](/images/BMI_gx2Vo4FiEJ2q/1751463524118-edecd6c1-324b-4704-84af-4e5575d835e9-974029.png) 本地打开vscode终端进行gcp login然后再reopen container 再配置一下cargo的代理，否则下载可能有问题 ```bash vi $HOME/.cargo/config.toml #增加以下内容 [http] proxy="http://172.17.0.1:your_port" git配置 由于是在docker内开发，所以直接在docker内配置ssh.下面的操作都是在docker内进行的
+...</p></div><footer class=entry-footer><span title=2025-07-02T00:00:00+00:00>创建于 2025-07-02</span>&nbsp;·&nbsp;<span title=2026-02-03T00:00:00+00:00>最后修改于 2026-02-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 本地部署流程" href=https://jler666.github.io/tools/nzk95rvk3me8uh8h/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>kabutack结构</h2></header><div class=entry-content><p>ObserveEnvironmentChange 环境更新
+plmap
+plgraph update
+先构造所有row(左到右 之间没有属性检查) -> 建立row前后拓扑 (row拓扑非常严格要求前后继的大量属性都要一致)-> 基于row拓扑泛洪得到用于构造单个block的所有lane -> 构造block -> 在构造block中构造node(单列) 单个node的属性一定一样(因为row的前后继严格检查)，同时加上nodes的前后左右拓扑
+有点像lane包
+BuildRamps
+ramp理解为进出高速HIGHWAY的闸道是重要的汇入或者分流节点。分为ENTRANCE_RAMP(merge)和EXIT_RAMP(split)
+ramp的构造还有很多不懂，以后对照着地图可视化看吧.ExitRamp逻辑较EntranceRamp简单清晰很多
+BuildIntersections 和 UpdatePatch这部分目前被注释了
+UpdateSegments
+给segment设置属性，包括segment的左右num，segment是否是进出ramp属性,merge区域属性。很多merge的处理看不懂
+FrameContext构造
+其中更新上帧过渡态Transition包含，from/to/time/reason 状态机
+StateType from_state{StateType::DEFAULT}; StateType to_state{StateType::DEFAULT}; Timestamp transition_time; // timestamp when to_state start TransitionReason reason{TransitionReason::EMPTY}; enum class StateType { LANE_FOLLOW, LANE_CHANGE, DEFAULT = LANE_FOLLOW }; // transition reason enum class TransitionReason { EMPTY, RESET, START_LANE_CHANGE, FINISH_LANE_CHANGE, CANCEL_LANE_CHANGE_FROM_LEFT, CANCEL_LANE_CHANGE_FROM_RIGHT }; 如果非启动reset状态，存在上帧的决策。更新上帧决策rote对应的各种lane
+GenerateTrajectory 调用栈
+...</p></div><footer class=entry-footer><span title=2025-05-20T00:00:00+00:00>创建于 2025-05-20</span>&nbsp;·&nbsp;<span title=2025-08-19T00:00:00+00:00>最后修改于 2025-08-19</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to kabutack结构" href=https://jler666.github.io/tools/ssog1b70caf4mm12/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>check</h2></header><div class=entry-content><p>进行统一的代码风格并进行代码静态检查，git commit时利用pre-commit检查,hook有clang-format,cppcheck,cpplint
+sudo apt-get update sudo pip install clang-format sudo apt install python3-pkg-resources python3-pygments sudo apt install cppcheck cppcheck-gui python3-setuptools ttf-bitstream-vera sudo pip install cpplint sudo pip install pre-commit 配置
+cd到对应仓库 pre-commpreit install
+cd到对应仓库 echo "repos: - repo: https://gitee.com/rxzh/pre-commit-hooks rev: v1.0 hooks: - id: clang-format args: ["-i","--style=file"] - id: cppcheck - id: cpplint args: ["--linelength=120","--filter=-legal/copyright,-whitespace,-readability/fn_size, -build/include_what_you_use"] " > .pre-commit-config.yaml git add & git commit clang-format会自动修改不符合规定的代码，但是cppcheck及cpplint回检查出的问题需要手动修改，然后再次git add
+...</p></div><footer class=entry-footer><span title=2025-03-29T00:00:00+00:00>创建于 2025-03-29</span>&nbsp;·&nbsp;<span title=2025-03-29T00:00:00+00:00>最后修改于 2025-03-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to check" href=https://jler666.github.io/tools/hiy3org3xc8y7e6a/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>perf+火焰图</h2></header><div class=entry-content><p>perf安装: sudo apt-get install linux-tools-common perf –version 会提醒是否安装成功，没有安装成功会提醒目前的核版本对应的安装命令
+You may need to install the following packages for this specific kernel: // 核对应版，用这个
+linux-tools-5.15.0-53-generic
+linux-cloud-tools-5.15.0-53-generic
+You may also want to install one of the following packages to keep up to date: // 最新版
+linux-tools-generic
+linux-cloud-tools-generic
+sudo apt-get install linux-tools-5.15.0-53-generic linux-cloud-tools-5.15.0-53-generic
+可能会报找不到库那就用最新版，最新版可兼容老版
+火焰图仓库，主要是perf脚本 https://github.com/brendangregg/FlameGraph</p></div><footer class=entry-footer><span title=2025-03-27T00:00:00+00:00>创建于 2025-03-27</span>&nbsp;·&nbsp;<span title=2025-03-29T00:00:00+00:00>最后修改于 2025-03-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to perf+火焰图" href=https://jler666.github.io/tools/qilae6qautnwqasl/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>ub22 c++开发环境配置</h2></header><div class=entry-content><p>docker环境:
+1 docker安装
+https://www.runoob.com/docker/ubuntu-docker-install.html
+https://mirrors.tuna.tsinghua.edu.cn/help/docker-ce/
+https://segmentfault.com/a/1190000044229597 – this one ok
+(1)卸载已安装旧版docker
+for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do apt-get remove $ pkg; done (2)安装依赖 sudo apt-get install \ apt-transport-https \ ca-certificates \ curl \ gnupg-agent \ software-properties-common (3)信任 Docker 的 GPG 公钥并添加仓库： ```plain (1) sudo install -m 0755 -d /etc/apt/keyrings (2) curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 国内换成中科大源 curl -fsSL https://mirrors.ustc.edu.cn/docker-ce/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg (3) sudo chmod a+r /etc/apt/keyrings/docker.gpg (4) 清华源 echo \ "deb [arch= $(dpkg –print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu “$ (. /etc/os-release && echo " $VERSION_CODENAME”)" stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null 中科大源 echo “deb [arch="$ (dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://mirrors.ustc.edu.cn/docker-ce/linux/ubuntu \ " $(. /etc/os-release && echo “$ VERSION_CODENAME")" stable" | \ sudo tee /etc/apt/sources.list.d/docker.list \gt /dev/null (5) sudo apt-get update ``` sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin 将docker软件源改为中科大源 [https://segmentfault.com/a/1190000044229597](https://segmentfault.com/a/1190000044229597) vim /etc/docker/daemon.json ```plain { "registry-mirrors": [ "https://docker.mirrors.ustc.edu.cn/", "https://mirror.ccs.tencentyun.com", "https://hub-mirror.c.163.com", "https://mirror.baidubce.com" ] } ``` 安装docker compose 先进入root sudo -i curl -L "https://github.com/docker/compose/releases/download/vxxx(去git上找最新版本号)/docker-compose- $(uname -s)-$ (uname -m)" -o /usr/local/bin/docker-compose !! 注意有些版本是没有docker-compose-linux-x86_64的导致文件下不到，需要检查一下 curl下不来，直接去git上下，下载得到的就是一个二进制文件，然后放到/usr/local/bin下，记得给文件重命名为docker-compose # 授予执行权限 chmod +x /usr/local/bin/docker-compose # 显示安装后的版本信息 docker-compose --version docker重启: sudo systemctl restart docker 启动: sudo systemctl start docker 通过非root使用docker,需要使用下面命令: sudo groupadd docker && sudo usermod -aG docker $USER && newgrp docker
+...</p></div><footer class=entry-footer><span title=2024-11-09T00:00:00+00:00>创建于 2024-11-09</span>&nbsp;·&nbsp;<span title=2024-11-11T00:00:00+00:00>最后修改于 2024-11-11</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to ub22 c++开发环境配置" href=https://jler666.github.io/tools/gkr37izyb0m6davd/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>gdb</h2></header><div class=entry-content><p>http://www.unknownroad.com/rtfm/gdbtut/gdbtoc.html
+backtrace 快捷 bt
+打印当前函数调用栈
+(gdb) backtrace #0 func2 (x=30) at test.c:5 #1 0x80483e6 in func1 (a=30) at test.c:10 #2 0x8048414 in main (argc=1, argv=0xbffffaf4) at test.c:19 #3 0x40037f5c in __libc_start_main () from /lib/libc.so.6 (gdb) frame x (x为bt对应标号)
+进入某个函数
+(gdb) frame 2 #2 0x8048414 in main (argc=1, argv=0xbffffaf4) at test.c:19 19 x = func1(x); (gdb) 在当前frame的下
+以下为几个打印当前函数信息的指令
+info frame 打印出的都是地址信息不太直观
+(gdb) info frame Stack level 2, frame at 0xbffffa8c: eip = 0x8048414 in main (test.c:19); saved eip 0x40037f5c called by frame at 0xbffffac8, caller of frame at 0xbffffa5c source language c. Arglist at 0xbffffa8c, args: argc=1, argv=0xbffffaf4 Locals at 0xbffffa8c, Previous frame's sp is 0x0 Saved registers: ebp at 0xbffffa8c, eip at 0xbffffa90 打印此函数内的局部变量(常用于调试)
+...</p></div><footer class=entry-footer><span title=2023-09-05T00:00:00+00:00>创建于 2023-09-05</span>&nbsp;·&nbsp;<span title=2023-11-24T00:00:00+00:00>最后修改于 2023-11-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to gdb" href=https://jler666.github.io/tools/nt4gu3ggl35ax6ly/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>debug</h2></header><div class=entry-content><p>参考线话题没有发布
+从decider/common/common_info.cc–GetInteractionObstaclePairs–current_reference_line开始往下查
+curr_ref_line_ptr = dnp::DnpMapManager::Instance()->GetCurrReferenceLine(&amp;passable_info_); 此函数调用dnp的refline接口</p></div><footer class=entry-footer><span title=2023-08-03T00:00:00+00:00>创建于 2023-08-03</span>&nbsp;·&nbsp;<span title=2024-02-08T00:00:00+00:00>最后修改于 2024-02-08</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to debug" href=https://jler666.github.io/tools/kx02kpms4oyp13po/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>编译</h2></header><div class=entry-content><p>切换SDK
+列举当前所有版本记录
+crpilot_sdk
+自动下载对应版本sdk
+crpilot_sdk 指定版本
+版本切换
+bash downloaded.sdk
+待开发工程放在src目录下
+crmake默认编译优化选项为-O2 -s (最大程度优化代码)，自己调试时可在Cmakelist中添加add_compile_options("-g -O0") 不优化代码。但注意在代码合并时移除此选项。
+使用ccache提高编译速度
+在build文件夹中创建ccache文件夹
+写进bash中
+export CCACHE_DIR=/cowarobot/build-docker/.ccache
+ccache -M 15G
+ccache -s 看cache保存目录
+ccache -C 清空ccache
+crmake configure -DCMAKE_BUILD_TYPE=Debug
+crmake -j6
+如果修改后的文件结构发生变化需要先
+crmake clean
+再重新configure
+有些头文件为了提供给其他人，在上次编译成功时会保存到build_docker/crpilot-x86_v2.4/include中，编译时也会检查这些头文件，当文件结构发生变化后，要将这里面的部分文件也删除，否则其中的文件依旧会变更前的内容。
+sdk版本变化后需要从以下链接先将最新sdk下载(养成好习惯将老sdk备份 备份和替换的都是指的buid-docker/crpilot-x86_v2.4中除3rd链接外的其他所有东西)
+http://crpilot.sandbox.cowarobot.cn/x86_v2.4/
+将下载好的内容直接替换
+在编译时新sdk可能缺一些lib文件，去老sdk中找直接替换
+/usr/bin/ld: 找不到 -lnode
+/usr/bin/ld: 找不到 -ltask
+同时可能要更新simultor，下载后直接解压即可，下次运行仿真时直接使用新的可执行文件即可
+当出现symbol lookup error错误时
+T230803 10:11:13:078118 channel_manager.cc:113 Register COWA.De/cowarobot/build-docker/crpilot-x86_v2.4/bin/crload: symbol lookup error: /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so: undefined symbol: _ZNK4COWA6common14ReferencePoint1xEv
+首先根据
+nm -g -D /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so | grep -B10 _ZNK4COWA6common14ReferencePoint1xEv 输出：
+...</p></div><footer class=entry-footer><span title=2023-06-29T00:00:00+00:00>创建于 2023-06-29</span>&nbsp;·&nbsp;<span title=2023-08-28T00:00:00+00:00>最后修改于 2023-08-28</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 编译" href=https://jler666.github.io/tools/bypav66lcfngedl5/></a></article><footer class=page-footer><nav class=pagination><a class=next href=https://jler666.github.io/tools/page/2/>Next&nbsp;&nbsp;»</a></nav></footer></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

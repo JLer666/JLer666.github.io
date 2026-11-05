@@ -1,0 +1,146 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>C++ | CantBlog</title><meta name=keywords content><meta name=description content="C++ 语言、STL 与工程实践笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/cpp/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/cpp/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="C++"><meta property="og:description" content="C++ 语言、STL 与工程实践笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="C++"><meta name=twitter:description content="C++ 语言、STL 与工程实践笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>C++</h1><div class=post-description>C++ 语言、STL 与工程实践笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>6 异常：用还是不用，这是个问题</h2></header><div class=entry-content><p>首先，开宗明义，如果你不知道到底该不该用异常的话，那答案就是该用。如果你需要避免使用异常，原因必须是你有明确的需要避免使用异常的理由。
+如果像C一样通过返回错误码来判断是否出错，如果出错位置离处理错误的位置相差很远(多层嵌套调用)，每一层函数调用里都得有判断错误码的代码，这就既对写代码的人提出了严格要求，也对读代码的人造成视觉上的干扰
+对于一个矩阵类
+class matrix { … private: float* data_; size_t nrows_; size_t ncols_; } //构造函数 matrix::matrix(size_t nrows, size_t ncols) { data_ = new float[nrows * ncols]; nrows_ = nrows; ncols_ = ncols; } //析构 matrix::~matrix() { delete[] data_; } }; 矩阵乘法
+matrix operator*(const matrix& lhs, const matrix& rhs) { if (lhs.ncols != rhs.nrows) {//左阵行数!=右阵列数 无法进行矩阵乘法抛出异常 throw std::runtime_error( "matrix sizes mismatch"); } matrix result(lhs.nrows, rhs.ncols); // 进行矩阵乘法运算 ......... return result; } 这段代码好像没有对异常进行处理啊，只是throw抛出一个异常。异常处理并不意味着要显式地写try和catch，异常安全的代码可以没有任何try catch。—-异常安全指当异常发生时，既不会发生资源泄漏，系统也不会处于一个不一致的状态
+...</p></div><footer class=entry-footer><span title=2022-02-26T00:00:00+00:00>创建于 2022-02-26</span>&nbsp;·&nbsp;<span title=2023-01-16T00:00:00+00:00>最后修改于 2023-01-16</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 6 异常：用还是不用，这是个问题" href=https://jler666.github.io/cpp/zawgx4/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>4 容器汇编1 比较简单的若干容器</h2></header><div class=entry-content><p>string
+string一般不被认为是一个c++容器，但是和容器有很多共同点。
+string是模板basic_string对char类型的特化，可以认为是一个存放char类型数据的容器，真正的容器与string最大的不同点是里面可以存放任意类型的对象(不止char)。
+跟大部分容器一样 string具有下列成员函数 begin得到对象起始点，end得到对象结束点，[begin,end)–begin指向容器内第一个元素 end指向最后一个元素的后面位置，当begin==end容器为空,empty判断容器是否为空，size得到容器的大小,sawp和另外一个容器交换内容
+在string的情况下考虑到和C字符串的兼容，当容器为空 end和begin一样一起指向代表字符串结尾的\0字符
+容器的开始结束点，容器会记录其状态是否为空，容器大小，容器支持swap直接交换容器内容—-这几点是所有容器都有的共同点
+string的内存不具大致如下
+和vector非常相似 连续内存存放
+string和C字符串的不同处：
+string负责自动维护字符串的生命周期(引用计数 类似shared_ptr)
+string支持字符串的拼接操作符(+,+=)
+string支持字符串的查找操作(find,rfind)
+string支持从istream安全地读入字符串(getline)
+string支持给需要const cahr*的接口传递字符串内容 (通过c_str)
+string支持到数字的互转(stoi-str2int , to_string–int2string)
+等
+推荐在代码中尽量使用string来管理字符串。 但是对于对外暴露的接口，情况有一点复杂。 除非已知调用者已经持有string，不建议在接口中使用const string&。
+如果函数里不对字符串做复杂处理的话，建议使用const char*，可以避免调用者只有C字符串时编译器自动构造string(char可以自动调用string构造，但是使用const cahr则可以阻止char*隐式地转换为string string构造和析构的代价都不低)。
+反之 如果在函数内要做复杂的字符串处理，需要用到string的成员函数，则考虑下面的策略: 1 如果不修改字符串内容，使用cosnt string&或c++17的string_view作为参数类型。string_view在传入C字符串的情况下也不会引发不必要的内存复制。
+2 需要修改字符串内容、但不能影响调用者传入的字符串，使用string作为参数类型(拷贝)
+3 需要修改调用者传入的字符串 使用string&作为参数类型(一般不推荐)
+vector
+c++中的vector相当于java中的ArrayList和python中的list
+和string相似，vector的成员在连续内存里存放，同时begin、end、front、back成员函数指向的位置和string一样
+vector允许下面的操作(不完全):
+可以用中括号[]的下标来访问其成员(同string)
+可以使用data来获得指向其内容的裸指针(同string)
+可以使用capacity来获得当前分配的存储空间大小，移元素数量计(同string)
+可以使用reserve来改变所需的存储空间的大小，成功后capacity()会改变(同string)
+可以使用resize来改变其大小，成功后size()会改变(同string)
+可以使用pop_back来删除最后一个元素(同string)
+可以使用push_back在尾部插入一个元素(同string)
+可以使用insert在指定位置插入一个元素(同string)
+可以使用erease在指定位置删除一个元素(同string)
+可以使用emplace在指定位置构造(拷贝构造 or 移动构造)一个元素
+可以使用emplace_back在尾部新构造(拷贝构造 or 移动构造)一个元素
+当一个容器存在push_xxx,pop_xxx成员函数存在时，说明容器对指定位置的删除和插入性能较高。vector适合在尾部操作，由它的内存布局决定，只有在尾部插入和删除时，其他元素才会不需要移动，除非内存空间不足导致需要重新分配内存空间。
+vector的push_back、insert、reserve、resize等函数可能导致内存重新分配，或者当insert、erease导致元素位置移动时，vector会试图把元素”移动(不是移动构造的那个移动，这里叫拷贝更合适)”新的内存区域。vector通常保证强异常安全性，如果元素类没有提供一个保证不抛异常的移动构造函数(nonexcept修饰)，vector在push或insert一个新元素到容器中(容器中的内存中 构造容器元素)会调用拷贝构造。因此，对于拷贝代价较高的自定义元素类型，我们应当定义移动构造函数，并标其为 noexcept，或只在容器中放置对象的智能指针。这就是为什么我之前需要在 smart_ptr 的实现中标上 noexcept 的原因。
+...</p></div><footer class=entry-footer><span title=2022-02-25T00:00:00+00:00>创建于 2022-02-25</span>&nbsp;·&nbsp;<span title=2022-03-14T00:00:00+00:00>最后修改于 2022-03-14</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 4 容器汇编1 比较简单的若干容器" href=https://jler666.github.io/cpp/rdo3zf/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>5 容器汇编2 需要函数对象的容器</h2></header><div class=entry-content><p>函数对象及其特化
+先讲两个重要的函数对象，less和hash
+先看less，小于关系 在标准库中less通常这样定义
+template &lt;class T> struct less: binary_function&lt;T, T, bool> {//binary_function函数模板 参数为T,T类型 返回值为布尔类型 bool operator()(const T& x, const T& y) const { return x &lt; y; } }; less()(1,2);//先less()构造less临时对象，再调用opreator()双参数重载版
+less 是一个函数对象，并且是个二元函数，执行对任意类型的值的比较，返回布尔类型。作为函数对象，它定义了函数调用运算符（operator()），并且缺省(defualt 默认)行为是对指定类型的对象进行 &lt; 的比较操作。 — 还有greater
+若干容器和排序算法sort会用这个默认less
+计算哈希值的函数对象hash，目的是把某个类型(传入的实例化类型)的值转换成一个无符号整数哈希值(类型为size_t)，编译器没有像less一样给一个默认缺省的hash实现
+系统提供了对于系统常用的类型hash特化 如
+namespace std{ //声明一个模板 hash，其有一个类型参数。编译器知道了 //hash 是一个类模板之后，下面才能进行特化。 template &lt;class T> struct hash;//声明函数hash类 template &lt;>//模板T特化 struct hash&lt;int>//int特化版本 : public unary_function&lt;int, size_t> { size_t operator()(int v) const noexcept { return static_cast&lt;size_t>(v); } } }; 更复杂的类型，如指针或者 string 的特化，都会更复杂。要点是，对于每个类，类的作者都可以提供 hash 的特化，使得对于不同的对象，hash函数调用运算符都能得到尽可能均匀分布的不同数值
+...</p></div><footer class=entry-footer><span title=2022-02-25T00:00:00+00:00>创建于 2022-02-25</span>&nbsp;·&nbsp;<span title=2022-04-24T00:00:00+00:00>最后修改于 2022-04-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 5 容器汇编2 需要函数对象的容器" href=https://jler666.github.io/cpp/phgi4m/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>3右值和移动究竟解决了什么问题. 3 引用折叠,完美转发</h2></header><div class=entry-content><p>此部分内容和右值引用重复
+2.引用折叠
+引用折叠规则：
+X& + & => X&
+X&& + & => X&
+X& + && => X&
+X&& + && => X&&
+函数模板参数推导规则（右值引用参数部分）：
+当函数模板的模板参数为__T__而函数形参为__T&&__（右值引用）时适用本规则。
+若实参为左值_(U,U&,U&&的有名左值 等)则认为其类型为__U& ，则模板参数 T 应推导为引用类型 U& _。
+（根据引用折叠规则，_ U& + && => U&， 而__T&& ≡ U&，故__T ≡ U& _）
+若实参为右值(U(),move(左值) 亡值,static_cast&lt;U&&>左值 亡值等)则认为其类型为U&&_ ，则模板参数 T 应推导为非引用类型 U 。_
+（根据引用折叠规则，_ U__或__U&& + && => U&&， 而__T&& ≡ U&&，故__T ≡ U__，这里强制规定__T ≡ U _）
+std::remove_reference__为__C++0x__标准库中的元函数，其功能为去除类型中的引用。
+std::remove_reference&lt;U&>::type ≡ U
+...</p></div><footer class=entry-footer><span title=2022-02-24T00:00:00+00:00>创建于 2022-02-24</span>&nbsp;·&nbsp;<span title=2025-06-29T00:00:00+00:00>最后修改于 2025-06-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 3右值和移动究竟解决了什么问题. 3 引用折叠,完美转发" href=https://jler666.github.io/cpp/fb9bt7/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>3右值和移动究竟解决了什么问题. 4 forward,move</h2></header><div class=entry-content><p>此部分内容和右值引用重复
+5.std::move()与std::forward()源码剖析
+在分析std::move()与std::forward()之前，先看看remove_reference，下面是__remove_reference__的实现：
+template&lt;typename _Tp> struct remove_reference { typedef _Tp type; }; //如果传入_Tp为 // 特化版本 特化了_Tp& _Tp&&的struct 对于struct中的参数_Tp是确定 template&lt;typename _Tp> struct remove_reference&lt;_Tp&> { typedef _Tp type; }; template&lt;typename _Tp> struct remove_reference&lt;_Tp&&> { typedef _Tp type; }; _ _
+/类模板特例化和部分特例化
+//原始的，最通用版本，允许接收T为任何类型 template&lt;typename T> class C { ... }; //部分特例化，此版本仅适用于指针类型 template&lt;typename T> class C&lt;T *> { ... }; 注：只有类模板才支持部分特例化，函数模板特例化时必须为原模板中每个模板参数都提供实参。 类模板部分特例化本身仍然是一个模板，使用它时用户还必须为那些再部分特例化版中未指明的模板参数提供实参。上面这个例子中，特例化版本的模板参数数量与原始模板相同，但是类型不同。
+c调用第一个版本
+c&lt;int*>调用第二个版本—调用第一个模板也说的过去啊，可以说T是int*类型的嘛。这是因为当多个模板可供选择，编译器将使用特例化程度最高(部分特例化 肯定比 不特例化的版本特例化程度更高)的模板，就是指定了指针版本 当特化时带指针则都会调用这个部分特例化版本。
+template
+_struct remove_reference&lt;Tp&>
+template
+...</p></div><footer class=entry-footer><span title=2022-02-24T00:00:00+00:00>创建于 2022-02-24</span>&nbsp;·&nbsp;<span title=2025-06-29T00:00:00+00:00>最后修改于 2025-06-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 3右值和移动究竟解决了什么问题. 4 forward,move" href=https://jler666.github.io/cpp/hp9rlm/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>3右值和移动究竟解决了什么问题. 2 万能引用</h2></header><div class=entry-content><p>此部分内容和右值引用重复
+万能引用
+是否看到T&就一定是个左值引用 是
+是否看到T&&就一定是个右值引用 否 – 有的模板代码里 对于类型参数的推导结果可能是引用 – T可能是个引用类型
+假设右值引用是使用&&声明的，那么假设类型声明中出现&& 表示右值引用似乎是合理的。事实并非如此:
+Widget&& var1 = someWidget; // here, “&&” means rvalue reference auto&& var2 = var1; // here, “&&” does not mean rvalue reference template&lt;typename T> void f(std::vector&lt;T>&& param); // here, “&&” means rvalue reference template&lt;typename T> void f(T&& param); // here, “&&”does not mean rvalue reference 类型声明当中的“&&”有的时候意味着rvalue reference，但有的时候意味着rvalue reference 或者 lvalue reference (两种都有可能)。因此，源代码当中出现的 “&&” 有可能是 “&” 的意思，即是说，语法上看着像rvalue reference (“&&”)，但实际上却代表着一个lvalue reference (“&”)。在这种情况下，此种引用比lvalue references 或者 rvalue references都要来的更灵活。
+...</p></div><footer class=entry-footer><span title=2022-02-23T00:00:00+00:00>创建于 2022-02-23</span>&nbsp;·&nbsp;<span title=2025-06-29T00:00:00+00:00>最后修改于 2025-06-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 3右值和移动究竟解决了什么问题. 2 万能引用" href=https://jler666.github.io/cpp/pxydey/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>3右值和移动究竟解决了什么问题. 1 右值和移动的介绍</h2></header><div class=entry-content><p>c++中表达式值类别(value categories)如下
+从字面意义上理解一下
+一个 lvalue 是通常可以放在等号左边的表达式，左值
+一个 rvalue 是通常只能放在等号右边的表达式，右值
+一个 glvalue 是 generalized lvalue，广义左值
+一个 xvalue 是 expiring lvalue，将亡值
+一个 prvalue 是 pure rvalue，纯右值
+先不管这么多先只看 lvalue 左值，prvalue 纯右值
+左值是有标识符(有名–非匿名)、可以取地址的表达式，最常见的有：
+变量、函数或数据成员的名字
+返回左值引用的表达式 ++x，x=1,cout«’ ’,(?:)
+字符串字面量 如”hello world” 字符串字面量之所以是左值是因为它需要占用主存，是可以取地址的。而整数，字符等字面量是直接放在寄存器里 不能取地址。在C++中 字符串其实是const char[N]，其实是个常量表达式，在内存中有明确的地址。
+解引用表达式比如*p 转型为左值引用的表达式返回的也是左值static_cast&lt;X&>(x);
+函数调用时 左值可以被绑定到 左值引用类型(T&)的形参。[常量变量只能绑定到常左值引用(const T&)]
+纯右值是没有标识符(匿名)、不可取地址的表达式(匿名临时对象是不能取地址的)--一般就是临时对象 或者字面值 常见的有：
+返回非引用类型的表达式 如x++(先返回加之前的匿名对象)、x+1(返回的是一个+1后的匿名对象)、make_shared(42)(构造函数 构造的一个没有赋名的匿名对象)，this指针(X类重载了& 返回this), 转换为非引用类型的转型表达式，如static_cast(x)，(int)1
+转型为右值引用的表达式(亡值 也算右值的一种) static_cast&lt;X&&>(x) ,move(x)
+lamba表达式
+当a为右值，以下变量是亡值(右值的一种 move后的返回值就是亡值) a[n],a.m(m为非静态非引用类型)
+...</p></div><footer class=entry-footer><span title=2022-02-23T00:00:00+00:00>创建于 2022-02-23</span>&nbsp;·&nbsp;<span title=2025-06-29T00:00:00+00:00>最后修改于 2025-06-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 3右值和移动究竟解决了什么问题. 1 右值和移动的介绍" href=https://jler666.github.io/cpp/zigoxt/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>2章思考问题</h2></header><div class=entry-content><p>1 c++11使用大括号进行对象初始化–使用大括号编译器知道是调用构造函数来初化对象，不会出现语法上的误导认为是函数指针
+X another_X(X());//本意 用临时对象X()去调用移动构造函数去构造another_X这个对象，但是并没有调用移动构造！编译器会认为X another_X(X());这是一个函数声明，another_X是函数名，X是返回类型， 参数名 无 参数类型 函数指针，函数指针的返回类型为X 函数无参数。
+这是个很经典的c++ Most vexing parse” 问题。
+为了避免歧义c++11中，X another_X{ X{} };这样会调用移动构造函数
+smart_ptr ptr1{create_shape{shape_type::circle}};
+2 下面两个拷贝构造函数，一个泛型版本一个非泛型版本,但是函数体内容又都一致。应该只写一个泛型版本就够了啊,在调用拷贝构造时指明模板类型–如果没有非泛型版本的拷贝构造，则编译器给一个默认的拷贝构造，这样会导致相同类型的拷贝构造调用的是默认版一个堆上内存同时被两个指针拥有但是引用计数为1，这就是错误的。effective45条提到，member templates不影响语言规则，声明member templates用于泛化copy构造时，还需要声明正常的copy构造。
+smart_ptr ptr1; smart_ptr ptr2(ptr1);
+所以需要写非泛型版
+因为smart_ptr(smart_ptr&& other)这个函数不会被编译器当作移动构造函数，因而不会自动触发删除拷贝构造函数的行为。如果我们想要实现自动移动，需要显示地将拷贝构造函数标记为=delete，或者定义含模板参数的拷贝构造函数–所以要写含模板的拷贝构造函数
+smart_ptr(const smart_ptr& other)//拷贝构造 { //使this 共享 other的资源 ptr_ = other.ptr_; if (ptr_) { other.shared_count_ ->add_count();//与other一样指向同一块资源 此资源的引用计数+1 shared_count_ = other.shared_count_; } } template &lt;typename U> smart_ptr(const smart_ptr&lt;U>& other) noexcept //隐式类型转换(子类转父类) 拷贝构造 { //使this 共享 other的资源 ptr_ = other.ptr_; if (ptr_) { other.shared_count_ ->add_count(); shared_count_ = other.shared_count_; } } 3 老师，能否推荐一些比较经典的C++开源项目，特别是关于后端开发的。
+...</p></div><footer class=entry-footer><span title=2022-02-23T00:00:00+00:00>创建于 2022-02-23</span>&nbsp;·&nbsp;<span title=2022-12-21T00:00:00+00:00>最后修改于 2022-12-21</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 2章思考问题" href=https://jler666.github.io/cpp/mscz94/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>移动构造函数</h2></header><div class=entry-content><p>移动构造函数
+首先对c++11中的多个概念做个定义
+表达式expression 定义 由运算符op和运算对象类似于数学上的算数表达式。举例 字面值(literal)和变量(variable)时最简单的表达式,函数的返回值也被认为是表达式。
+表达式是可求值的，对表达式求值将得到结果，**结果拥有两个属性 类型 和 值类别。**类型就是int,float…这些plain old type以及一些自定义的类类型
+下面重点讲下值类别
+** 在c++11以后，表达式按值类别分，必然属于以下三者之一：左值(left value,lvalue)，将亡值(expiring value,xvalue)，纯右值(pure rvalue,pralue)。其中，左值和将亡值合称泛左值(generalized lvalue,glvalue)，纯右值和将亡值合称右值(right value,rvalue)**
+下面用 左值、右值.. 来指代 结果值类别为左值的表达式和结果值类别为右值的表达式。
+下面对各个值类别的特征进行描述
+左值表达式 lvalue 特点具名 是一个具体的对象 不是临时对象
+能够用&取地址的表达式是左值表达式
+举例 函数名和变量名(实际上是函数指针和具变量名–namespace::变量),模板型参对象，返回左值引用的函数调用、前置自增自减符连接的表达式++x/–x，由赋值运算符或符合赋值运算符连接的表达式(a=b a+=b a%=b)，解引用表达式*p，字符串字面值”abc”等。
+纯右值表达式 prvalue 特点不具名 是匿名的 临时的
+满足以下条件之一 1)本身就是纯粹的字面值如 3、false 2)求值结果相当于字面值或一个临时对象
+举例 除字符串字面值以外的字面值、返回非引用类型的函数调用、后置自增自减运算符连接的表达式x++/x–、算术表达式 a+b,a&amp;b,a«b、逻辑表达式a&&amp;b,a||b,~a、比较表达式 a==b,a>=b,a&lt;b、取地址表达式&amp;a
+根据上面的说明要强调几点：
+1)前缀自增自减是左值表达式 后缀自增自减是右值表达式–因为++i是对i加1后再赋值给i 返回的就是+1后的i，所以++i的结果是具名的 名字就是i。对于i++ 是对i先拷贝将得到的副本作为结果返回然后再对i加1，由于i++的返回结果是对i加1前的一份拷贝所以它是不具名的 所以无法作为左值被赋值。
+2)解引用*p是左值表达式 取地址&amp;a是纯右值
+我们在左值判断的说明中 说能被取地址&的表达式就是左值，因为&(p)正确所以p是左值表达式。对于&amp;a而言得到的是a的地址 相当于unsinged int的字面值，所以是纯右值
+a+b、a&&amp;b、a== b a+b得到的是不具名的临时对象，而a&&amp;b a==b得到的非true即false相当于字面值
+将亡值表达式 xvalue
+c++11之前的右值和c++11的纯右值是等价的。所谓将亡值就是下列表达式
+返回右值引用的函数的 调用表达式
+转换为右值引用的转换函数的 调用表达式
+...</p></div><footer class=entry-footer><span title=2022-02-22T00:00:00+00:00>创建于 2022-02-22</span>&nbsp;·&nbsp;<span title=2025-06-29T00:00:00+00:00>最后修改于 2025-06-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 移动构造函数" href=https://jler666.github.io/cpp/gsb47d/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>2自己动手来实现一个shared_ptr智能指针3 实现代码</h2></header><div class=entry-content><p>template &lt;typename T> class smart_ptr { … smart_ptr(smart_ptr&& other) noexcept//拷贝构造参数改为右值引用 变为移动构造函数 { ptr_ = other.release(); } smart_ptr& operator=(smart_ptr rhs)//不传入引用而传入对象 {//传入对象构造形参rhs时 因为只定义了移动构造所以在调用op=必须传入右值引用或者右值(临时对象)，来构造形参 传入左值会出错 rhs.swap(*this); return *this; } //原 //smart_ptr& operator=(smart_ptr& rhs) //{ //smart_ptr(rhs).swap(*this); //return *this; //} … }; 根据 C++ 的规则，如果我提供了移动构造函数而没有手动提供拷贝构造函数，那后者自动被禁用（记住，C++ 里那些复杂的规则也是为方便编程而设立的）。于是，我们自然地得到了以下结果：
+smart_ptr&lt;shape> ptr1{create_shape(shape_type::circle)};//移动构造 smart_ptr&lt;shape> ptr2{ptr1}; // 编译出错 因为没写拷贝构造 smart_ptr&lt;shape> ptr3; ptr3 = ptr1; // 编译出错 因为没写拷贝构造在调用op=时 无法通过拷贝构造来构造形参 ptr3 = std::move(ptr1); // OK，可以 调用op=时 通过移动构造来构造形参 smart_ptr&lt;shape> ptr4{std::move(ptr3)}; // OK，可以 移动构造 这也是 C++11 的 unique_ptr 的基本行为。
+...</p></div><footer class=entry-footer><span title=2022-02-22T00:00:00+00:00>创建于 2022-02-22</span>&nbsp;·&nbsp;<span title=2022-12-21T00:00:00+00:00>最后修改于 2022-12-21</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 2自己动手来实现一个shared_ptr智能指针3 实现代码" href=https://jler666.github.io/cpp/be4506/></a></article><footer class=page-footer><nav class=pagination><a class=prev href=https://jler666.github.io/cpp/page/4/>«&nbsp;Prev&nbsp;
+</a><a class=next href=https://jler666.github.io/cpp/page/6/>Next&nbsp;&nbsp;»</a></nav></footer></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

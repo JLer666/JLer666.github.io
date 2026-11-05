@@ -1,0 +1,412 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux多线程开发3 生产者消费者,条件量,信号量 | CantBlog</title><meta name=keywords content><meta name=description content='生产者和消费者模型 和 条件变量
+生产者
+容器装满后不再生产阻塞 并通知消费者去消费
+容器
+消费者
+容器无内容后不再消费阻塞 并通知生产者去生产
+/*
+生产者消费者模型 也叫有限缓冲模型
+生产者向容器中添加节点 消费者从容器中删除节点
+
+条件变量 不是锁  但是可以在某个条件满足后阻塞线程或解阻塞线程
+pthread_cond_t
+int pthread_cond_init(pthread_cond_t *restrict cond, pthread_condattr_t *restrict cond_attr);
+初始化条件变量
+int pthread_cond_destroy(pthread_cond_t *cond);
+销毁条件变量
+int pthread_cond_wait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex);
+阻塞函数  等待被唤醒(在信号或广播唤醒前一直等待)
+pthread_cond_wait的线程在等待期间会将锁给让出去 当前线程在等待时是不拿锁的
+在被唤醒等待结束不阻塞时 锁又会还给这个在等待的线程
+int pthread_cond_timedwait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex, const struct timespec *restrict abstime);
+阻塞函数  等待被唤醒(在信号或广播唤醒或阻塞的实际还没有超过设定的abstime前 一直等待)
+等待期间会将锁给让出去 当前线程在等待时是不拿锁的
+在被唤醒等待结束不阻塞时 锁又会还给这个在等待的线
+int pthread_cond_signal(pthread_cond_t *cond);
+唤醒1个或多个在等待的线程
+int pthread_cond_broadcast(pthread_cond_t *cond);
+唤醒所有在等待的线程
+\*/
+#include <stdio.h>
+#include <pthread.h>
+#include <string.h>
+#include <unistd.h>
+#include <stdlib.h>      //malloc
+pthread_rwlock_t rwlock; //全局读写锁量
+void *produce(void *arg);
+void *custom(void *arg);
+//使用链表作为容器 假设这个容器不会满 但是会空
+typedef struct Node
+{
+    int data;
+    struct Node *next;
+} Node;
+Node *head = NULL; //头节点
+//创建条件变量
+pthread_cond_t cond;
+int main()
+{
+    //初始化互斥量
+    pthread_rwlock_init(&amp;rwlock, NULL);
+    //初始化条件变量
+    pthread_cond_init(&amp;cond, NULL);
+    //  创建3个子线程 主线程只用于管理系统资源
+    pthread_t ptids[5],
+        ctids[5]; //线程数组 5个生产者 5个消费者
+    for (int i = 0; i < 5; i++)
+    {
+        int ret = pthread_create(&amp;ptids[i], NULL, produce, NULL);
+        if (ret != 0)
+        {
+            printf("%s\n", strerror(ret));
+        }
+        //不join了 直接将10个线程都分离 由系统回收
+        pthread_detach(ptids[i]);
+    }
+    for (int i = 0; i < 5; i++)
+    {
+        int ret = pthread_create(&amp;ctids[i], NULL, custom, NULL);
+        if (ret != 0)
+        {
+            printf("%s\n", strerror(ret));
+        }
+        //不join了 直接将10个线程都分离 由系统回收
+        pthread_detach(ctids[i]);
+    }
+    while (1)
+    {
+        sleep(10);
+        break;
+
+    }
+    pthread_cond_destroy(&amp;cond);
+    //子线程执行10秒后就将锁销毁
+    pthread_rwlock_destroy(&amp;rwlock);
+    //pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程
+    return 0; //不会执行
+}
+// 这整个链表就像栈 生产和消费的过程就是出栈和入栈 生产出来加在队首 消费也优先消费队首的节点
+// 生产和消费都是写操作
+void *produce(void *arg) //生产线程 向容器添加内容 不断创建节点添加到链表中--新节点直接作为新的头节点
+{
+    while (1)
+    {
+        pthread_rwlock_wrlock(&amp;rwlock);
+        Node *new_node = (Node *)malloc(sizeof(Node));
+        new_node->data = rand() % 1000;
+        new_node->next = head;
+        head = new_node;
+        printf("%ld produce node %d\n
+", pthread_self(), new_node->data);
+        //只要生产了一个就通知消费者消费 唤醒在等待的消费者
+        pthread_cond_signal(&amp;cond);
+        pthread_rwlock_unlock(&amp;rwlock);
+        usleep(1000); //每个线程在产生一个新节点后至少1ms不生产新节点
+    }
+    return NULL;
+}
+void *custom(void *arg)
+{
+    while (1)
+    {
+        pthread_rwlock_wrlock(&amp;rwlock);
+        if (head == NULL)
+        {
+            //1head此时为null说明生产线程还没有生产节点 容器为空 需要将锁给生产线程，让生产线程先生产节点先
+            // pthread_rwlock_unlock(&amp;rwlock);
+            // usleep(1000); //每个线程在消费一个节点后至少1ms不争夺锁
+            // continue;
+            //2 没有数据阻塞等待 当生产者生产了一个节点会发信号通知 这里就会解除阻塞
+            pthread_cond_wait(&amp;cond, &amp;rwlock); //当前消费者拿着锁在等待 生产者拿不到锁怎么生产？
+            //并不会这样 pthread_cond_wait在等待期间会将锁给让出去 当前线程在等待时是不拿锁的
+            //当唤醒后不再等待 锁又归还给当前线程
+            pthread_rwlock_unlock(&amp;rwlock);
+            continue;
+        }
+        Node *temp = head;
+        head = head->next;
+        printf("%ld custom node %d\n
+", pthread_self(), temp->data);
+        free(temp); //释放头节点
+        pthread_rwlock_unlock(&amp;rwlock);
+        usleep(1000); //每个线程在消费一个节点后至少1ms不消费新节点
+    }
+    return NULL;
+}
+信号量'><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/cwx9z0/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/cwx9z0/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/cwx9z0/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux多线程开发3 生产者消费者,条件量,信号量"><meta property="og:description" content='生产者和消费者模型 和 条件变量
+生产者
+容器装满后不再生产阻塞 并通知消费者去消费
+容器
+消费者
+容器无内容后不再消费阻塞 并通知生产者去生产
+/* 生产者消费者模型 也叫有限缓冲模型 生产者向容器中添加节点 消费者从容器中删除节点 条件变量 不是锁 但是可以在某个条件满足后阻塞线程或解阻塞线程 pthread_cond_t int pthread_cond_init(pthread_cond_t *restrict cond, pthread_condattr_t *restrict cond_attr); 初始化条件变量 int pthread_cond_destroy(pthread_cond_t *cond); 销毁条件变量 int pthread_cond_wait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex); 阻塞函数 等待被唤醒(在信号或广播唤醒前一直等待) pthread_cond_wait的线程在等待期间会将锁给让出去 当前线程在等待时是不拿锁的 在被唤醒等待结束不阻塞时 锁又会还给这个在等待的线程 int pthread_cond_timedwait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex, const struct timespec *restrict abstime); 阻塞函数 等待被唤醒(在信号或广播唤醒或阻塞的实际还没有超过设定的abstime前 一直等待) 等待期间会将锁给让出去 当前线程在等待时是不拿锁的 在被唤醒等待结束不阻塞时 锁又会还给这个在等待的线 int pthread_cond_signal(pthread_cond_t *cond); 唤醒1个或多个在等待的线程 int pthread_cond_broadcast(pthread_cond_t *cond); 唤醒所有在等待的线程 \*/ #include <stdio.h> #include <pthread.h> #include <string.h> #include <unistd.h> #include <stdlib.h> //malloc pthread_rwlock_t rwlock; //全局读写锁量 void *produce(void *arg); void *custom(void *arg); //使用链表作为容器 假设这个容器不会满 但是会空 typedef struct Node { int data; struct Node *next; } Node; Node *head = NULL; //头节点 //创建条件变量 pthread_cond_t cond; int main() { //初始化互斥量 pthread_rwlock_init(&amp;rwlock, NULL); //初始化条件变量 pthread_cond_init(&amp;cond, NULL); // 创建3个子线程 主线程只用于管理系统资源 pthread_t ptids[5], ctids[5]; //线程数组 5个生产者 5个消费者 for (int i = 0; i < 5; i++) { int ret = pthread_create(&amp;ptids[i], NULL, produce, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } //不join了 直接将10个线程都分离 由系统回收 pthread_detach(ptids[i]); } for (int i = 0; i < 5; i++) { int ret = pthread_create(&amp;ctids[i], NULL, custom, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } //不join了 直接将10个线程都分离 由系统回收 pthread_detach(ctids[i]); } while (1) { sleep(10); break; } pthread_cond_destroy(&amp;cond); //子线程执行10秒后就将锁销毁 pthread_rwlock_destroy(&amp;rwlock); //pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程 return 0; //不会执行 } // 这整个链表就像栈 生产和消费的过程就是出栈和入栈 生产出来加在队首 消费也优先消费队首的节点 // 生产和消费都是写操作 void *produce(void *arg) //生产线程 向容器添加内容 不断创建节点添加到链表中--新节点直接作为新的头节点 { while (1) { pthread_rwlock_wrlock(&amp;rwlock); Node *new_node = (Node *)malloc(sizeof(Node)); new_node->data = rand() % 1000; new_node->next = head; head = new_node; printf("%ld produce node %d\n ", pthread_self(), new_node->data); //只要生产了一个就通知消费者消费 唤醒在等待的消费者 pthread_cond_signal(&amp;cond); pthread_rwlock_unlock(&amp;rwlock); usleep(1000); //每个线程在产生一个新节点后至少1ms不生产新节点 } return NULL; } void *custom(void *arg) { while (1) { pthread_rwlock_wrlock(&amp;rwlock); if (head == NULL) { //1head此时为null说明生产线程还没有生产节点 容器为空 需要将锁给生产线程，让生产线程先生产节点先 // pthread_rwlock_unlock(&amp;rwlock); // usleep(1000); //每个线程在消费一个节点后至少1ms不争夺锁 // continue; //2 没有数据阻塞等待 当生产者生产了一个节点会发信号通知 这里就会解除阻塞 pthread_cond_wait(&amp;cond, &amp;rwlock); //当前消费者拿着锁在等待 生产者拿不到锁怎么生产？ //并不会这样 pthread_cond_wait在等待期间会将锁给让出去 当前线程在等待时是不拿锁的 //当唤醒后不再等待 锁又归还给当前线程 pthread_rwlock_unlock(&amp;rwlock); continue; } Node *temp = head; head = head->next; printf("%ld custom node %d\n ", pthread_self(), temp->data); free(temp); //释放头节点 pthread_rwlock_unlock(&amp;rwlock); usleep(1000); //每个线程在消费一个节点后至少1ms不消费新节点 } return NULL; } 信号量'><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-19T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux多线程开发3 生产者消费者,条件量,信号量"><meta name=twitter:description content='生产者和消费者模型 和 条件变量
+生产者
+容器装满后不再生产阻塞 并通知消费者去消费
+容器
+消费者
+容器无内容后不再消费阻塞 并通知生产者去生产
+/* 生产者消费者模型 也叫有限缓冲模型 生产者向容器中添加节点 消费者从容器中删除节点 条件变量 不是锁 但是可以在某个条件满足后阻塞线程或解阻塞线程 pthread_cond_t int pthread_cond_init(pthread_cond_t *restrict cond, pthread_condattr_t *restrict cond_attr); 初始化条件变量 int pthread_cond_destroy(pthread_cond_t *cond); 销毁条件变量 int pthread_cond_wait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex); 阻塞函数 等待被唤醒(在信号或广播唤醒前一直等待) pthread_cond_wait的线程在等待期间会将锁给让出去 当前线程在等待时是不拿锁的 在被唤醒等待结束不阻塞时 锁又会还给这个在等待的线程 int pthread_cond_timedwait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex, const struct timespec *restrict abstime); 阻塞函数 等待被唤醒(在信号或广播唤醒或阻塞的实际还没有超过设定的abstime前 一直等待) 等待期间会将锁给让出去 当前线程在等待时是不拿锁的 在被唤醒等待结束不阻塞时 锁又会还给这个在等待的线 int pthread_cond_signal(pthread_cond_t *cond); 唤醒1个或多个在等待的线程 int pthread_cond_broadcast(pthread_cond_t *cond); 唤醒所有在等待的线程 \*/ #include <stdio.h> #include <pthread.h> #include <string.h> #include <unistd.h> #include <stdlib.h> //malloc pthread_rwlock_t rwlock; //全局读写锁量 void *produce(void *arg); void *custom(void *arg); //使用链表作为容器 假设这个容器不会满 但是会空 typedef struct Node { int data; struct Node *next; } Node; Node *head = NULL; //头节点 //创建条件变量 pthread_cond_t cond; int main() { //初始化互斥量 pthread_rwlock_init(&amp;rwlock, NULL); //初始化条件变量 pthread_cond_init(&amp;cond, NULL); // 创建3个子线程 主线程只用于管理系统资源 pthread_t ptids[5], ctids[5]; //线程数组 5个生产者 5个消费者 for (int i = 0; i < 5; i++) { int ret = pthread_create(&amp;ptids[i], NULL, produce, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } //不join了 直接将10个线程都分离 由系统回收 pthread_detach(ptids[i]); } for (int i = 0; i < 5; i++) { int ret = pthread_create(&amp;ctids[i], NULL, custom, NULL); if (ret != 0) { printf("%s\n", strerror(ret)); } //不join了 直接将10个线程都分离 由系统回收 pthread_detach(ctids[i]); } while (1) { sleep(10); break; } pthread_cond_destroy(&amp;cond); //子线程执行10秒后就将锁销毁 pthread_rwlock_destroy(&amp;rwlock); //pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程 return 0; //不会执行 } // 这整个链表就像栈 生产和消费的过程就是出栈和入栈 生产出来加在队首 消费也优先消费队首的节点 // 生产和消费都是写操作 void *produce(void *arg) //生产线程 向容器添加内容 不断创建节点添加到链表中--新节点直接作为新的头节点 { while (1) { pthread_rwlock_wrlock(&amp;rwlock); Node *new_node = (Node *)malloc(sizeof(Node)); new_node->data = rand() % 1000; new_node->next = head; head = new_node; printf("%ld produce node %d\n ", pthread_self(), new_node->data); //只要生产了一个就通知消费者消费 唤醒在等待的消费者 pthread_cond_signal(&amp;cond); pthread_rwlock_unlock(&amp;rwlock); usleep(1000); //每个线程在产生一个新节点后至少1ms不生产新节点 } return NULL; } void *custom(void *arg) { while (1) { pthread_rwlock_wrlock(&amp;rwlock); if (head == NULL) { //1head此时为null说明生产线程还没有生产节点 容器为空 需要将锁给生产线程，让生产线程先生产节点先 // pthread_rwlock_unlock(&amp;rwlock); // usleep(1000); //每个线程在消费一个节点后至少1ms不争夺锁 // continue; //2 没有数据阻塞等待 当生产者生产了一个节点会发信号通知 这里就会解除阻塞 pthread_cond_wait(&amp;cond, &amp;rwlock); //当前消费者拿着锁在等待 生产者拿不到锁怎么生产？ //并不会这样 pthread_cond_wait在等待期间会将锁给让出去 当前线程在等待时是不拿锁的 //当唤醒后不再等待 锁又归还给当前线程 pthread_rwlock_unlock(&amp;rwlock); continue; } Node *temp = head; head = head->next; printf("%ld custom node %d\n ", pthread_self(), temp->data); free(temp); //释放头节点 pthread_rwlock_unlock(&amp;rwlock); usleep(1000); //每个线程在消费一个节点后至少1ms不消费新节点 } return NULL; } 信号量'><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux多线程开发3 生产者消费者,条件量,信号量","item":"https://jler666.github.io/cpp/cwx9z0/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux多线程开发3 生产者消费者,条件量,信号量","name":"Linux多线程开发3 生产者消费者,条件量,信号量","description":"生产者和消费者模型 和 条件变量\n生产者\n容器装满后不再生产阻塞 并通知消费者去消费\n容器\n消费者\n容器无内容后不再消费阻塞 并通知生产者去生产\n/* 生产者消费者模型 也叫有限缓冲模型 生产者向容器中添加节点 消费者从容器中删除节点 条件变量 不是锁 但是可以在某个条件满足后阻塞线程或解阻塞线程 pthread_cond_t int pthread_cond_init(pthread_cond_t *restrict cond, pthread_condattr_t *restrict cond_attr); 初始化条件变量 int pthread_cond_destroy(pthread_cond_t *cond); 销毁条件变量 int pthread_cond_wait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex); 阻塞函数 等待被唤醒(在信号或广播唤醒前一直等待) pthread_cond_wait的线程在等待期间会将锁给让出去 当前线程在等待时是不拿锁的 在被唤醒等待结束不阻塞时 锁又会还给这个在等待的线程 int pthread_cond_timedwait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex, const struct timespec *restrict abstime); 阻塞函数 等待被唤醒(在信号或广播唤醒或阻塞的实际还没有超过设定的abstime前 一直等待) 等待期间会将锁给让出去 当前线程在等待时是不拿锁的 在被唤醒等待结束不阻塞时 锁又会还给这个在等待的线 int pthread_cond_signal(pthread_cond_t *cond); 唤醒1个或多个在等待的线程 int pthread_cond_broadcast(pthread_cond_t *cond); 唤醒所有在等待的线程 \\*/ #include \u0026lt;stdio.h\u0026gt; #include \u0026lt;pthread.h\u0026gt; #include \u0026lt;string.h\u0026gt; #include \u0026lt;unistd.h\u0026gt; #include \u0026lt;stdlib.h\u0026gt; //malloc pthread_rwlock_t rwlock; //全局读写锁量 void *produce(void *arg); void *custom(void *arg); //使用链表作为容器 假设这个容器不会满 但是会空 typedef struct Node { int data; struct Node *next; } Node; Node *head = NULL; //头节点 //创建条件变量 pthread_cond_t cond; int main() { //初始化互斥量 pthread_rwlock_init(\u0026amp;rwlock, NULL); //初始化条件变量 pthread_cond_init(\u0026amp;cond, NULL); // 创建3个子线程 主线程只用于管理系统资源 pthread_t ptids[5], ctids[5]; //线程数组 5个生产者 5个消费者 for (int i = 0; i \u0026lt; 5; i++) { int ret = pthread_create(\u0026amp;ptids[i], NULL, produce, NULL); if (ret != 0) { printf(\u0026#34;%s\\n\u0026#34;, strerror(ret)); } //不join了 直接将10个线程都分离 由系统回收 pthread_detach(ptids[i]); } for (int i = 0; i \u0026lt; 5; i++) { int ret = pthread_create(\u0026amp;ctids[i], NULL, custom, NULL); if (ret != 0) { printf(\u0026#34;%s\\n\u0026#34;, strerror(ret)); } //不join了 直接将10个线程都分离 由系统回收 pthread_detach(ctids[i]); } while (1) { sleep(10); break; } pthread_cond_destroy(\u0026amp;cond); //子线程执行10秒后就将锁销毁 pthread_rwlock_destroy(\u0026amp;rwlock); //pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程 return 0; //不会执行 } // 这整个链表就像栈 生产和消费的过程就是出栈和入栈 生产出来加在队首 消费也优先消费队首的节点 // 生产和消费都是写操作 void *produce(void *arg) //生产线程 向容器添加内容 不断创建节点添加到链表中--新节点直接作为新的头节点 { while (1) { pthread_rwlock_wrlock(\u0026amp;rwlock); Node *new_node = (Node *)malloc(sizeof(Node)); new_node-\u0026gt;data = rand() % 1000; new_node-\u0026gt;next = head; head = new_node; printf(\u0026#34;%ld produce node %d\\n \u0026#34;, pthread_self(), new_node-\u0026gt;data); //只要生产了一个就通知消费者消费 唤醒在等待的消费者 pthread_cond_signal(\u0026amp;cond); pthread_rwlock_unlock(\u0026amp;rwlock); usleep(1000); //每个线程在产生一个新节点后至少1ms不生产新节点 } return NULL; } void *custom(void *arg) { while (1) { pthread_rwlock_wrlock(\u0026amp;rwlock); if (head == NULL) { //1head此时为null说明生产线程还没有生产节点 容器为空 需要将锁给生产线程，让生产线程先生产节点先 // pthread_rwlock_unlock(\u0026amp;rwlock); // usleep(1000); //每个线程在消费一个节点后至少1ms不争夺锁 // continue; //2 没有数据阻塞等待 当生产者生产了一个节点会发信号通知 这里就会解除阻塞 pthread_cond_wait(\u0026amp;cond, \u0026amp;rwlock); //当前消费者拿着锁在等待 生产者拿不到锁怎么生产？ //并不会这样 pthread_cond_wait在等待期间会将锁给让出去 当前线程在等待时是不拿锁的 //当唤醒后不再等待 锁又归还给当前线程 pthread_rwlock_unlock(\u0026amp;rwlock); continue; } Node *temp = head; head = head-\u0026gt;next; printf(\u0026#34;%ld custom node %d\\n \u0026#34;, pthread_self(), temp-\u0026gt;data); free(temp); //释放头节点 pthread_rwlock_unlock(\u0026amp;rwlock); usleep(1000); //每个线程在消费一个节点后至少1ms不消费新节点 } return NULL; } 信号量\n","keywords":[],"articleBody":"生产者和消费者模型 和 条件变量\n生产者\n容器装满后不再生产阻塞 并通知消费者去消费\n容器\n消费者\n容器无内容后不再消费阻塞 并通知生产者去生产\n/* 生产者消费者模型 也叫有限缓冲模型 生产者向容器中添加节点 消费者从容器中删除节点 条件变量 不是锁 但是可以在某个条件满足后阻塞线程或解阻塞线程 pthread_cond_t int pthread_cond_init(pthread_cond_t *restrict cond, pthread_condattr_t *restrict cond_attr); 初始化条件变量 int pthread_cond_destroy(pthread_cond_t *cond); 销毁条件变量 int pthread_cond_wait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex); 阻塞函数 等待被唤醒(在信号或广播唤醒前一直等待) pthread_cond_wait的线程在等待期间会将锁给让出去 当前线程在等待时是不拿锁的 在被唤醒等待结束不阻塞时 锁又会还给这个在等待的线程 int pthread_cond_timedwait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex, const struct timespec *restrict abstime); 阻塞函数 等待被唤醒(在信号或广播唤醒或阻塞的实际还没有超过设定的abstime前 一直等待) 等待期间会将锁给让出去 当前线程在等待时是不拿锁的 在被唤醒等待结束不阻塞时 锁又会还给这个在等待的线 int pthread_cond_signal(pthread_cond_t *cond); 唤醒1个或多个在等待的线程 int pthread_cond_broadcast(pthread_cond_t *cond); 唤醒所有在等待的线程 \\*/ #include #include #include #include #include //malloc pthread_rwlock_t rwlock; //全局读写锁量 void *produce(void *arg); void *custom(void *arg); //使用链表作为容器 假设这个容器不会满 但是会空 typedef struct Node { int data; struct Node *next; } Node; Node *head = NULL; //头节点 //创建条件变量 pthread_cond_t cond; int main() { //初始化互斥量 pthread_rwlock_init(\u0026rwlock, NULL); //初始化条件变量 pthread_cond_init(\u0026cond, NULL); // 创建3个子线程 主线程只用于管理系统资源 pthread_t ptids[5], ctids[5]; //线程数组 5个生产者 5个消费者 for (int i = 0; i \u003c 5; i++) { int ret = pthread_create(\u0026ptids[i], NULL, produce, NULL); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } //不join了 直接将10个线程都分离 由系统回收 pthread_detach(ptids[i]); } for (int i = 0; i \u003c 5; i++) { int ret = pthread_create(\u0026ctids[i], NULL, custom, NULL); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } //不join了 直接将10个线程都分离 由系统回收 pthread_detach(ctids[i]); } while (1) { sleep(10); break; } pthread_cond_destroy(\u0026cond); //子线程执行10秒后就将锁销毁 pthread_rwlock_destroy(\u0026rwlock); //pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程 return 0; //不会执行 } // 这整个链表就像栈 生产和消费的过程就是出栈和入栈 生产出来加在队首 消费也优先消费队首的节点 // 生产和消费都是写操作 void *produce(void *arg) //生产线程 向容器添加内容 不断创建节点添加到链表中--新节点直接作为新的头节点 { while (1) { pthread_rwlock_wrlock(\u0026rwlock); Node *new_node = (Node *)malloc(sizeof(Node)); new_node-\u003edata = rand() % 1000; new_node-\u003enext = head; head = new_node; printf(\"%ld produce node %d\\n \", pthread_self(), new_node-\u003edata); //只要生产了一个就通知消费者消费 唤醒在等待的消费者 pthread_cond_signal(\u0026cond); pthread_rwlock_unlock(\u0026rwlock); usleep(1000); //每个线程在产生一个新节点后至少1ms不生产新节点 } return NULL; } void *custom(void *arg) { while (1) { pthread_rwlock_wrlock(\u0026rwlock); if (head == NULL) { //1head此时为null说明生产线程还没有生产节点 容器为空 需要将锁给生产线程，让生产线程先生产节点先 // pthread_rwlock_unlock(\u0026rwlock); // usleep(1000); //每个线程在消费一个节点后至少1ms不争夺锁 // continue; //2 没有数据阻塞等待 当生产者生产了一个节点会发信号通知 这里就会解除阻塞 pthread_cond_wait(\u0026cond, \u0026rwlock); //当前消费者拿着锁在等待 生产者拿不到锁怎么生产？ //并不会这样 pthread_cond_wait在等待期间会将锁给让出去 当前线程在等待时是不拿锁的 //当唤醒后不再等待 锁又归还给当前线程 pthread_rwlock_unlock(\u0026rwlock); continue; } Node *temp = head; head = head-\u003enext; printf(\"%ld custom node %d\\n \", pthread_self(), temp-\u003edata); free(temp); //释放头节点 pthread_rwlock_unlock(\u0026rwlock); usleep(1000); //每个线程在消费一个节点后至少1ms不消费新节点 } return NULL; } 信号量\n相比条件变量使用起来更灵活方便\n/* 信号量(信号灯) 与条件变量类似 用于阻塞线程 但一样不是锁 类型 sem_t #include int sem_init(sem_t *sem, int pshared, unsigned int value); 初始化信号量 sem 要初始化的信号量 pshared 此信号量用于线程间还是进程间 为0是线程 非0是进程(信号量在共享内存中) 但LinuxThreads仅实现线程间共享，因此所有非0值的pshared输入都将使sem_init()返回-1，且置errno为ENOSYS。 value 信号量中断的值(总共有几个灯) int sem_destroy(sem_t *sem); 销毁信号量 释放资源 释放自己占用的一切资源，被注销的信号量sem要求已没有线程在等待该信号量了，否则返回-1，且置errno为EBUSY。 wait对信号量加锁 int sem_wait(sem_t *sem); 若当前亮着的灯为0个则阻塞直到亮灯不为0个 不为0不会阻塞 将亮着的灯关掉一个(-1) int sem_trywait(sem_t *sem); sem_trywait()为sem_wait()的非阻塞版，如果信号量计数大于0，则信号量立即减1并返回0，否则立即返回-1，errno置为EAGAIN。 int sem_timedwait(sem_t *sem, const struct timespec *abs_timeout); sem_timedwait和sem_wait一样当信号量计数为0会阻塞,但sem_timedwait的abs_timeout参数指定了调用应该阻塞的时间限制 当阻塞超时时返回失败(errno 设置为 ETIMEDOUT) 尽量不要使用sem_timedwait函数来实现延时等待的功能，若要使用该延时等待的功能，建议使用sem_trywait+usleep 实现的延时阻塞 int sem_post(sem_t *sem); 解锁一个信号量(开一个灯(+1)) 唤醒在wait的线程(它获得了一个信号量锁) 它是一个“原子操作”，即同时对同一个信号量做加“1”操作的两个线程是不会冲突的,一个先加1一个后加1最后是加2 int sem_getvalue(sem_t *sem, int *sval); 读取sem中信号量计数，存于*sval中，并返回0。 \\*/ #include #include #include #include #include //malloc #include pthread_rwlock_t rwlock; //全局读写锁量 void *produce(void *arg); void *custom(void *arg); //使用链表作为容器 假设这个容器不会满 但是会空 typedef struct Node { int data; struct Node *next; } Node; Node *head = NULL; //头节点 //创建条两个信号量 sem_t csem, psem; int main() { //初始化互斥量 pthread_rwlock_init(\u0026rwlock, NULL); //初始化信号量 //这个10限定了容器中最多只会有10个节点 生产者灭的灯数+消费者亮的灯数=消费者灭的灯数+生产者亮的灯数=10 这个式子永远是恒等的 sem_init(\u0026psem, 0, 10); //生产者的信号量初始值为10 这个值其实可以设置为容器的上限 sem_init(\u0026csem, 0, 0); //消费的信号量初始值为0 这意味着消费者一开始是阻塞的(因为生产者还没生产 容器为空不允许消费) // 创建子线程 主线程只用于管理系统资源 pthread_t ptids[5], ctids[5]; //线程数组 5个生产者 5个消费者 for (int i = 0; i \u003c 5; i++) { int ret = pthread_create(\u0026ptids[i], NULL, produce, NULL); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } //不join了 直接将10个线程都分离 由系统回收 pthread_detach(ptids[i]); } for (int i = 0; i \u003c 5; i++) { int ret = pthread_create(\u0026ctids[i], NULL, custom, NULL); if (ret != 0) { printf(\"%s\\n\", strerror(ret)); } //不join了 直接将10个线程都分离 由系统回收 pthread_detach(ctids[i]); } while (1) { sleep(10); break; } sem_destroy(\u0026csem); sem_destroy(\u0026psem); //子线程执行10秒后就将锁销毁 pthread_rwlock_destroy(\u0026rwlock); // pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程 return 0; //不会执行 } // 这整个链表就像栈 生产和消费的过程就是出栈和入栈 生产出来加在队首 消费也优先消费队首的节点 // 生产和消费都是写操作 //生产者灭的灯数+消费者亮的灯数=消费者灭的灯数+生产者亮的灯数=10 这个式子永远是恒等的 void *produce(void *arg) //生产线程 向容器添加内容 不断创建节点添加到链表中--新节点直接作为新的头节点 { while (1) { sem_wait(\u0026psem); //每生产一次 生产者亮灯数减1 当亮灯数为0 阻塞等待消费者消费 pthread_rwlock_wrlock(\u0026rwlock); Node *new_node = (Node *)malloc(sizeof(Node)); new_node-\u003edata = rand() % 1000; new_node-\u003enext = head; head = new_node; printf(\"%ld produce node %d\\n\", pthread_self(), new_node-\u003edata); //只要生产了一个就通知消费者消费 唤醒在等待的消费者 pthread_rwlock_unlock(\u0026rwlock); sem_post(\u0026csem); //已经生产了一个节点消费者亮灯数+1 并唤醒消费者线程中在wait的线程去消费 usleep(1000); //每个线程在产生一个新节点后至少1ms不生产新节点 } return NULL; } void *custom(void *arg) { while (1) { //消费者不再需要单独地判断容器是否为空 //当容器为空 则消费者亮灯数为0 自然阻塞 等待生产者生产将消费者灯点亮 sem_wait(\u0026csem); pthread_rwlock_wrlock(\u0026rwlock); Node *temp = head; head = head-\u003enext; printf(\"%ld custom node %d\\n\", pthread_self(), temp-\u003edata); free(temp); //释放头节点 pthread_rwlock_unlock(\u0026rwlock); sem_post(\u0026psem); //已经消费了一个节点灭了一个消费者灯 需要量一个生产者灯 并唤醒生产者线程中在wait的线程去生产 usleep(1000); //每个线程在消费一个节点后至少1ms不消费新节点 } return NULL; } ","wordCount":"647","inLanguage":"en","datePublished":"2022-03-19T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/cwx9z0/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux多线程开发3 生产者消费者,条件量,信号量</h1><div class=post-meta><span title=2022-03-19T00:00:00+00:00>创建于 2022-03-19</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>生产者和消费者模型 和 条件变量</strong></p><p>生产者</p><p>容器装满后不再生产阻塞 并通知消费者去消费</p><p>容器</p><p>消费者</p><p>容器无内容后不再消费阻塞 并通知生产者去生产</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>生产者消费者模型 也叫有限缓冲模型
+</span></span></span><span style=display:flex><span><span style=color:#75715e>生产者向容器中添加节点 消费者从容器中删除节点
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>条件变量 不是锁  但是可以在某个条件满足后阻塞线程或解阻塞线程
+</span></span></span><span style=display:flex><span><span style=color:#75715e>pthread_cond_t
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_cond_init(pthread_cond_t *restrict cond, pthread_condattr_t *restrict cond_attr);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>初始化条件变量
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_cond_destroy(pthread_cond_t *cond);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>销毁条件变量
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_cond_wait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>阻塞函数  等待被唤醒(在信号或广播唤醒前一直等待)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>pthread_cond_wait的线程在等待期间会将锁给让出去 当前线程在等待时是不拿锁的
+</span></span></span><span style=display:flex><span><span style=color:#75715e>在被唤醒等待结束不阻塞时 锁又会还给这个在等待的线程
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_cond_timedwait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex, const struct timespec *restrict abstime);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>阻塞函数  等待被唤醒(在信号或广播唤醒或阻塞的实际还没有超过设定的abstime前 一直等待)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>等待期间会将锁给让出去 当前线程在等待时是不拿锁的
+</span></span></span><span style=display:flex><span><span style=color:#75715e>在被唤醒等待结束不阻塞时 锁又会还给这个在等待的线
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_cond_signal(pthread_cond_t *cond);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>唤醒1个或多个在等待的线程
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int pthread_cond_broadcast(pthread_cond_t *cond);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>唤醒所有在等待的线程
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;pthread.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>      </span><span style=color:#75715e>//malloc
+</span></span></span><span style=display:flex><span>pthread_rwlock_t rwlock; <span style=color:#75715e>//全局读写锁量
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>produce</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>custom</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#75715e>//使用链表作为容器 假设这个容器不会满 但是会空
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>Node</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> data;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>Node</span> <span style=color:#f92672>*</span>next;
+</span></span><span style=display:flex><span>} Node;
+</span></span><span style=display:flex><span>Node <span style=color:#f92672>*</span>head <span style=color:#f92672>=</span> NULL; <span style=color:#75715e>//头节点
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//创建条件变量
+</span></span></span><span style=display:flex><span>pthread_cond_t cond;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//初始化互斥量
+</span></span></span><span style=display:flex><span>    pthread_rwlock_init(<span style=color:#f92672>&amp;</span>rwlock, NULL);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//初始化条件变量
+</span></span></span><span style=display:flex><span>    pthread_cond_init(<span style=color:#f92672>&amp;</span>cond, NULL);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//  创建3个子线程 主线程只用于管理系统资源
+</span></span></span><span style=display:flex><span>    pthread_t ptids[<span style=color:#ae81ff>5</span>],
+</span></span><span style=display:flex><span>        ctids[<span style=color:#ae81ff>5</span>]; <span style=color:#75715e>//线程数组 5个生产者 5个消费者
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>5</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>ptids[i], NULL, produce, NULL);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//不join了 直接将10个线程都分离 由系统回收
+</span></span></span><span style=display:flex><span>        pthread_detach(ptids[i]);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>5</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>ctids[i], NULL, custom, NULL);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//不join了 直接将10个线程都分离 由系统回收
+</span></span></span><span style=display:flex><span>        pthread_detach(ctids[i]);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        sleep(<span style=color:#ae81ff>10</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    pthread_cond_destroy(<span style=color:#f92672>&amp;</span>cond);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//子线程执行10秒后就将锁销毁
+</span></span></span><span style=display:flex><span>    pthread_rwlock_destroy(<span style=color:#f92672>&amp;</span>rwlock);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>// 这整个链表就像栈 生产和消费的过程就是出栈和入栈 生产出来加在队首 消费也优先消费队首的节点
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 生产和消费都是写操作
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>produce</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg) <span style=color:#75715e>//生产线程 向容器添加内容 不断创建节点添加到链表中--新节点直接作为新的头节点
+</span></span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        pthread_rwlock_wrlock(<span style=color:#f92672>&amp;</span>rwlock);
+</span></span><span style=display:flex><span>        Node <span style=color:#f92672>*</span>new_node <span style=color:#f92672>=</span> (Node <span style=color:#f92672>*</span>)malloc(<span style=color:#66d9ef>sizeof</span>(Node));
+</span></span><span style=display:flex><span>        new_node<span style=color:#f92672>-&gt;</span>data <span style=color:#f92672>=</span> rand() <span style=color:#f92672>%</span> <span style=color:#ae81ff>1000</span>;
+</span></span><span style=display:flex><span>        new_node<span style=color:#f92672>-&gt;</span>next <span style=color:#f92672>=</span> head;
+</span></span><span style=display:flex><span>        head <span style=color:#f92672>=</span> new_node;
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%ld produce node %d</span><span style=color:#ae81ff>\n</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;, pthread_self(), new_node-&gt;data);</span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//只要生产了一个就通知消费者消费 唤醒在等待的消费者
+</span></span></span><span style=display:flex><span>        pthread_cond_signal(<span style=color:#f92672>&amp;</span>cond);
+</span></span><span style=display:flex><span>        pthread_rwlock_unlock(<span style=color:#f92672>&amp;</span>rwlock);
+</span></span><span style=display:flex><span>        usleep(<span style=color:#ae81ff>1000</span>); <span style=color:#75715e>//每个线程在产生一个新节点后至少1ms不生产新节点
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> NULL;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>custom</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        pthread_rwlock_wrlock(<span style=color:#f92672>&amp;</span>rwlock);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (head <span style=color:#f92672>==</span> NULL)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//1head此时为null说明生产线程还没有生产节点 容器为空 需要将锁给生产线程，让生产线程先生产节点先
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// pthread_rwlock_unlock(&amp;rwlock);
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// usleep(1000); //每个线程在消费一个节点后至少1ms不争夺锁
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// continue;
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//2 没有数据阻塞等待 当生产者生产了一个节点会发信号通知 这里就会解除阻塞
+</span></span></span><span style=display:flex><span>            pthread_cond_wait(<span style=color:#f92672>&amp;</span>cond, <span style=color:#f92672>&amp;</span>rwlock); <span style=color:#75715e>//当前消费者拿着锁在等待 生产者拿不到锁怎么生产？
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//并不会这样 pthread_cond_wait在等待期间会将锁给让出去 当前线程在等待时是不拿锁的
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//当唤醒后不再等待 锁又归还给当前线程
+</span></span></span><span style=display:flex><span>            pthread_rwlock_unlock(<span style=color:#f92672>&amp;</span>rwlock);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>continue</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        Node <span style=color:#f92672>*</span>temp <span style=color:#f92672>=</span> head;
+</span></span><span style=display:flex><span>        head <span style=color:#f92672>=</span> head<span style=color:#f92672>-&gt;</span>next;
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%ld custom node %d</span><span style=color:#ae81ff>\n</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;, pthread_self(), temp-&gt;data);</span>
+</span></span><span style=display:flex><span>        free(temp); <span style=color:#75715e>//释放头节点
+</span></span></span><span style=display:flex><span>        pthread_rwlock_unlock(<span style=color:#f92672>&amp;</span>rwlock);
+</span></span><span style=display:flex><span>        usleep(<span style=color:#ae81ff>1000</span>); <span style=color:#75715e>//每个线程在消费一个节点后至少1ms不消费新节点
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> NULL;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>信号量</strong></p><p>相比条件变量使用起来更灵活方便</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>信号量(信号灯) 与条件变量类似 用于阻塞线程 但一样不是锁
+</span></span></span><span style=display:flex><span><span style=color:#75715e>类型 sem_t
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include &lt;semaphore.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int sem_init(sem_t *sem, int pshared, unsigned int value);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>初始化信号量
+</span></span></span><span style=display:flex><span><span style=color:#75715e>sem 要初始化的信号量
+</span></span></span><span style=display:flex><span><span style=color:#75715e>pshared 此信号量用于线程间还是进程间 为0是线程 非0是进程(信号量在共享内存中)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>但LinuxThreads仅实现线程间共享，因此所有非0值的pshared输入都将使sem_init()返回-1，且置errno为ENOSYS。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>value 信号量中断的值(总共有几个灯)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int sem_destroy(sem_t *sem);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>销毁信号量 释放资源
+</span></span></span><span style=display:flex><span><span style=color:#75715e>释放自己占用的一切资源，被注销的信号量sem要求已没有线程在等待该信号量了，否则返回-1，且置errno为EBUSY。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>wait对信号量加锁
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int sem_wait(sem_t *sem);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>若当前亮着的灯为0个则阻塞直到亮灯不为0个  不为0不会阻塞 将亮着的灯关掉一个(-1)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int sem_trywait(sem_t *sem);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>sem_trywait()为sem_wait()的非阻塞版，如果信号量计数大于0，则信号量立即减1并返回0，否则立即返回-1，errno置为EAGAIN。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int sem_timedwait(sem_t *sem, const struct timespec *abs_timeout);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>sem_timedwait和sem_wait一样当信号量计数为0会阻塞,但sem_timedwait的abs_timeout参数指定了调用应该阻塞的时间限制
+</span></span></span><span style=display:flex><span><span style=color:#75715e>当阻塞超时时返回失败(errno 设置为 ETIMEDOUT)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>尽量不要使用sem_timedwait函数来实现延时等待的功能，若要使用该延时等待的功能，建议使用sem_trywait+usleep 实现的延时阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int sem_post(sem_t *sem);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>解锁一个信号量(开一个灯(+1))  唤醒在wait的线程(它获得了一个信号量锁)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>它是一个“原子操作”，即同时对同一个信号量做加“1”操作的两个线程是不会冲突的,一个先加1一个后加1最后是加2
+</span></span></span><span style=display:flex><span><span style=color:#75715e>int sem_getvalue(sem_t *sem, int *sval);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>读取sem中信号量计数，存于*sval中，并返回0。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;pthread.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//malloc
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;semaphore.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span>pthread_rwlock_t rwlock; <span style=color:#75715e>//全局读写锁量
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>produce</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>custom</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg);
+</span></span><span style=display:flex><span><span style=color:#75715e>//使用链表作为容器 假设这个容器不会满 但是会空
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>Node</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> data;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>Node</span> <span style=color:#f92672>*</span>next;
+</span></span><span style=display:flex><span>} Node;
+</span></span><span style=display:flex><span>Node <span style=color:#f92672>*</span>head <span style=color:#f92672>=</span> NULL; <span style=color:#75715e>//头节点
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//创建条两个信号量
+</span></span></span><span style=display:flex><span>sem_t csem, psem;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//初始化互斥量
+</span></span></span><span style=display:flex><span>    pthread_rwlock_init(<span style=color:#f92672>&amp;</span>rwlock, NULL);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//初始化信号量
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//这个10限定了容器中最多只会有10个节点 生产者灭的灯数+消费者亮的灯数=消费者灭的灯数+生产者亮的灯数=10 这个式子永远是恒等的
+</span></span></span><span style=display:flex><span>    sem_init(<span style=color:#f92672>&amp;</span>psem, <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>10</span>); <span style=color:#75715e>//生产者的信号量初始值为10  这个值其实可以设置为容器的上限
+</span></span></span><span style=display:flex><span>    sem_init(<span style=color:#f92672>&amp;</span>csem, <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>0</span>);  <span style=color:#75715e>//消费的信号量初始值为0 这意味着消费者一开始是阻塞的(因为生产者还没生产 容器为空不允许消费)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//  创建子线程 主线程只用于管理系统资源
+</span></span></span><span style=display:flex><span>    pthread_t ptids[<span style=color:#ae81ff>5</span>],
+</span></span><span style=display:flex><span>        ctids[<span style=color:#ae81ff>5</span>]; <span style=color:#75715e>//线程数组 5个生产者 5个消费者
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>5</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>ptids[i], NULL, produce, NULL);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//不join了 直接将10个线程都分离 由系统回收
+</span></span></span><span style=display:flex><span>        pthread_detach(ptids[i]);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>5</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pthread_create(<span style=color:#f92672>&amp;</span>ctids[i], NULL, custom, NULL);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, strerror(ret));
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//不join了 直接将10个线程都分离 由系统回收
+</span></span></span><span style=display:flex><span>        pthread_detach(ctids[i]);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        sleep(<span style=color:#ae81ff>10</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    sem_destroy(<span style=color:#f92672>&amp;</span>csem);
+</span></span><span style=display:flex><span>    sem_destroy(<span style=color:#f92672>&amp;</span>psem);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//子线程执行10秒后就将锁销毁
+</span></span></span><span style=display:flex><span>    pthread_rwlock_destroy(<span style=color:#f92672>&amp;</span>rwlock);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// pthread_exit(NULL); //让主线程退出 当主线程退出时 不会影响其他正常运行的线程
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//不会执行
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>// 这整个链表就像栈 生产和消费的过程就是出栈和入栈 生产出来加在队首 消费也优先消费队首的节点
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 生产和消费都是写操作
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//生产者灭的灯数+消费者亮的灯数=消费者灭的灯数+生产者亮的灯数=10 这个式子永远是恒等的
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>produce</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg) <span style=color:#75715e>//生产线程 向容器添加内容 不断创建节点添加到链表中--新节点直接作为新的头节点
+</span></span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        sem_wait(<span style=color:#f92672>&amp;</span>psem); <span style=color:#75715e>//每生产一次 生产者亮灯数减1  当亮灯数为0 阻塞等待消费者消费
+</span></span></span><span style=display:flex><span>        pthread_rwlock_wrlock(<span style=color:#f92672>&amp;</span>rwlock);
+</span></span><span style=display:flex><span>        Node <span style=color:#f92672>*</span>new_node <span style=color:#f92672>=</span> (Node <span style=color:#f92672>*</span>)malloc(<span style=color:#66d9ef>sizeof</span>(Node));
+</span></span><span style=display:flex><span>        new_node<span style=color:#f92672>-&gt;</span>data <span style=color:#f92672>=</span> rand() <span style=color:#f92672>%</span> <span style=color:#ae81ff>1000</span>;
+</span></span><span style=display:flex><span>        new_node<span style=color:#f92672>-&gt;</span>next <span style=color:#f92672>=</span> head;
+</span></span><span style=display:flex><span>        head <span style=color:#f92672>=</span> new_node;
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%ld produce node %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, pthread_self(), new_node<span style=color:#f92672>-&gt;</span>data);
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//只要生产了一个就通知消费者消费 唤醒在等待的消费者
+</span></span></span><span style=display:flex><span>        pthread_rwlock_unlock(<span style=color:#f92672>&amp;</span>rwlock);
+</span></span><span style=display:flex><span>        sem_post(<span style=color:#f92672>&amp;</span>csem); <span style=color:#75715e>//已经生产了一个节点消费者亮灯数+1 并唤醒消费者线程中在wait的线程去消费
+</span></span></span><span style=display:flex><span>        usleep(<span style=color:#ae81ff>1000</span>);    <span style=color:#75715e>//每个线程在产生一个新节点后至少1ms不生产新节点
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> NULL;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>custom</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>arg)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//消费者不再需要单独地判断容器是否为空
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//当容器为空 则消费者亮灯数为0 自然阻塞 等待生产者生产将消费者灯点亮
+</span></span></span><span style=display:flex><span>        sem_wait(<span style=color:#f92672>&amp;</span>csem);
+</span></span><span style=display:flex><span>        pthread_rwlock_wrlock(<span style=color:#f92672>&amp;</span>rwlock);
+</span></span><span style=display:flex><span>        Node <span style=color:#f92672>*</span>temp <span style=color:#f92672>=</span> head;
+</span></span><span style=display:flex><span>        head <span style=color:#f92672>=</span> head<span style=color:#f92672>-&gt;</span>next;
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%ld custom node %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, pthread_self(), temp<span style=color:#f92672>-&gt;</span>data);
+</span></span><span style=display:flex><span>        free(temp); <span style=color:#75715e>//释放头节点
+</span></span></span><span style=display:flex><span>        pthread_rwlock_unlock(<span style=color:#f92672>&amp;</span>rwlock);
+</span></span><span style=display:flex><span>        sem_post(<span style=color:#f92672>&amp;</span>psem); <span style=color:#75715e>//已经消费了一个节点灭了一个消费者灯 需要量一个生产者灯 并唤醒生产者线程中在wait的线程去生产
+</span></span></span><span style=display:flex><span>        usleep(<span style=color:#ae81ff>1000</span>);    <span style=color:#75715e>//每个线程在消费一个节点后至少1ms不消费新节点
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> NULL;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

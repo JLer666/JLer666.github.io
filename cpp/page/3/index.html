@@ -1,0 +1,236 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>C++ | CantBlog</title><meta name=keywords content><meta name=description content="C++ 语言、STL 与工程实践笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/cpp/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/cpp/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="C++"><meta property="og:description" content="C++ 语言、STL 与工程实践笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="C++"><meta name=twitter:description content="C++ 语言、STL 与工程实践笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>C++</h1><div class=post-description>C++ 语言、STL 与工程实践笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux多进程开发9 守护进程</h2></header><div class=entry-content><p>守护进程
+终端
+在Unix系统中用户通过终端后得到一个shell进程，这个终端成为shell进程的控制终端，控制终端信息保存在pcb中，而fork会复制pcb中的信息所以由shell进程启动的其他进程(在shell里相当于fork一个子进程 再exec我们要执行的可执行文件 所以其实我们在shell中启动的可执行文件都有一个共同的父进程 就是shell进程)的控制终端也是这个终端。
+echo $ $可以查看当前终端的pid号 在ps -aux中shell进程 叫-bash
+tty 可以查看当前终端设备 /dev/pts/1
+默认情况下(没有重定向)，每个进程的标准输入、标准输出和标准错误都指向控制终端，进程从标准输入读也就是读用户的键盘输入，进程往标准输出或标准错误输出也是输出到显示器上。
+在控制终端输入一些特殊的控制键可以给前台进程(在当前终端中运行的进程)发信号，例如ctrl c会产生SIGINT信号ctrl \会产生SIGQUIT信号。
+后台进程是没有控制终端的
+进程组
+进程组和会话在进程之间形成了一种两级层次关系：**进程组是一组进程的集合，会话是一组相关进程组的集合。**进程组和会话是为支持shell作业控制而定义的抽象概念，用户通过shell能够交互式地在前台或后台运行命令。
+进程组由一个或多个共享同一进程组标识符(PGID)的进程组成。一个进程组拥有一个进程组首进程，该进程是创建改组的进程，将其进程PID作为该进程组的PGID，子进程会继承其父进程所属的进程组PGID。
+进程组的生命周期为，其开始时间为首进程创建组的时刻，结束时间为最后一个成员进程退出组的时刻。一个进程可能会因为终止而退出进程组，也可能会因为加入了另外一个进程组而退出进程组。进程组首进程无需是最后一个离开进程组的成员。
+会话
+会话是一组进程组的集合。会话首进程是创建该新会话的进程，其PID会成为会话ID。子进程会继承其父进程的会话ID。
+一个会话中所有进程共享单个控制终端，控制终端会在会话首进程首次打开一个终端设备时被建立。一个终端只能作为一个(不能多)会话的控制终端。
+在任一时刻，会话中的其中一个进程组会成为终端的前台进程组，其他进程组会成为后台进程组(在shell里运行了一个可执行程序后，这个可执行程序就将这个终端占用了 无法再执行其他的shell命令)。只有前台进程组中的进程才能从控制终端中读取读入。当用户在控制终端中输入终端字符生成信号后，该信号会被发送到前台进程组中的所有成员。(控制终端只能控制前台进程组 其有个属性就是前端PGID当前前台进程组号)
+当控制终端的连接建立起来后，会话首进程会成为该终端的控制进程。
+| |
+| — |
+find /2 > /dev/null | wc -l & > /dev/null重定向到这个设备 |管道符创建子进程 wc -l统计文件个数 &在后台运行
+sort &lt; longlist | uniq -c 管道符创建子进程| uniq -c
+在执行了这两条命令后可得到上图的会话视图 PPID为父进程的PID，SID为会话ID
+进程组会话操作函数
+pid_t getpgrp(void); 得到当前进程组PGID
+pid_t getpgid(pid_t pid); 获取指定进程的进程组PGID
+int setpgid(pid_t pid,pid_t pgid); 设置指定进程的进程组
+...</p></div><footer class=entry-footer><span title=2022-03-17T00:00:00+00:00>创建于 2022-03-17</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux多进程开发9 守护进程" href=https://jler666.github.io/cpp/zsdc9w/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux多进程开发6 信号介绍以及信号相关函数1</h2></header><div class=entry-content><p>信号
+信号是Linux进程间通信的最古老的方式之一，是事件发生时对进程的通知机制，有时也称之为软件中断,它是在软件层次上对中断机制的一种模拟，是一种异步通信的方式。信号可以导致一个正在运行的进程被另一个正在运行的异步进程中断，转而处理某一个突发事件，发往进程的诸多信号，通常都是源于内核。引发内核为进程产生信号的各类事件如下:
+对于前台进程(占用shell)，用户可以通过输入特殊的终端字符来给它发送信号。比如Ctrl+C通常会给进程发送一个中断信号。
+硬件发生异常，即硬件检查到一个错误条件并通知内核，随即再由内核发送相应信号给相关进程。比如执行一条异常的机器语言指令，诸如被除0，或者引用了无法访问的内存区域。
+系统状态变化，比如alarm定时器到期将引起SIGALRM信号，进程执行的cpu时间超限，或者该进程的某个子进程退出。
+运行kill命令或调用kill命令
+一般信号用于两种用途:1让进程知道已经发生了一个特定的事情2强迫进程执行它自己代码中的信号处理程序
+信号的特定：简单，不能携带大量信息，满足某个特定条件才发送，优先级比较高。
+查看系统定义的信号列表：kill -l 前31个信号为常规信号 其余为实时信号
+SIGHUP 2) SIGINT 3) SIGQUIT 4) SIGILL 5) SIGTRAP
+SIGABRT 7) SIGBUS 8) SIGFPE 9) SIGKILL 10) SIGUSR1
+SIGSEGV 12) SIGUSR2 13) SIGPIPE 14) SIGALRM 15) SIGTERM
+SIGSTKFLT 17) SIGCHLD 18) SIGCONT 19) SIGSTOP 20) SIGTSTP
+SIGTTIN 22) SIGTTOU 23) SIGURG 24) SIGXCPU 25) SIGXFSZ
+SIGVTALRM 27) SIGPROF 28) SIGWINCH 29) SIGIO 30) SIGPWR
+SIGSYS 34) SIGRTMIN 35) SIGRTMIN+1 36) SIGRTMIN+2 37) SIGRTMIN+3
+SIGRTMIN+4 39) SIGRTMIN+5 40) SIGRTMIN+6 41) SIGRTMIN+7 42) SIGRTMIN+8
+SIGRTMIN+9 44) SIGRTMIN+10 45) SIGRTMIN+11 46) SIGRTMIN+12 47) SIGRTMIN+13
+SIGRTMIN+14 49) SIGRTMIN+15 50) SIGRTMAX-14 51) SIGRTMAX-13 52) SIGRTMAX-12
+SIGRTMAX-11 54) SIGRTMAX-10 55) SIGRTMAX-9 56) SIGRTMAX-8 57) SIGRTMAX-7
+SIGRTMAX-6 59) SIGRTMAX-5 60) SIGRTMAX-4 61) SIGRTMAX-3 62) SIGRTMAX-2
+SIGRTMAX-1 64) SIGRTMAX
+...</p></div><footer class=entry-footer><span title=2022-03-16T00:00:00+00:00>创建于 2022-03-16</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux多进程开发6 信号介绍以及信号相关函数1" href=https://jler666.github.io/cpp/ncwo9y/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux多进程开发7 信号相关函数2</h2></header><div class=entry-content><p>sigprocmask函数使用
+sigprocmask用于修改内核的信号集 将自定义信号集设置到内核的信号集中，内核未决信号集无法修改(只能获取 通过sigpending)即这个函数用于修改阻塞信号集
+int sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
+int sigpending(sigset_t *set);
+/* 每个进程都有自己的PCB 都有自己的未决信号集和阻塞信号集 int sigprocmask(int how,const sigset_t *set,sigset_t *oldset); 用于将自定义的信号集设置到内核中 how 如何对内核阻塞信号集进行处理 SIG_BLOCK 将用户设置的阻塞信号添加到内核中 即用户的信号集中设置为1的信号 在内核信号集中的对应位置也设置为1 用户信号集设置为0的部分 则内核信号集中对应位置保留不变 内核信号集 mask = mask | set SIG_UNBLOCK 根据set将内核信号集的对应位置解除阻塞 即用户的信号集中设置为1的信号 在内核信号集中的对应位置设置为0(解除阻塞) 用户信号集设置为0的部分 则内核信号集中对应位置保留不变 内核信号集 mask = mask & (~set) SIG_SETMASK 用自定义的信号集 替换内核中PCB的阻塞信号集 set 用户已经初始化好的用户自定义的信号集 oldset 传出参数 保存着上次(这次设置之前)内核中阻塞信号集的值 返回值 成功0 失败-1(有两种错误 分别会设置两种错误号 EFAULT set或oldset指向了此进程虚拟地址外 EINVAL how指定错误) int sigpending(sigset_t *set); 用与获取内核中的 未决信号集 set为传出的未决信号集 返回值 0成功 -1失败 \*/ #include &lt;unistd.h> #include &lt;stdio.h> #include &lt;stdlib.h> #include &lt;sys/types.h> #include &lt;signal.h> //sigprocmask #include &lt;sys/time.h> int main() { //编写一个程序 把所有的常规信号(1-31)的未决状态打印到屏幕 //设置某些信号阻塞再通过键盘产生这些信号 这样的话这些信号状态就是未决的 //设置2、3号信号阻塞 2、3号信号可由键盘直接产生 sigset_t set; sigemptyset(&amp;set); //将2、3号信号添加到信号集中 sigaddset(&amp;set, SIGINT); sigaddset(&amp;set, SIGQUIT); //修改内核中的阻塞信号集为set sigprocmask(SIG_BLOCK, &amp;set, NULL); sigset_t pending_set_now; sigemptyset(&amp;pending_set_now); while (1) { sigpending(&amp;pending_set_now); //遍历输出1-31位未决信号集 for (int i = 0; i &lt;= 31; i++) { if (sigismember(&amp;pending_set_now, i) == 1) //是未决信号 { printf("1"); } else if (sigismember(&amp;pending_set_now, i) == 0) { printf("0"); } else { perror("sigismember:"); return -1; } } printf("\n"); sleep(1); //解除阻塞 // sigprocmask(SIG_UNBLOCK, &amp;set, NULL); } return 0; } sigaction信号捕捉函数
+...</p></div><footer class=entry-footer><span title=2022-03-16T00:00:00+00:00>创建于 2022-03-16</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux多进程开发7 信号相关函数2" href=https://jler666.github.io/cpp/rmt7hl/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux多进程开发5 内存映射</h2></header><div class=entry-content><p>内存映射
+也是进程间通信的一种方式，效率相对于上面基于文件的方法更高(对内存直接操作 而非对物理磁盘操作)。内存映射(Memory-mapped I/O)是将磁盘文件的数据映射到内存，用户通过修改内存就能修改磁盘文件。
+将文件数据映射到虚拟地址空间(进程地址空间)—加载到动态库(share)的那块区域，可以根据off,len参数选择部分文件内容映射到内存中。对这块内存操作等同于对文件操作，对文件操作也等同于对内存进行修改。
+| |
+| — |
+| |
+| — |
+两个进程将同一磁盘文件映射到内存中，直接通过对内存的读写就能完成进程间通信。
+#include &lt;sys/mman.h> void *mmap(void *addr,size_t length,int prot,int flags,int fd,off_t offset) //映射文件到内存中 int munmap(void *addr,size_t length)//解除映射 释放映射的内存 内存映射实现父子进程通信
+/* #include &lt;sys/mman.h> void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset); 映射or解除映射 文件、设备 到进程虚拟地址空间 addr 映射内存的起始地址 传入NULL 则由内核决定(内核帮你去找一块相应大小的空间) length 内存大小 不能为0，一般使用文件的长度。 获取文件的长度: stat lseek 分配的内存空间并不是length个字节 而是大于length且与length最接近一页内存空间大小的整数倍 prot 对申请的内存映射区的操作权限 不能与open文件的权限有冲突！！！ PROT_EXEC 页内存可执行 PROT_READ 页内存可读 PROT_WRITE 页内存可写 PROT_NONE 无对这块内存的任何权限 想要操作至少要有读权限、不能是单独的写权限 至少是PROT_READ|PROT_WRITE flags MAP_SHARED 映射区内存数据会自动与磁盘文件同步 进程间通信 必须要设置这个选项 MAP_PRIVATE 不同步 内存映射区的数据改变了 不会修改对应的磁盘文件而是创建一个新的文件 copy on write fd 需要映射的文件的文件描述符 注意文件的大小不能为0！！ open指定的权限不能和prot有冲突 prot为PROT_READ 则之前open时给 读/读写 权限 prot为PROT_READ|PROT_WRITE 则之前open时给 读写 权限\ 即prot的权限要小于等于open给的权限 offset 映射时的偏移量 从文件的offset个字节开始 向下length个字节的内容 映射到内存中，指定的大小必须是一页内存4k的整数倍，0表示不偏移 返回值 成功 内存映射空间的首地址 失败返回 一个宏MAP_FAILED (that is, (void *) -1) int munmap(void *addr, size_t length); 释放映射的内存 addr 释放内存的首地址 length 空间大小 与mmap中length参数的大小一样 返回值 成功0 失败-1 \*/ /* 文件映射 有血缘关系的进程 在还没fork时 创建文件 以及创建内存映射区(在进程内存空间的内核区中 fork后也是直接拷贝给子进程的) fork后共享内存映射区 匿名映射 准备一个大小不是0的磁盘文件 进程1 通过磁盘文件创建 内存映射区 进程2 通过磁盘文件(同一文件)创建 内存映射区 可以使用内存映射区通信 内存映射区通信是非阻塞的！！(管道默认是阻塞的，没数据后读是阻塞的) \*/ #include &lt;sys/mman.h> #include &lt;stdio.h> #include &lt;sys/types.h> #include &lt;sys/stat.h> #include &lt;stdlib.h> #include &lt;unistd.h> //acess lseek #include &lt;fcntl.h> //open #include &lt;sys/types.h> //lseek #include &lt;stdlib.h> #include &lt;wait.h> int main() { //打开文件 文件大小不要为0 int fd = open("mmap-parent-child-ipc", O_RDWR); //获取文件大小 int size = lseek(fd, 0, SEEK_END); //从文件末尾 偏移0 //创建内存映射区 void *ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); if (ptr == MAP_FAILED) //创建失败 { perror("mmap"); exit(0); } //文件映射 pid_t pid = fork(); if (pid > 0) //父进程 { wait(NULL); //回收子进程 子进程没结束就一直阻塞 即等待子进程向文件写数据完成后 再向下执行 char buf[1024]; strcpy(buf, (char *)ptr); //通过strcpy从文件读数据到buf中 printf("data from son: %s \n"); } else if (pid == 0) //子进程的第一次fork返回值是0 { strcpy((char *)ptr, "hello par"); //通过strcpy向文件写数据 } //释放映射空间 munmap(ptr, size); return 0; } mmap调用的一些问题，
+...</p></div><footer class=entry-footer><span title=2022-03-15T00:00:00+00:00>创建于 2022-03-15</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux多进程开发5 内存映射" href=https://jler666.github.io/cpp/hghr74/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux多进程开发4 有名管道介绍及使用</h2></header><div class=entry-content><p>有名管道介绍及使用
+匿名管道，由于没有名字，只能用于有亲缘关系的进程间通信(通过进程fork 拷贝内核区的文件描述符这个机制来实现)，为了克服这个缺点提出了有名管道(FIFO 先入先出)。
+有名管道(FIFO 也是由环形队列实现)不同于匿名管道之处在于它提供路径名与这个管道关联，以FIFO的文件形式存在于文件系统中，并且其打开方式与打开一个普通文件的方式是一样的，这样即使与FIFO的创建进程不存在亲缘关系的进程，只要可以访问该路径就可以彼此通过FIFO互相通信，因此通过FIFO不相关的进程也能交换数据。
+一旦打开了FIFO，就能在它上面使用与操作匿名管道和其他文件的系统调用一样的I/O系统调用(如read、write、close)，与管道一样，FIFO也有一个写入端和读取端，并且从管道中读取数据的顺序与写入的顺序是一样的(先入先出)。
+FIFO与pipe(匿名管道)的不同点：
+1 FIFO在文件中作为一个特殊文件存在，但是FIFO中的内容却存放在内存中(内核中的一个缓存区中)
+2 当使用FIFO的进程退出后，FIFO文件将继续保存在文件系统中以便以后使用
+3 FIFO有名字，不相关的进程可以通过打开有名管道进行通信
+有名管道的使用
+通过命令创建有名管道 mkfifo 管道名
+通过函数创建有名管道
+#include &lt;sys/types.h>
+#include &lt;sys/stat.h>
+int mkfifo(const char *pathname,mode_t mode);
+一旦使用mkfifo创建了一个FIFO就可以用open，常见的文件IO操作含糊书(close read wirte unlink删除)都可以用于FIFO文件
+FIFO严格遵顼先入先出，对管道及FIFO的读总是从开始处返回数据(单向队列队首数据)，对它们的写则把数据添加到末尾(向单向队列队尾添加数据)，FIFO文件不支持诸如lseek()等文件定位操作。
+一个为只读(写)而打开(open)的管道的进程会阻塞(阻塞在open),直到另一个进程以包含写(读)的方式打开相同的管道，才不会继续阻塞而是继续向下运行。
+1 当指向管道写端的fd都close了,此时有进程从管道读端读数据，若此时管道中有剩余数据则读取剩余数据，直到剩余数据被读完后，再次read返回0(读到文件末尾read是返回0的 读出现异常是返回-1的)。
+2 有指向管道写端的文件描述符没有关闭(管道写端的引用计数大于0)并且没有进程向管道写端写数据，此时将管道内数据读空后再继续读是出现read阻塞，直到有进程写了一些数据，read读到返回读到的字节数。
+3 所有的指向管道读端的文件描述符 都关闭了(管道读端的引用计数为0)，此时有进程向管道中写数据，那么该进程会收到一个信号SIGPIPE，通常这个信号会导致进程异常终止。
+4 有指向管道读端的文件描述符没有关闭(管道读端的引用计数大于0)并且没有进程从管道读端读数据，此时有进程向管道中写数据，在管道写满后，再次调用写write会导致写进程阻塞，直到管道中有空位write才不会阻塞并返回写入的字节数。
+//为了实验 还需要创建两个进程 我们通过两个.c文件来实现 //这个.c为写fifo进程 #include &lt;stdio.h> #include &lt;sys/types.h> #include &lt;sys/stat.h> #include &lt;stdlib.h> #include &lt;unistd.h> //acess #include &lt;fcntl.h> //open #include &lt;string.h> //strlen int main() { //判断文件是否存在 int ret = access("f1", F_OK); //判断叫这个名字的文件是否存在 if (ret == 0) //return 0 表示管道以存在 { ; } else { int ret = mkfifo("f1", 0664); if (ret == -1) { perror("mkfifo:"); return -1; } } //打开管道 // 这个进程只向管道里写数据 所以以只写的方式打开管道 int fd = open("f1", O_WRONLY); //以只写的形式打开 若没有其他线程以包含读的方式打开文件 这个open会一直阻塞在这!!!! if (fd == -1) { perror("open:"); return -1; } //写数据 for (int i = 0; i &lt; 100; i++) { char buf[1024]; sprintf(buf, "hello %d\n", i); //向buf中写数据 printf("write data:%s\n", buf); //打印当前buf中的字符数据 write(fd, buf, stelen(buf)); //向管道中写数据 sleep(1); } //当所有读端都关闭 此时有写线程向管道中写数据会收到SIGPIPE信号导致进程直接异常退出 close(fd); //关闭管道 return 0; } //为了实验 还需要创建两个进程 我们通过两个.c文件来实现 //这个.c为读fifo进程 #include &lt;stdio.h> #include &lt;sys/types.h> #include &lt;sys/stat.h> #include &lt;stdlib.h> #include &lt;unistd.h> //acess #include &lt;fcntl.h> //open int main() { //判断文件是否存在 int ret = access("f1", F_OK); //判断叫这个名字的文件是否存在 if (ret == 0) //return 0 表示管道以存在 { ; } else { int ret = mkfifo("f1", 0664); if (ret == -1) { perror("mkfifo:"); return -1; } } //打开管道 // 这个进程只读管道里的数据 所以以只读的方式打开管道 int fd = open("f1", O_RDONLY); //以只读的形式打开 若没有其他线程以包含写的方式打开文件 这个open会一直阻塞在这!!!! if (fd == -1) { perror("open:"); return -1; } //读数据 while (1) { char buf[1024] = {0}; int len = read(fd, buf, sizeof(buf)); //当写端关闭 并且管道中无数据 返回len=0 if (len == 0) break; printf("recv buf %s\n", buf); memset(buf, 0, sizeof(buf)); } close(fd); //关闭管道 return 0; } 有名管道实现简单版聊天功能
+...</p></div><footer class=entry-footer><span title=2022-03-15T00:00:00+00:00>创建于 2022-03-15</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux多进程开发4 有名管道介绍及使用" href=https://jler666.github.io/cpp/rptyrs/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>7 迭代器和好用的新for循环</h2></header><div class=entry-content><p>什么是迭代器?
+迭代器是一个通用的概念，并不是一个特定类型而是一组对类型的要求，最基本的要求是从一个端点出发，下一步，下一步地到达另一个端点。
+容器对begin()和end()成员函数提出了要求，假设前者返回的类型是I，后者返回的类型是S，这些要求是
+I对象支持*解引用操作，解引用得到容器内的某个元素对象
+I对象那支持++,指向下一个对象
+I对象可以和I或S对象进行相等==比较，判断是否遍历到了特定位置(I==S说明已经遍历到了容器末尾)
+c++17之前，begin()和end()返回的类型I和S必须是相同的。c++17开始，I和S可以是不同的类型，这带来了更大的灵活性和更多的优化可能性。
+这两个类型之间是需要允许比较操作的。后面有个例子，你可以先看一下： https://github.com/adah1972/geek_time_cpp/blob/master/29/test05_null_sentinel.cpp 要点是，这种情况下，比较的时候可以不是比较迭代器本身，而是做一下更复杂的操作。如检查文件是否结束，读取的内容是否为 NUL（istream_line_reader
+例子里的情况），甚至比较永远失败（无限循环的情况）。
+迭代器的基本要求:
+可以被拷贝构造、拷贝赋值和析构
+支持*解引用运算符
+支持前置++运算符
+下面讲下迭代器类型
+输入迭代器(input iterator)
+==比较，!=
+支持前置和后置++，支持解引用(输入迭代器在一次成功后 会自动++移动到下一个位置，所以不支持多次解引用)即每个被遍历位置上只能读取一次
+不需要支持赋值保存迭代器来重新遍历容器
+对输入迭代器的要求就是可以单次访问某个元素，并可以读取这个元素的内容
+输入迭代器只能向前，被用来读取容器中的元素，但是不能使用输入迭代器修改容器对象中元素的值(输入是相对程序而言的)
+输出迭代器(output iterator)
+==比较，!=
+支持前置和后置++，支持，->解引用(输出迭代器在一次成功后 会自动++移动到下一个位置，所以不支持多次解引用)即每个被遍历位置上只能被写一次
+不需要支持赋值保存迭代器来重新遍历容器
+可以使用输出迭代器向容器中写入元素 *it = xx(ok)(修改元素的值)，但不能读取容器中的元素。对输出迭代器的要求就是可以单次访问某个元素，并可以读取这个元素的内容
+通常用来将数据从一个位置拷贝到另一个位置
+前向迭代器(forward iterator)
+==比较，!= ,=赋值
+支持前置和后置++，支持解引用,解引用后不会自动移到下个位置 即允许多次访问同一个元素
+支持赋值保存迭代器来重新遍历容器
+可读取容器中的数据 只能向前
+双向迭代器(bidirectional iterator)
+==比较，!= ,=赋值
+支持前置和后置++，支持解引用,解引用后不会自动移到下个位置 即允许多次访问同一个元素
+并且支持前置和后置–,回到前一个对象。即既可以正向遍历，也可以反向遍历
+支持赋值保存迭代器来重新遍历容器
+可读取容器中的数据
+随机访问迭代器(random -acess iterator)
+==比较，!=, =赋值 +,-,+=,-=这些跳跃式地移动迭代器 支持[]下标访问 支持大小比较&lt;,>,&lt;=,>=
+支持前置和后置++，支持解引用,解引用后不会自动移到下个位置 即允许多次访问同一个元素
+并且支持前置和后置–,回到前一个对象。即既可以正向遍历，也可以反向遍历
+支持赋值保存迭代器来重新遍历容器
+可以读取容器中的数据
+连续迭代器(contiguous iterator) c++20
+在随机访问迭代器基础上
+...</p></div><footer class=entry-footer><span title=2022-02-26T00:00:00+00:00>创建于 2022-02-26</span>&nbsp;·&nbsp;<span title=2023-02-02T00:00:00+00:00>最后修改于 2023-02-02</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 7 迭代器和好用的新for循环" href=https://jler666.github.io/cpp/yzw2id/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux多进程开发3 父子进程间匿名管道通信</h2></header><div class=entry-content><p>10 进程间通信
+进程是资源分配的单元，不同进程(指用户进程 不是内核进程)之间的资源是独立的没有关联的，不能在一个进程中直接访问另一个进程的资源。
+但是进程不是孤立的，不同的进程需要进行信息的交互和状态的传递等，因此需要进程间通信IPC
+进程间通信的目的:
+数据传输：一个进程将它的数据发给另一个进程
+通知时间：一个进程需要向另一个或一组进程发送消息，通知它(它们)发生了某种事件(如进程终止时需要通知父进程)。
+资源共享：多个进程之间共享同样的资源，为了做到这一点，需要内核提供互斥和同步机制
+进程控制：有些进程希望完全控制另一个进程的执行(如DeBug进程 GDB进程 控制被GDB调试的那个进程)，此时控制进程能个拦截另一个进程的所有陷入和异常，并能够及时知道它的状态改变。
+Linux 进程间通信的方式
+| |
+| — |
+11匿名管道概述
+匿名管道，它是UNIX系统IPC进程间通信的最古老形式，所有的UNIX系统都支持这种通信机制
+比如 统计一个目录中文件的数目命令 ls | wc -l 为了执行该命令,shell创建了两个进程来分别执行ls和wc
+| |
+| — |
+ls获取当前目录的文件列表 |叫管道符 wc文件统计个数
+ls进程将文件列表通过管道发给wc进程
+ls默认是将文件列表显示到终端(即 将信息写到fd=1的文件中 对应的是stdout标准输出 输出到终端屏幕)，管道有写入端和读取端，当加上|管道符后ls写的文件 fd=1 stdout指向的不再终端屏幕而是管道的写入端,wc同理wc读的文件 fd=0 stdin指向的不再终端屏幕而是管道的读入端。
+fd=0 stdin默认指向终端屏幕 fd=1stdout默认指向的也是终端屏幕
+管道的特点
+管道其实是一个在内核内存中维护的缓冲区，这个缓冲区的大小是有限的，不同操作系统的管道大小不一定相同。
+管道拥有文件的特质：读、写 管道的两端对应了两个文件描述符(写入端文件描述符，读取端文件描述符)，匿名管道是没有文件实体的但是有名管道是有文件实体的(但这个文件是不存储数据的)，可以按照造作文件的方式对管道进行操作。
+匿名管道只能用于有公共祖先的进程之间比如父进程和子进程，爷爷进程和孙子进程，兄弟进程之间。
+有名管道用于无关系的进程之间。
+一个管道是一个字节流，使用管道时不存在消息或消息边界的概念(就是没有一个数据帧的头尾内容这些概念 就是单纯的字节)，从管道读取数据的进程可以读取任意大小的数据块，而不管写进程写入的数据块的大小是多大(读写分离 互不影响)。
+通过管道传递的数据是顺序的，管道实际为环形队列实现 先入先出 读取出来的字节的顺序和它们被写入管道的顺序完全一样。
+在管道中的数据的传递方向是单向的，一端用于写入，一端用于读取，管道是半双工(遥控器单向发送 单工 电话通信 双工同时传递消息 可以同时读也可以同时写 也可以一个读一个写 对讲机 半双工 同一时间只能 读或写 不能同时读或同时写 在同一时刻内数据的流动是单向的，但是可以在一个时刻选择数据的流动方向)。
+从管道读数据是一次性操作，数据一旦被读走它就从管道中被抛弃(pop)，释放空间以便写更多的数据，在管道中无法使用lseek()来随机访问数据。
+| |
+...</p></div><footer class=entry-footer><span title=2022-03-14T00:00:00+00:00>创建于 2022-03-14</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux多进程开发3 父子进程间匿名管道通信" href=https://jler666.github.io/cpp/ka0sxx/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux多进程开发2 父子进程间关系,exec函数族,进程控制,wait函数</h2></header><div class=entry-content><p>5父子进程关系及GDB多进程调试
+使用GDB调试时，GDB默认只能跟踪一个进程，可以再fork调用前，通过指令设置GDB调试工具跟踪父进程或跟踪子进程，默认跟踪父进程
+下面的这些命令都是gdb命令 不是命令行命令
+设置调试子进程 set follow-fork-mode child 这种情况下且set detach-on-fork为on则会停在子进程的断点处 父进程会一直运行直到跑完
+默认调试父进程 set follow-fork-mode parent如果在这种情况下在父进程内打断点 然后运行父进程会停在断点处 子进程不会管 只会继续运行然后跑完
+在gdb内可查看当前gdb追踪的是什么进程 show follow-fork-mode
+设置调试模式 set detach-on-fork [on|off] 默认为on,表示调试当前进程的时候其他进程继续运行，如果为off调试当前进程时，其他进程被GDB挂起(会停在fork那句话 等待我们切换调试)。
+gdb版本为8.x set detach-on-fork off会出问题 7.x 9.x可以用这个功能
+查看当前程序的所有进程 会打印出进程在gdb中的编号：info inferiors
+切换当前调试进程：inferior id(id为进程在gdb中的编号)
+使进程脱离GDB调试：detach inferiors id (执行后id号进程不再受gdb控制就一直向下执行)
+移除某进程：remove inferiors id
+gcc fork_test.c -o hello -g
+gdb hello
+父子进程之间的关系
+区别：
+1 fork()函数的返回值不同 父进程中>0：返回的子进程id 子进程=0
+2 pcb中的一些数据 比如父进程和子进程的pid ppid都是不同的
+共同点：
+某些状态下:子进程刚被创造出来，还没有执行任何写数据的操作时，用户区的数据文件描述符表两个进程是相同的 (读时共享)。只要发生写操作 那么发生写时拷贝，两个进程的这个被写对象就不同了。
+6 exec函数族
+exec函数族的作用是根据指定的文件名找到可执行文件，并用它来取代调用进程的内容。
+换句话说就是在调用进程内部执行一个可执行文件。
+...</p></div><footer class=entry-footer><span title=2022-03-14T00:00:00+00:00>创建于 2022-03-14</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux多进程开发2 父子进程间关系,exec函数族,进程控制,wait函数" href=https://jler666.github.io/cpp/ltoizg/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux系统编程入门3 IO函数续</h2></header><div class=entry-content><p>二、与文件属性相关的操作函数
+acess判断文件的权限(或文件是否存在) chmod修改文件的权限 chown修改文件的所有者或所在组 truncate用于缩减或扩展某个文件的大小
+/* #include &lt;unistd.h> int access(const char *pathname, int mode); 作用:判断某个文件是否有某个权限(通过当前进程是否能访问某个文件来判断) 或者判断文件是否存在 参数： 文件名 mode：待判断的当前进程对这个文件权限 F_OK(用于检查文件是否存在) R_OK(是否可读) W_OK(是否可写) X_OK(是否可执行) 返回值: 成功返回0 失败返回-1 \*/ #include &lt;unistd.h> #include &lt;stdio.h> //perror int main() { int ret = access("a.txt", F_OK); //判断 a.txt是否存在 if (ret == -1) { perror("file not exist"); } return 0; } // gcc access.c -o access /* #include &lt;sys/stat.h> int chmod(const char *pathname, mode_t mode); 用于修改当前进程对pathname文件的权限 参数: 文件名 mode_t mode 需要修改的权限 给定相应的宏 让这个进程拥有对文件的处理的相应权限 也可以像例子中那样直接给个八进制数0775 S_ISUID (04000 八进制) set-user-ID (set process effective user ID on execve(2)) S_ISGID (02000) set-group-ID (set process effective group ID on execve(2); mandatory locking, as described in fcntl(2); take a new file's group from parent directory, as described in chown(2) and mkdir(2)) S_ISVTX (01000) sticky bit (restricted deletion flag, as described in unlink(2)) S_IRUSR (00400) read by owner S_IWUSR (00200) write by owner S_IXUSR (00100) execute/search by owner ("search" applies for directories, and means that entries within the directory can be accessed) S_IRGRP (00040) read by group S_IWGRP (00020) write by group S_IXGRP (00010) execute/search by group S_IROTH (00004) read by others 返回值: 成功返回0 失败返回-1 \*/ #include &lt;sys/stat.h> int main() { //-rw-rw-r-- 664 原a.txt权限--->-rwxrwxr-x 775 int ret = chmod("a.txt", 0775); if (ret == -1) { return -1; //fail } return 0; } /* #include &lt;unistd.h> int chown(const char *pathname, uid_t owner, gid_t group); uid_t owner 待改为哪个用户id所有这个文件 gid_t group 待改为哪个组id所有这个文件 vim /etc/passwd 当中写了所有的用户 wen:x:1000(用户id):1000(组id):wen,,,:/home/wen:/bin/bash vim /etc/group 当中写了所有的组 wen:x:1000(组id): sudo useradd 用户名 来添加用户 id 用户名 来查看用户的uid与gid uid=1000(wen) gid=1000(wen) 组=1000(wen 组名) 要想通过chown修改文件的所有者和所有组 在编译完后 需要 sudo ./可执行文件 才有权限去修改!!!!!!!!! \*/ #include &lt;sys/stat.h> int main() { int ret = chown("a.txt", 1000, 1000); if (ret == -1) { return -1; //fail } return 0; } /* #include &lt;unistd.h> #include &lt;sys/types.h> int truncate(const char *path, off_t length); 用于缩减或拓展文件的大小 参数： 文件路径 length 文件最终的大小(文件经过这个函数后就直接变这么大了) 如需清空文件，length设置为0 这个大小大于当前大小 则在文件尾添加一系列空字节 小于则将超出部分删掉 返回值： 成功返回0 失败返回-1并设置errno 1 EACCESS 参数path所指定的文件无法存取 2 EROFS 欲写入的文件存在于只读文件系统内 3 EFAULT 参数path指针超出可存取空间 4 EINVAL 参数path包含不合法字符 5 ENAMETOOLONG 参数path太长 6 ENOTDIR 参数path路径并非一目录 7 EISDIR 参数path指向一目录 8 ETXTBUSY 参数path所指的文件为共享程序，而且正被执行中 9 ELOOP 参数path 有过多符号连接问题。 10 EIO I/O存取错误 \*/ #include &lt;unistd.h> #include &lt;sys/types.h> int main() { int ret = truncate("a.txt", 20); //将a.txt变为20个字节 if (ret == -1) { return -1; //fail } return 0; } 三、目录操作函数
+...</p></div><footer class=entry-footer><span title=2022-03-13T00:00:00+00:00>创建于 2022-03-13</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux系统编程入门3 IO函数续" href=https://jler666.github.io/cpp/fyr7ci/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Linux多进程开发1 介绍,相关命令,父子进程虚拟地址空间</h2></header><div class=entry-content><p>程序是包含一系列信息的文件，这些信息描述了如何在运行时创建一个进程。
+二进制格式标识：每个程序文件都包含用于描述可执行文件格式的元信息。内核利用此信息来解释文件中的其他信息。(ELF可执行连接格式)
+机器语言指令：对程序算法的编码
+程序入口地址：标识程序开始执行时的起始指令在内存中的位置
+数据：程序文件包含的变量初始值和程序使用的字面量值(比如字符串””)
+符号表以及重定位表：描述程序中函数和变量的位置及名称。这些表格有多重用途其中包括 调试和运行时的符号解析(动态链接)。
+共享库和动态链接信息：程序文件所包含的一些字段，列出了程序运行时需要的的共享库以及加载共享库的动态连接器的路径名。
+其他信息：….用于描述如何创建进程
+进程是正在运行的程序的实例。是一个具有一定独立功能的程序关于某个数据集合的一次运行活动。他是操作系统动态执行的基本单元，在传统的操作系统中也是分配资源的基本单元。可以用一个程序来创建多个进程，进程是内核定义的抽象实体，并为该实体分配用以执行程序的各项系统资源。从内核的角度看，进程由用户内存空间和一系列内核数据结构组成，其中用户内存空间包含了程序代码及代码所使用的变量，而内核数据结构则用于维护进程状态信息。记录在内核数据结构中的信息包括许多与进程相关的标识号(IDS)、虚拟内存表、打开文件的描述符表(fd)、信号传递及处理的有关信息、进程资源使用及限制、当前工作目录和大量的其他信息。
+单道程序，即在计算机内存中只允许一个程序运行。多道程序设计是在计算机内存中同时存放多道相互独立的程序，使他们在os管理下相互穿插并发地执行。两个或两个以上程序在计算机系统中同处于开始到结束之间的状态，这些程序共享计算机系统资源(注意不共享线程独有的一些资源、共享的是一些独立的临界资源)，这样可以大大地提高cpu利用率。
+对于一个单cpu系统来说,多进程并发执行，但就微观而言任意时刻cpu上运行的程序只有一个。多个进程轮流使用cpu，当下的常见cpu为纳秒级，1秒可以执行大约10亿条指令。由于人眼的反应是毫秒级，所以看似同时在运行。
+时间片又称”量子”或”处理片”是操作系统分配给每个正在运行的进程微观上的一段cpu时间，在Linux上为5ms-800ms。时间片由操作系统内核的调度程序分配给每个进程。首先，内核会给每个进程分配相等的初始时间片。然后每个进程轮番地执行相应的时间，当所有进程都处于时间片耗尽的状态时，内核会重新为每个进程计算并分配时间片如此往复。
+并行(parallel)：指在同一时刻，有多条指令在多个cpu上同时执行。
+并发(concurrency)：指在同一时刻只能有一条指令执行，但多个进程指令被快速轮换执行，使得宏观上有”同时执行”的效果。在微观上并不是同时执行的只是在若干时间内，多个进程快速交替执行。
+| |
+| — |
+进程控制块，os内核为每个进程分配一个PCB(processing control block)进程控制块，维护进程相关的信息，Linux的进程控制块是task_struct结构体。在/usr/src/linux-headers-xxx/include/linux/sched.h文件中可以查看task_struct结构体定义，主要掌握以下部分
+进程id:系统中每个进程唯一的id用pid_t类型表示，是一个非负整数
+进程的状态：有就绪、运行、挂起、停止等状态
+进程切换时需要保存和恢复的一些cpu寄存器
+描述虚拟地址空间的信息
+描述控制终端的信息
+当前的工作目录
+umask掩码
+文件描述符表fd表，包含很多指向文件结构体的FILE*指针
+和信号相关的信息
+用户id和组id
+会话(session)和组id
+进程可以使用的资源上限 ulimt -a
+2进程状态转换
+进程状态反应进程执行过程的变化。这些状态随着进程的执行和外界条件的变化而转换。在三态模型中进程分为三个剧本状态，就绪态 运行态 阻塞态。简单讲下状态的转化(具体的去看王道操作系统的笔记)。
+运行态: 进程当前占有cpu 进程正在cpu上跑
+就绪态：进程具备运行条件(需要的资源已经全部到位 就差cpu)。就绪态的进程编号存在就绪队列中，根据调度算法选出一个放在cpu上跑
+阻塞态：又称为等待态或睡眠态，指进程不具备运行条件(除了cpu外还差其他资源)，正在等待某个事件的完成
+| |
+| — |
+| |
+| — |
+进程进入终止态的进程以后不再执行，但依然保留在os系统中等待善后(比如子进程结束后等待父进程回收其使用的资源后再删除)
+进程相关命令
+ps aux a：显示终端上的所有进程 包括其他用户的进程(可有多用户登录同一服务器) u：显示进程的详细信息 x：显示没有控制终端的进程
+root(USER用户名) 1(PID进程ID) 0.1(%CPU这个进程占用了多少cpu) 0.2(%MEM这个进程占用了多少内存) 225420(VSZ ) 9104(RSS) pts/1(TTY 当前进程所属于的终端) Ss(STAT 状态) 19:02(START 线程启动时间) 0:02(TIME 线程已经运行时间) -bash(COMMAND 什么命令启动了这个线程)
+...</p></div><footer class=entry-footer><span title=2022-03-13T00:00:00+00:00>创建于 2022-03-13</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Linux多进程开发1 介绍,相关命令,父子进程虚拟地址空间" href=https://jler666.github.io/cpp/yu442b/></a></article><footer class=page-footer><nav class=pagination><a class=prev href=https://jler666.github.io/cpp/page/2/>«&nbsp;Prev&nbsp;
+</a><a class=next href=https://jler666.github.io/cpp/page/4/>Next&nbsp;&nbsp;»</a></nav></footer></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

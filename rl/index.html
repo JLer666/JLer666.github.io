@@ -1,0 +1,148 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>强化学习 | CantBlog</title><meta name=keywords content><meta name=description content="强化学习理论与算法笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/rl/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/rl/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/rl/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/rl/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="强化学习"><meta property="og:description" content="强化学习理论与算法笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="强化学习"><meta name=twitter:description content="强化学习理论与算法笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"强化学习","item":"https://jler666.github.io/rl/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>强化学习</h1><div class=post-description>强化学习理论与算法笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Multi Agent</h2></header><div class=entry-content><p>2agent交互 自车与某一他车，(自车,他车1)、(自车,他车2)…..但忽略了他车与他车之间的交互
+两个学生合作小组作业，小组作业有两种pre和考试，如果准备考试可以获得92分，如果两个人都准备pre可以获得100一个准备可以获得92,都没准备获得80,pre和考试各占成绩的50%。两人的决策就是0,1选择，可以得到下面这个payoff matrix
+在partner决策未知的前提下，选择做exam的期望分数更高
+在所有人都是理性的假设下，partner也会做同样的选择，最终的分数就是88,88。(strictly dominant strategy)
+但两人都选pre才是最优的双赢局面
+囚徒困境(prisoner’s dilemma)
+两个囚徒被抓，都告密两个人都将获刑4年，没人告密两人都获刑1年，其中一个告密另一人获刑10年自己将免除刑罚
+列出payoff matrix，未知partner决策，明显告密confess对自己是更优的选择(strictly dominant strategy).全局最优是都不告密
+类似的运动员用药的payoff matrix(数字为reward)，strictly dominant strategy是用药，全局最优是都不用药
+定义符号
+玩家1的策略S，玩家2的策略T。玩家i的Payoff表示为$ P_i(S,T) $
+S策略被称为best response to T , if $ P_1(S,T)\geq P_1(S',T) $ S’为除S外玩家1可做的其他决策
+当$ P_1(S,T)\gt P_1(S',T) $ 又被称为strict best response to T
+定义 dominant srtategy 是best response to any others,同理 strict dominant srtategy 是strict best response to any others
+对于囚徒困境而言两个囚徒都有strictly dominant strategy，下面举一个例子只有一个player有dominat strategy(payoff matrix不对称)
+市场上60%的人想要低价商品，40%的人想要高价商品。
+两家公司如果做相决策竞争做同价位商品，公司1获得80%销量，公司2获得20%。如果做不同决策则获得各自价格市场的客户。
+...</p></div><footer class=entry-footer><span title=2025-01-05T00:00:00+00:00>创建于 2025-01-05</span>&nbsp;·&nbsp;<span title=2025-01-05T00:00:00+00:00>最后修改于 2025-01-05</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Multi Agent" href=https://jler666.github.io/rl/weygt3pml2hgy6pv/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>无标题文档</h2></header><div class=entry-content><p>联合概率 $ p(x,a)=p(x|a)p(a) == p(X=x,A=a)=p(X=x|A=a)p(A=a) $
+$ p(x|a)=\frac{p(x,a)}{p(a)} $
+$ p(x)=\sum_ap(x|a)=\sum_ap(x|a)p(a) $
+若X,A互相独立无关 $ p(x,a)=p(x)p(a) $
+$ p(x|a)=p(x) $
+条件独立，马尔可夫过程的memory less特点
+$ p(s_{t+2}|s_{t+1},s_t)=p(s_{t+2}|s_{t+1}) $下一步状态只与当前状态相关，与更早的状态无关
+概率求和法则，sum一个随机变量后可以得到将这个随机变量从联合中去除的表达
+$ p(x)=\sum_ap(x,a) $
+$ p(x|a)=\sum_yp(x,y|a) $
+链式法则，通过条件概率将联合概率拆分
+$ p(x,a)=p(x|a)p(a) $
+$ p(x,y,a)=p(x|y,a)p(y,a)=p(x|y,a)p(y|a)p(a) $
+移项得到
+$ \frac{p(x,y,a)}{p(a)}=p(x|y,a)p(y|a)=p(x,y|a) $
+$ p(x|a)=\sum_yp(x,y|a)=\sum_yp(x|y,a)p(y|a) $</p></div><footer class=entry-footer><span title=2024-10-27T00:00:00+00:00>创建于 2024-10-27</span>&nbsp;·&nbsp;<span title=2024-10-27T00:00:00+00:00>最后修改于 2024-10-27</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 无标题文档" href=https://jler666.github.io/rl/zzo8xwuecyndouig/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>20 Phasic Policy Gradient</h2></header><div class=entry-content><p>这个算法实现了我之前的想法，actor和critic共用一部分网络作为提取状态的深度信息的作用，有解决了之前的loss不好确定的问题。
+actor和critic有一部分的联合网络的有点是能够共享状态的深度特征** 特别在输入状态的维度特别大的时候(比如输入的是一幅图像)共享网络的效果比不共享网络的效果好很多**，缺点是难以确定actor和critic两者优化的权重，同时优化两个目标可能会相互干扰，并且同时优化必须使用相同的数据、相同的数据重利用率，但实际策略网络特别是类PPO的on policy策略是不允许数据重用的(actor-critic中值函数不直接影响策略，而策略网络的变化直接影响表现，因此策略的sample reuse容忍度更低（类似于学习率不能过大），这在TD3中也有体现，TD3中同样发现了以更低的频率去更新策略网络训练更加稳定，表现更好
+其实在TD3中actor网络的更新频率慢于critic网络也是因为这个原因)，而值网络特别是类DQN的Q网络是off policy是可以进行数据重用的。这就导致actor训练时使用和critic一样的数据和数据重利用率 将会导致actor的训练效果很差。
+想改进PPO，经过实验发现PPO的策略网络在sample reuse(用过去的轨迹进行训练)后给训练带来负面影响(废话 PPO本就是on polciy策略才能保证策略单调变好 这样改相当于改成了off policy 效果肯定会变差)，但是PPO的critic网络在sample reuse后训练效果变的更好。
+PPG中和其他Actor-Critic结构的网络一样使用了一个网络作为policy pi(actor)一个网络作为state value function V(critic)，使得两者训练阶段不会相互影响，又再增加了一个辅助阶段(知识蒸馏)，**将值函数网络的有用信息(V θv)传递给策略网络(V θpi),**既能避免两者训练过程中的相互干扰，同时共享了一部分表示信息，PPG能显著提高数据利用率。
+PPG分为了两个阶段，策略阶段(Policy Phase)和辅助阶段(Auxiiary Phase)。策略阶段分别独立训练值函数和策略网络，优化目标与PPO一样。
+Loss_pi = L_clip = E[min(rtAt,clip(rt,1-^,1+^)At)] +βentpopy pi 更新pi
+At是GAE通过Vθv网络估计的价值来进行计算的
+Loss_V = E[(Vθv(st) - Vtar t)^2/2] Vtar t是通过客观地累加环境返回的奖励计算得到的 更新V
+(Loss_V指的的是value network的loss不是指的V θpi)
+在此阶段需要存在 (st,Vtar t) 和 策略函数在st下所做分布pi(.|st)
+在Loss_pi和Loss_V **经过optimizer优化后！**进行辅助阶段
+Loss_joint = L_aux + β_clone*E[KL[pi_old(.|st),pi(.|st)]]
+Loss_joint是单独去更新policy网络的
+L_aux=E[(Vθpi(st) - Vtar t^2)/2]
+Vtar t是通过客观地累加环境返回的奖励计算得到的
+先来解释一下policy网络的结构，我们能看到policy网络有两个输出
+class Policy_Model(nn.Module): def __init__(self, state_dim, action_dim): super(Policy_Model, self).__init__() self.nn_layer = nn.Sequential( nn.Linear(state_dim, 256), nn.ReLU(), nn.Linear(256, 128), nn.ReLU() ).float().to(device) self.actor_layer = nn.Sequential( nn.Linear(128, action_dim), nn.Tanh() ).float().to(device) self.critic_layer = nn.Sequential( nn.Linear(128, 1) ).float().to(device) def forward(self, states): x = self.nn_layer(states) return self.actor_layer(x), self.critic_layer(x) policy中有个前置的nn_layer用于提取深度信息，再将深度信息分别输入到actor_layer得到pi分布和critic_layer得到Vθpi(st)
+...</p></div><footer class=entry-footer><span title=2022-02-10T00:00:00+00:00>创建于 2022-02-10</span>&nbsp;·&nbsp;<span title=2022-03-09T00:00:00+00:00>最后修改于 2022-03-09</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 20 Phasic Policy Gradient" href=https://jler666.github.io/rl/cwsz06/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>19 PPO 2 补充</h2></header><div class=entry-content><p>TRPO方法中，求出FIM关于状态的平均之后，可以直接求逆矩阵。但是神经网络的参数（与FIM阶数相同）一般是高维的，所以求逆矩阵计算量过大。在现实中，TRPO一般采用共轭梯度法求解，这意味着每一个子问题都需要多步的迭代来求解；另外，PPO中针对L_CLIP函数，作者给出的方法是用Adam求解，这也意味着每一个子问题可能需要多步Adam的迭代。在TRPO与PPO的每个迭代步中，我们用当前策略pi定义出子问题，然后对这个子问题迭代多步求解。接着我们又用得到的最终解作为当前的策略，定义下一个子问题。这种**“迭代地迭代”的训练方式也使得TRPO与PPO与我们之前熟悉的VPG和AC有所不同**。如果要在实战中训练，则我们务必弄清楚这些细节。
+补充1
+这里要特别强调一下PPO中针对L_CLIP函数，作者给出的方法是用Adam求解，这也意味着每一个子问题可能需要多步Adam的迭代。
+$ \begin{gathered} L^{CLIP}(\theta)=E_t[min(r_t(\theta)A_{\pi_{\theta_{old}}}(s_t,a_t),clip(r_t(\theta),1-\varepsilon,1+\varepsilon)A_{\pi_{\theta_{old}}}(s_t,a_t))]\\ r_t(\theta)=\frac{\pi_{\theta}(a_t|s_t)}{\pi_{\theta_{old}}(a_t|s_t)} \end{gathered} $在很多的PPO代码实现中没有两个策略网络pi和pi old而是只有一个策略pi。其算法流程是
+1先清空经验池(on policy)
+2pi策略探索采样足够步数的一条轨迹
+3更新策略
+从经验池中sample 足够的轨迹数据
+for 规定重复次数 # pi会被更新多次
+从轨迹数据中随机取batch size条
+计算loss = L_clip+熵+critic loss
+注意在第一次计算loss时 pi/pi=1,在更新了一次之后(op.step 更新了pi后) pi(op 更新过后已经不是原始的pi了)/pi(这个策略实际为 在经验池中的act 就是前面pi探索时采取的动作 是原始的pi没经过更新的pi) 第一次pi/pi_old=1后还是会因为adv的大小和熵导致新的pi被更新
+loss.backward
+op.step # 更新pi网络
+补充2
+策略分为确定性策略(Deterministic Policy)和随机性策略(Stochastic Policy),确定性策略是指针对一个st能够输出一个确定性动作at—at=u(st)。随机策略指的是针对某一st无法给出一个确定的动作，而是输出每个动作的概率(输出动作的概率分布)。
+因为随机策略是个分布我们最后采取的动作是个确定动作，所以需要去这个随机分布中采样得到最终的动作。
+在DRL中最常见的两种随机策略是categorical policy(用于离散策略)和diagonal gaussian policy(用于连续策略)。
+categorical policy的动作空间是离散的比如[向前的概率,向后的概率,向左的概率,向右的概率]–向前向后..是一个确定的方向。这个policy的输出相当于一个分类问题的输出，输入状态到policy中 将policy的输出经过softmax(输出类别的值的和为1,这样就将输出变为了概率)后 我们再从这个分布中采样一个确定的方向比如[0.5前,0.2后,0.2左,0.1右],从这个分布中采样 大概率采样到向前 但其他方向依然有可能 所以说随机策略自带随机探索。
+diagonal gaussian policy的动作空间是连续的比如油门力的大小，方向盘转角的大小 因为要求具体的大小不能再当作分类问题来做。让策略输出一个高斯分布的期望ui和方差gi，采样这个高斯分布得到动作ai(输出动作从ui,gi组成的高斯分布上采样得到)。
+一般将policy神经网络的输出作为ui,而方差gi有两种方法来计算1 log gi作为独立的参数来设定(直接给值 与环境无关 是目前的主流方法) 2 也通过神经网络来计算log gi(s) 由状态决定这个方差。 假设动作和动作之间不相关，比如油门力度和方向盘的旋转角度(其实是相关的 不同油门力度下相同的方向盘角度可能会出现极端状态)，用一个联合概率分布来表示所有动作种类，因为假设所有动作不相关 则是对角高斯分布(multivatiate gaussian distribution)是一种多元高斯分布，其协方差矩阵是一个对角阵(因为假设动作之间两两不相关)，因此可以用一个一维向量代表这个协方差矩阵(因为只有对角线上有值，所以可以用一个由对角线上值组成的向量来代表这个对角协方差阵)。policy的输出可以用一个对角高斯分布(多维联合概率分布)来表示
+...</p></div><footer class=entry-footer><span title=2022-02-09T00:00:00+00:00>创建于 2022-02-09</span>&nbsp;·&nbsp;<span title=2023-05-17T00:00:00+00:00>最后修改于 2023-05-17</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 19 PPO 2 补充" href=https://jler666.github.io/rl/hrhx9p/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>18 PPO 1 原理</h2></header><div class=entry-content><p>我们在之前针对优化问题介绍过信赖域方法与近似点方法的区别。在拉格朗日乘子对偶的角度下看，二者是等价的。而在上面，我们又介绍了TRPO方法。所以，聪明的读者自然会联想到“信赖域方法之于近似点方法”，正如“TRPO方法之于PPO方法”。事实上，这也正是PPO的出发点。PPO算法有两种版本，第一种叫做“KL penalty version”。它的子问题其实我们在上面推导TRPO的时候已经见过了：
+待优化函数
+$ \begin{gathered} \underset{\pi_{\theta}}{max}L_{\pi_{\theta_{old}}}(\pi_{\theta})\\ s.t.D_{KL}^{\rho_{\theta_{old}}}(\pi_{\theta_{old}}||\pi_{\theta})\lt \delta \end{gathered} $
+约束形式(未展开近似)
+$ \underset{\pi_{\theta}}{max}L_{\pi_{\theta_{old}}}(\pi_{\theta})-CD_{KL}^{\rho_{\theta_{old}}}(\pi_{\theta_{old}}||\pi_{\theta}) $
+散度惩罚系数C为常数 可以改为动态调整的β
+$ \begin{gathered} d=D_{KL}^{\rho_{\theta_{old}}}(\pi_{\theta_{old}}||\pi_{\theta})\\ if\ d\lt d_{tar}/1.5\ ;\beta=\beta/2\\ if\ d\gt d_{tar}\cdot1.5\ ;\beta=2\beta\\ \underset{\pi_{\theta}}{max}L_{\pi_{\theta_{old}}}(\pi_{\theta})-\beta D_{KL}^{\rho_{\theta_{old}}}(\pi_{\theta_{old}}||\pi_{\theta}) \end{gathered} $
+1.5,2这两个也是超参数 需要整定，但实际实验后发现 这两个参数并不会特别影响算法的性能，这种方法在优化中叫LM方法与信赖域方法形成对偶。
+接下来介绍clipped version ppo主要考虑的问题仍然是控制步长 和我们在优化中说的近似点方法并没有太大的关系 CPI(conservative policy iteration 保守策略迭代)
+定义
+$ \begin{gathered} L^{CPI}(\theta)=E_{t}[\frac{\pi_{\theta}(a_t|s_t)}{\pi_{\theta_{old}}(a_t|s_t)}A_{\pi_{\theta_{old}}}(s_t,a_t)]\\ r_t(\theta)=\frac{\pi_{\theta}(a_t|s_t)}{\pi_{\theta_{old}}(a_t|s_t)}\\ r(\theta_{old})=1 \end{gathered} $
+上述定义和trpo中的L的定义
+$ \sum_s \rho_{\pi_{\theta_{old}}}(s) \sum_a \pi_{\theta}(a|s)A_{\pi_{\theta_{old}}}(s,a)= \sum_s \sum_a \rho_{\pi_{\theta_{old}}}(s,a)\frac{\pi_{\theta}(a|s)}{\pi_{\theta_{old}}(a|s)}A_{\pi_{\theta_{old}}}(s,a) $是完全等价的
+(下标t 是对$ \rho_{\pi^{'}}(s)=P(s_0=s|\pi^{'})+\gamma P(s_1=s|\pi^{'})+\gamma^2 P(s_2=s|\pi^{'})+... $这个随事件衰减的概率的 一个综合描述)，trpo中其实优化的也是这个CPI函数。
+为什么要将L化为完全等价的L CPI函数? TPRO的基本思想是 新旧策略不能相差太大(KL散度不能相差太大)， 从L当中是看不出来这个约束的(KL散度的约束需要另外加)。从CPI定义的L中可以直接看出 如果r(θ)越大得到的期望优势奖励也就越大,但是我们需要的是r(θ)接近于1—也就是新旧策略越接近 此时最大化r(θ)与kl散度约束达到的效果是一样的。不能让r(θ)无限增大需要限制
+...</p></div><footer class=entry-footer><span title=2022-02-09T00:00:00+00:00>创建于 2022-02-09</span>&nbsp;·&nbsp;<span title=2025-09-02T00:00:00+00:00>最后修改于 2025-09-02</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 18 PPO 1 原理" href=https://jler666.github.io/rl/oi6feq/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>17 TRPO 9 补充</h2></header><div class=entry-content><p>补充1 重要性采样后的方差变化
+李宏毅
+$ E_{x\sim p}[f(x)]=E_{x\sim q}[f(x)\frac{p(x)}{q(x)}] $重要性采样定义
+重要性采样前方差为
+$ D_{x\sim p}[f(x)]=E_{x\sim p}[f^2(x)]-(E_{x\sim p}[f^2(x)])^2 $
+重要性采样后方差为
+$ D_{x\sim q}[f(x)\frac{p(x)}{q(x)}]=E_{x\sim q}[(f(x)\frac{p(x)}{q(x)})^2]-(E_{x\sim q}[f(x)\frac{p(x)}{q(x)}])^2 $
+$ \begin{gathered} E_{x\sim p}[(f(x)\frac{p(x)}{q(x)})^2]=\int(f(x)\frac{p(x)}{q(x)})^2q(x)dx\\ = \int f(x)^2\frac{p(x)}{q(x)}p(x)dx \\ = E_{x\sim p}[f(x)^2\frac{p(x)}{q(x)}] \end{gathered} $
+$ E_{x\sim p}[f(x)]=E_{x\sim q}[f(x)\frac{p(x)}{q(x)}] $就是重要性采样的定义 直接替换
+最终$ D_{x\sim q}[f(x)\frac{p(x)}{q(x)}]=E_{x\sim p}[f(x)^2\frac{p(x)}{q(x)}]-(E_{x\sim p}[f(x)])^2 $
+与重要性采样前的$ D_{x\sim p}[f(x)]=E_{x\sim p}[f^2(x)]-(E_{x\sim p}[f^2(x)])^2 $的差别就在于第一项
+多了一个p/q 如果二者分布p与q相差过大会导致方差变大。 即只有在p,q差异不大的情况下重要性采样得到的结果是相对可靠的
+补充2 为什么DQN DDPG TD3…(Value Base)不需要重要性采样 但是 TRPO PPO(Policy Base)就需要
+https://zhuanlan.zhihu.com/p/371156865
+首先问为什么要使用重要性采样，因为原始数据分布xp(x)难以直接采样，从而借助一个简单的可采样的分布xq(x)来计算f(x)的期望。
+对于强化学习来说，有两个策略 一个用于决策的behavior policy(用于采样) u，一个用于更新的target policy pi，当u和pi一样时就是on policy 不一样就是off policy。
+...</p></div><footer class=entry-footer><span title=2022-02-09T00:00:00+00:00>创建于 2022-02-09</span>&nbsp;·&nbsp;<span title=2022-05-02T00:00:00+00:00>最后修改于 2022-05-02</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 17 TRPO 9 补充" href=https://jler666.github.io/rl/en66bb/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>15 TRPO 7 TRPO 算法流程</h2></header><div class=entry-content><p>下面提出一种不用计算海森阵的优化方法
+$ f(x+\Delta x)\approx f(x)+\triangledown f(x)^T+\triangledown x^T H(f)\triangledown x/2 $
+在牛顿法中我们必须计算海森阵的逆从而计算出下个参数值,但是利用共轭梯度则我们不再需要计算这个海森阵的逆。
+$ f(x+\alpha \cdot p)\approx g_x(v)=f(x)+\triangledown f(x)^Tv+\triangledown v^T B\triangledown v/2;v=\alpha \cdot p,B=H+\lambda I $一般海森阵是不确定的f可能不存在最小值，并且当v太大后上面的这个展开的置信度降低，因此取B=H+/\I，/\被称为阻尼系数，Bv=Hv+/\v表示费舍尔向量积(Fisher Vector Product)。
+$ (Hv)_i=\sum_{j=1}^{N}\frac{\partial^2f(x) }{\partial x_i\partial x_j}\cdot v_j=\triangledown \frac{\partial f(x)}{\partial x_i}\cdot v $
+牛顿法中最小化f的迭代方法是
+$ x_{i+1}=x_i-H(f)^{-1}|_{x=x_i}\cdot\triangledown f(x)|_{x=x_i} $
+在共轭梯度的更新求新的优化方向中不需要求KL散度的二阶导H，也不需要求二阶导的逆H^-1(牛顿法中要)，要求的是Hv(Ap)这个矩阵和向量(更新方向)的乘积，经过多次迭代后能得到一个较优的优化方向，求Hv(v为任意向量)有Fisher vector product这种快速算法来求解。
+下面先将我们的问题重新描述一遍$ \begin{gathered} \underset{\theta}{max}(\triangledown_{\theta} L_{\theta_{old}}(\theta)|_{\theta=\theta_{old}})^T\cdot(\theta - \theta_{old})\\s.t.(\theta - \theta_{old})^T F (\theta - \theta_{old})/2 \leqslant \delta \end{gathered} $
+$ \underset{\theta}{max}(\triangledown_{\theta} L_{\theta_{old}}(\theta)|_{\theta=\theta_{old}})^T\cdot(\theta - \theta_{old})-\lambda((\theta - \theta_{old})^T F (\theta - \theta_{old})/2 - \delta) $其中$ \triangledown_{\theta} L_{\theta_{old}}(\theta) $在上面写过表达式，维度时[K,1]其中K为策略网络的总参数量(将网络参数打平 θ代表总参数的集合 维度也为[K,1])所以$ (\triangledown_{\theta} L_{\theta_{old}}(\theta)|_{\theta=\theta_{old}})^T\cdot (\theta - \theta_{old}) $=[1,K][K,1]=1是个常量。F的维度为[K,K]所以约束条件的维度也为[1,K][K,K]*[K,1]=1。
+...</p></div><footer class=entry-footer><span title=2022-02-09T00:00:00+00:00>创建于 2022-02-09</span>&nbsp;·&nbsp;<span title=2022-04-24T00:00:00+00:00>最后修改于 2022-04-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 15 TRPO 7 TRPO 算法流程" href=https://jler666.github.io/rl/kipmht/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>16 TRPO 8 Fisher Vector Product</h2></header><div class=entry-content><p>下面是不可取的直接计算KL散度二阶导数的方法
+def hessian(network, states): #pa = network.forward(states) pa_sum = network.get_kl(states) # pa_sum--Dkl J--dDkl/dθ J = torch.autograd.grad(pa_sum, network.parameters(), create_graph=True, retain_graph=True) J_ = Tensor().cuda() # concatenate the various gradient tensors (for each layer) into one vector # 将J--dDkl/dθ展开打平 for grad in J: J_ = torch.cat((J_, grad.view(-1)), 0) H = Tensor().cuda() # calculate gradient wrt each element and concatenate into the Hessian matrix # JJ = d2Dkl/dθ^2 for Ji in J_: JJ = torch.autograd.grad(Ji, network.parameters(), create_graph=False, retain_graph=True) JJ_ = torch.cat([grad.contiguous().view(-1) for grad in JJ]) H = torch.cat((H, JJ_), 0) # numParams is the number of parameters in the network numParams = sum(p.numel() for p in network.parameters() if p.requires_grad) HH = H.view((numParams, numParams)) return HH 这里使用一个技巧来避免在求H-1g(**)的过程中直接去求KL散度的二阶导,**直接求的公式 $ H_{ij}=\frac{\partial}{\partial \theta_j}\frac{\partial D_{KL}}{\partial \theta_i} $
+...</p></div><footer class=entry-footer><span title=2022-02-09T00:00:00+00:00>创建于 2022-02-09</span>&nbsp;·&nbsp;<span title=2022-04-30T00:00:00+00:00>最后修改于 2022-04-30</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 16 TRPO 8 Fisher Vector Product" href=https://jler666.github.io/rl/ix6cxo/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>14 TRPO 6 共轭梯度法2</h2></header><div class=entry-content><p>三个重要推论
+1 第i步的梯度$ \triangledown_{x}f(x)|_{x=x_i} $与p0,p1,..,pi-1正交正交
+证
+k&lt;i $ \begin{gathered} \triangledown_{x}f(x)|_{x=x_{i}}=Ax_{i}+b=A(x_{i-1}+\alpha_{i-1}p_{i-1})+b\\=Ax_{i-1}+\alpha_{i-1}Ap_{i-1}+b\\ =\triangledown_{x}f(x)|_{x=x_{i-1}}+\alpha_{i-1}Ap_{i-1} \end{gathered} $得到了一步迭代形式继续展开
+$ \begin{gathered} \triangledown_{x}f(x)|_{x=x_{i}}=\triangledown_{x}f(x)|_{x=x_{i-1}}+\alpha_{i-1}Ap_{i-1}\\ \because x_k = x_{k-1} + \alpha_{k-1}p_{k-1}\\=A(x_{i-2}+\alpha_{i-2}p_{i-2})+b+\alpha_{i-1}Ap_{i-1}\\=A(x_{i-3}+\alpha_{i-3}p_{i-3}+\alpha_{i-2}p_{i-2})+b+\alpha_{i-1}Ap_{i-1}\\=...\\=A(x_{0}+\alpha_{0}p_{0}+...+\alpha_{i-2}p_{i-2})+b+\alpha_{i-1}Ap_{i-1}\\=Ax_0+b+\alpha_0Ap_0+\alpha_1Ap_1+...+\alpha_{i-1}Ap_{i-1}\\\triangledown_{x}f(x)|_{x=x_{0}}=Ax_0+b\\=\triangledown_{x}f(x)|_{x=x_{0}}+\alpha_{0}Ap_{0}+\alpha_{1}Ap_{1}+...+\alpha_{i-1}Ap_{i-1} \end{gathered} $
+为了证明和所有pk正交需要缩回k+1这一层
+等$ =\triangledown_{x}f(x)|_{x=x_{k+1}}+\alpha_{k+1}Ap_{k+1}+\alpha_{k+2}Ap_{k+2}+...+\alpha_{i-1}Ap_{i-1} $式两边左乘$ p_k^T $
+$ \begin{gathered} p_k^T\triangledown_{x}f(x)|_{x=x_{i}}=p_k^T\triangledown_{x}f(x)|_{x=x_{k+1}}+\alpha_{k+1}p_k^TAp_{k+1}+\alpha_{k+2}p_k^TAp_{k+2}+...+\alpha_{i-1}p_k^TAp_{i-1}\\ \because p_i^TAp_j=0,i\neq j\\ p_k^T\triangledown_{x}f(x)|_{x=x_{i}}=p_k^T\triangledown_{x}f(x)|_{x=x_{k+1}} \end{gathered} $因为共轭梯度的定义第k步的步长是计算过的最优步长αk将pk这个方向误差更新完 第k步的优化方向是垂直于xk+1所在等高线的$ p_k^T\triangledown_{x}f(x)|_{x=x_{k+1}}=0 $
+$ \therefore p_k^T\triangledown_{x}f(x)|_{x=x_{i}}=0 $得到$ \triangledown_{x}f(x)|_{x=x_{i}} $和前i-1步的优化方向 p0,p1,..,pi-1正交
+2第i步的梯度$ \triangledown_{x}f(x)|_{x=x_i} $和前i-1步的梯度$ \triangledown_{x}f(x)|_{x=x_k};k=0,1,2,..,i-1 $正交
+$ \begin{gathered} (\triangledown_{x}f(x)|_{x=x_{k}})^T\cdot \triangledown_{x}f(x)|_{x=x_{i}}\\ \because p_{i+1} = -\triangledown_{x}f(x)|_{x=x_{i+1}}-\sum_{k=1}^{i}\beta_kp_k\\ \therefore \triangledown_{x}f(x)|_{x=x_{k}} = -(p_k + \sum_{j=1}^{k-1}\beta_jp_j)\\=-(p_k + \sum_{j=1}^{k-1}\beta_jp_j)^T \cdot \triangledown_{x}f(x)|_{x=x_{i}} \end{gathered} $
+由1可知$ \triangledown_{x}f(x)|_{x=x_{i}} $和前i-1步的优化方向 p0,p1,..,pi-1正交
+...</p></div><footer class=entry-footer><span title=2022-02-07T00:00:00+00:00>创建于 2022-02-07</span>&nbsp;·&nbsp;<span title=2022-04-23T00:00:00+00:00>最后修改于 2022-04-23</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 14 TRPO 6 共轭梯度法2" href=https://jler666.github.io/rl/xaqct6/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>13 TRPO 5 共轭梯度法1</h2></header><div class=entry-content><p>待优化函数
+$ \underset{\theta}{max}(\triangledown_{\theta} L_{\theta_{old}}(\theta)|_{\theta=\theta_{old}})^T\cdot(\theta - \theta_{old})-\lambda((\theta - \theta_{old})^T F (\theta - \theta_{old})/2 - \delta) $可以写成
+$ f(x)=x^TAx/2+b^Tx+c $这种形式，也就可以使用共轭梯度的方法来求解
+下面介绍一些FR共轭梯度的定义和定理
+设向量$ p_0,p_1,...,p_{n-1}\in R^n $关于实对称阵A共轭，即可用$ p_i^TAp_j=0,i\neq j $来表达
+问题找到合适的$ \lambda_i,p_i $经过n次迭代后能找到f的极小值点
+从x0点出发，相继以$ p_i,i=0,1,2,...,n-1 $为搜索方向
+$ \left\{\begin{matrix} & x_{i+1}=x_i+\lambda_ip_i\\ & f(x_i+\lambda_ip_i)=\underset{\lambda}{min}f(x_i+\lambda p_i)\\ & p_0=-\triangledown_{x}f(x)|_{x=x_0}\\ \end{matrix}\right. $
+经过n次上述表达式迭代(一维搜索)能够收敛到$ f(x)=x^TAx/2+b^Tx+c $的极小值点。当A为正定阵时f的最小值由$ Ax=-b $这个非齐次方程的解给出。
+定理1 关于实对称阵 共轭的向量组p0,p1…pn-1线性无关
+定理2 $ \triangledown_{x}f(x)|_{x=x_{i+1}}\cdot p_i=p_i^T\triangledown_{x}f(x)|_{x=x_{i+1}};i=0,1,...,n-1 $
+一维搜索时$ \lambda_i $为优化得到的最佳步长。 xi+1所在等高线与第i步下降方向pi相切于xi+1这点
+定理3 $ \triangledown_{x}f(x)|_{x=x_n} $与p0,p1,..,pn-1正交，$ \triangledown_{x}f(x)|_{x=x_k} $与p0,p1,..,pk-1正交
+$ f(x)=x^TAx/2+b^Tx+c;\triangledown_{x}f(x)=Ax+b;x_{i+1}=x_i+\lambda_i p_i $
+$ \begin{gathered} \triangledown_{x}f(x)|_{x=x_{i+1}}=Ax_{i+1}+b=A(x_i+\lambda_ip_i)+b\\=Ax_i+\lambda_iAp_i+b;Ax_i+b=\triangledown_{x}f(x)|_{x=x_{i}}\\ =\triangledown_{x}f(x)|_{x=x_{i}}+\lambda_iAp_i \end{gathered} $
+...</p></div><footer class=entry-footer><span title=2022-02-07T00:00:00+00:00>创建于 2022-02-07</span>&nbsp;·&nbsp;<span title=2022-04-19T00:00:00+00:00>最后修改于 2022-04-19</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 13 TRPO 5 共轭梯度法1" href=https://jler666.github.io/rl/smuhh4/></a></article><footer class=page-footer><nav class=pagination><a class=next href=https://jler666.github.io/rl/page/2/>Next&nbsp;&nbsp;»</a></nav></footer></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

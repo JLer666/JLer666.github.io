@@ -1,0 +1,384 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>开发工具 on CantBlog</title><link>https://jler666.github.io/tools/</link><description>Recent content in 开发工具 on CantBlog</description><generator>Hugo</generator><language>zh-cn</language><lastBuildDate>Tue, 03 Feb 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://jler666.github.io/tools/index.xml" rel="self" type="application/rss+xml"/><item><title>ubuntu代理</title><link>https://jler666.github.io/tools/zasqzxw8qno8hdnx/</link><pubDate>Mon, 08 Sep 2025 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/zasqzxw8qno8hdnx/</guid><description>&lt;p&gt;&lt;a href="https://github.com/JLer666/clash-for-linux-backup"&gt;https://github.com/JLer666/clash-for-linux-backup&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;安装clash for linux&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://shadowsocks5.github.io/en/download/clients.html"&gt;https://shadowsocks5.github.io/en/download/clients.html&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://github.com/TgfishVpn/clash-for-linux"&gt;https://github.com/TgfishVpn/clash-for-linux&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;sudo update-alternatives &amp;ndash;config gcc&lt;/p&gt;
+&lt;p&gt;sudo update-alternatives &amp;ndash;install /usr/bin/gcc gcc /usr/bin/gcc-12 3 &amp;ndash;slave /usr/bin/g++ g++ /usr/bin/g++-12&lt;/p&gt;
+&lt;p&gt;sudo update-alternatives &amp;ndash;install /usr/bin/gcc gcc /usr/bin/gcc-11 3 &amp;ndash;slave /usr/bin/g++ g++ /usr/bin/g++-11&lt;/p&gt;
+&lt;p&gt;NVIDIA-Linux-x86_64-550.107.02&lt;/p&gt;
+&lt;p&gt;clash-for-linux&lt;/p&gt;
+&lt;p&gt;运行本项目建议使用root用户，或者使用 sudo 提权。&lt;/p&gt;
+&lt;p&gt;使用过程中如遇到问题，请优先查已有的 issues。&lt;/p&gt;
+&lt;p&gt;在进行issues提交前，请替换提交内容中是敏感信息（例如：订阅地址）。&lt;/p&gt;
+&lt;p&gt;本项目是基于 clash（已跑路） 、yacd 进行的配置整合，关于clash、yacd的详细配置请去原项目查看。&lt;/p&gt;
+&lt;p&gt;此项目不提供任何订阅信息，请自行准备Clash订阅地址。&lt;/p&gt;
+&lt;p&gt;运行前请手动更改.env文件中的CLASH_URL变量值，否则无法正常运行。ps.CLASH_URL=您在飞鱼的订阅地址&lt;/p&gt;
+&lt;p&gt;当前在RHEL系列和Debian,Kali Linux,ubuntu以及Linux系统中测试过，其他系列可能需要适当修改脚本。&lt;/p&gt;
+&lt;p&gt;支持 x86_64/aarch64 平台&lt;/p&gt;
+&lt;p&gt;【注意：部分带有桌面端Linux系统的需要在浏览器设置代理！否则有可能无法使用！】&lt;/p&gt;
+&lt;p&gt;【若系统代理无法使用，但是想要系统代理，请修改尝试修改start.sh中的端口后执行环境变量命令！】&lt;/p&gt;
+&lt;p&gt;【还是无法使用请更换当前网络环境（也是其中一个因素！）】&lt;/p&gt;
+&lt;p&gt;谷歌，twitter，youtube等可能无法ping通，正常现象！&lt;/p&gt;
+&lt;h1 id="开启系统代理"&gt;开启系统代理&lt;/h1&gt;
+&lt;p&gt;function proxy_on() {&lt;/p&gt;
+&lt;p&gt;export http_proxy=&lt;a href="http://127.0.0.1:"&gt;http://127.0.0.1:&lt;/a&gt;修改这里&lt;/p&gt;
+&lt;p&gt;export https_proxy=&lt;a href="http://127.0.0.1:"&gt;http://127.0.0.1:&lt;/a&gt;修改这里&lt;/p&gt;
+&lt;p&gt;export no_proxy=127.0.0.1,localhost&lt;/p&gt;
+&lt;p&gt;export HTTP_PROXY=&lt;a href="http://127.0.0.1:"&gt;http://127.0.0.1:&lt;/a&gt;修改这里&lt;/p&gt;
+&lt;p&gt;export HTTPS_PROXY=&lt;a href="http://127.0.0.1:"&gt;http://127.0.0.1:&lt;/a&gt;修改这里&lt;/p&gt;
+&lt;p&gt;export NO_PROXY=127.0.0.1,localhost&lt;/p&gt;</description></item><item><title>Routing代码阅读</title><link>https://jler666.github.io/tools/routing%E4%BB%A3%E7%A0%81%E9%98%85%E8%AF%BB/</link><pubDate>Thu, 29 Jun 2023 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/routing%E4%BB%A3%E7%A0%81%E9%98%85%E8%AF%BB/</guid><description/></item><item><title>本地部署流程</title><link>https://jler666.github.io/tools/nzk95rvk3me8uh8h/</link><pubDate>Wed, 02 Jul 2025 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/nzk95rvk3me8uh8h/</guid><description>&lt;h2 id="gcloud-cli安装"&gt;gcloud CLI安装&lt;/h2&gt;
+&lt;p&gt;&lt;a href="https://cloud.google.com/sdk/docs/install"&gt;https://cloud.google.com/sdk/docs/install&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;我是用的ubuntu software查google cloud platform安装的&lt;/p&gt;
+&lt;p&gt;由于使用vpn访问gcp需要 &lt;a href="https://cloud.google.com/sdk/docs/proxy-settings"&gt;https://cloud.google.com/sdk/docs/proxy-settings&lt;/a&gt;&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;# 根据clash配置设置相应参数&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;gcloud config set proxy/type &lt;span style="color:#f92672"&gt;[&lt;/span&gt;PROXY_TYPE&lt;span style="color:#f92672"&gt;]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;gcloud config set proxy/address &lt;span style="color:#f92672"&gt;[&lt;/span&gt;PROXY_IP_ADDRESS&lt;span style="color:#f92672"&gt;]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;gcloud config set proxy/address 127.0.0.1
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;gcloud config set proxy/port &lt;span style="color:#f92672"&gt;[&lt;/span&gt;PROXY_PORT&lt;span style="color:#f92672"&gt;]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;gcloud config set proxy/port &lt;span style="color:#ae81ff"&gt;7890&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;# 或者开启终端的代理！！！！&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;source /etc/profile.d/clash.sh
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;proxy_on
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;gcloud init
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;gcloud config set project infra-433003
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;gcloud auth configure-docker asia-northeast1-docker.pkg.dev
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;# 可以执行如下命令关闭 gcloud CLI 的组件自动更新， 否则会遇到第一次启动gcloud命令等待时间长的问题&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;gcloud config set component_manager/disable_update_check true
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="docker安装"&gt;docker安装&lt;/h2&gt;
+&lt;p&gt;&lt;a href="https://docs.docker.com/engine/install/ubuntu/"&gt;https://docs.docker.com/engine/install/ubuntu/&lt;/a&gt;&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;# Add Docker&amp;#39;s official GPG key:&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo apt-get update
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo apt-get install ca-certificates curl
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo install -m &lt;span style="color:#ae81ff"&gt;0755&lt;/span&gt; -d /etc/apt/keyrings
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo chmod a+r /etc/apt/keyrings/docker.asc
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;# Add the repository to Apt sources:&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;echo &lt;span style="color:#ae81ff"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#e6db74"&gt;&amp;#34;deb [arch=&lt;/span&gt;$&lt;span style="color:#e6db74"&gt; (dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \ &lt;/span&gt;&lt;span style="color:#66d9ef"&gt;$(&lt;/span&gt;. /etc/os-release &lt;span style="color:#f92672"&gt;&amp;amp;&amp;amp;&lt;/span&gt; echo &lt;span style="color:#e6db74"&gt;&amp;#34;&lt;/span&gt;$&lt;span style="color:#e6db74"&gt; {UBUNTU_CODENAME:- &lt;/span&gt;$VERSION_CODENAME&lt;span style="color:#e6db74"&gt;}&amp;#34;&lt;/span&gt;&lt;span style="color:#66d9ef"&gt;)&lt;/span&gt;&lt;span style="color:#e6db74"&gt; stable&amp;#34;&lt;/span&gt; | &lt;span style="color:#ae81ff"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; sudo tee /etc/apt/sources.list.d/docker.list &amp;gt; /dev/null
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo apt-get update
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;# Install the Docker packages&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;# Create the docker group&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo groupadd docker
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo usermod -aG docker $ USER newgrp docker &lt;span style="color:#e6db74"&gt;```&lt;/span&gt; &lt;span style="color:#75715e"&gt;### 从gcp上拉docker ```bash gcloud auth login --no-launch-browser gcloud auth application-default login --no-launch-browser # Configure Docker to use Google Artifact Registry gcloud auth configure-docker asia-northeast1-docker.pkg.dev # 配置docker代理，否则拉取会timeout sudo mkdir -p /etc/systemd/system/docker.service.d sudo vim /etc/systemd/system/docker.service.d/http-proxy.conf # docker pull / docker push 的代理被 systemd 接管，需要在 systemd 里设置代理 # 在http-proxy.conf里 [Service] Environment=&amp;#34;HTTP_PROXY=http://127.0.0.1:your_port&amp;#34; Environment=&amp;#34;HTTPS_PROXY=http://127.0.0.1:your_port&amp;#34; # 重启服务 sudo systemctl daemon-reload sudo systemctl restart docker # 配置docker build/run代理 在本地~/.docker/config.json如果配置好gcloud因该长下面这样 # 172.17.0.1是ifconfig docker0的ip { &amp;#34;credHelpers&amp;#34;: { &amp;#34;asia-northeast1-docker.pkg.dev&amp;#34;: &amp;#34;gcloud&amp;#34; }, &amp;#34;proxies&amp;#34;: { &amp;#34;default&amp;#34;: { &amp;#34;httpProxy&amp;#34;: &amp;#34;http://172.17.0.1:your_port&amp;#34;, &amp;#34;httpsProxy&amp;#34;: &amp;#34;http://172.17.0.1:your_port&amp;#34;, &amp;#34;noProxy&amp;#34;: &amp;#34;localhost&amp;#34; } } } # For example: pull mantastyle latest docker image docker pull asia-northeast1-docker.pkg.dev/infra-433003/mantastyle/mantastyle:latest ``` docker内的bazel会从gcp上拉取一些提前编译好的东西，所以需要再docker内设置网络代理，在项目根目录下创建user_custom.sh ，从而实现在配置 docker 容器环境之前运行用户自定义的脚本逻辑；例如：国内的小伙伴设置 docker 容器中的网络代理以及 go 代理： ```bash #!/bin/bash export GO111MODULE=on export GOPROXY=https://goproxy.cn echo &amp;#34;export HTTP_PROXY=http://localhost:your_vpn_port/&amp;#34; \gt \gt $HOME/.bashrc&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;echo &lt;span style="color:#e6db74"&gt;&amp;#34;export HTTPS_PROXY=http://localhost:your_vpn_port/&amp;#34;&lt;/span&gt; &amp;gt;&amp;gt; $ HOME/.bashrc export HTTPS_PROXY&lt;span style="color:#f92672"&gt;=&lt;/span&gt;http://localhost:your_vpn_port/ export HTTP_PROXY&lt;span style="color:#f92672"&gt;=&lt;/span&gt;http://localhost:your_vpn_port/ &lt;span style="color:#e6db74"&gt;```&lt;/span&gt; !&lt;span style="color:#f92672"&gt;[&lt;/span&gt;1751463524118-edecd6c1-324b-4704-84af-4e5575d835e9.png&lt;span style="color:#f92672"&gt;](&lt;/span&gt;/images/BMI_gx2Vo4FiEJ2q/1751463524118-edecd6c1-324b-4704-84af-4e5575d835e9-974029.png&lt;span style="color:#f92672"&gt;)&lt;/span&gt; 本地打开vscode终端进行gcp login然后再reopen container 再配置一下cargo的代理，否则下载可能有问题 &lt;span style="color:#e6db74"&gt;```&lt;/span&gt;bash vi $HOME/.cargo/config.toml
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;#增加以下内容&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#f92672"&gt;[&lt;/span&gt;http&lt;span style="color:#f92672"&gt;]&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;proxy&lt;span style="color:#f92672"&gt;=&lt;/span&gt;&lt;span style="color:#e6db74"&gt;&amp;#34;http://172.17.0.1:your_port&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="git配置"&gt;git配置&lt;/h2&gt;
+&lt;p&gt;由于是在docker内开发，所以直接在docker内配置ssh.下面的操作都是在docker内进行的&lt;/p&gt;</description></item><item><title>kabutack结构</title><link>https://jler666.github.io/tools/ssog1b70caf4mm12/</link><pubDate>Tue, 20 May 2025 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/ssog1b70caf4mm12/</guid><description>&lt;p&gt;ObserveEnvironmentChange 环境更新&lt;/p&gt;
+&lt;p&gt;plmap&lt;/p&gt;
+&lt;p&gt;&lt;img alt="画板" loading="lazy" src="https://jler666.github.io/images/MRqGr8dhoSAwemA2/1747804931558-5e4a08ce-c7e8-4bab-b65c-ab3b04a6d4ea-134491.jpeg"&gt;&lt;/p&gt;
+&lt;p&gt;plgraph update&lt;/p&gt;
+&lt;p&gt;先构造所有row(左到右 之间没有属性检查) -&amp;gt; 建立row前后拓扑 (row拓扑非常严格要求前后继的大量属性都要一致)-&amp;gt; 基于row拓扑泛洪得到用于构造单个block的所有lane -&amp;gt; 构造block -&amp;gt; 在构造block中构造node(单列) &lt;strong&gt;单个node的属性一定一样(因为row的前后继严格检查)&lt;/strong&gt;，同时加上nodes的前后左右拓扑&lt;/p&gt;
+&lt;p&gt;有点像lane包&lt;/p&gt;
+&lt;p&gt;BuildRamps&lt;/p&gt;
+&lt;p&gt;ramp理解为进出高速HIGHWAY的闸道是重要的汇入或者分流节点。分为ENTRANCE_RAMP(merge)和EXIT_RAMP(split)&lt;/p&gt;
+&lt;p&gt;ramp的构造还有很多不懂，以后对照着地图可视化看吧.ExitRamp逻辑较EntranceRamp简单清晰很多&lt;/p&gt;
+&lt;p&gt;BuildIntersections 和 UpdatePatch这部分目前被注释了&lt;/p&gt;
+&lt;p&gt;UpdateSegments&lt;/p&gt;
+&lt;p&gt;给segment设置属性，包括segment的左右num，segment是否是进出ramp属性,merge区域属性。很多merge的处理看不懂&lt;/p&gt;
+&lt;p&gt;FrameContext构造&lt;/p&gt;
+&lt;p&gt;其中更新上帧过渡态Transition包含，from/to/time/reason 状态机&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-cpp" data-lang="cpp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;StateType from_state{StateType&lt;span style="color:#f92672"&gt;::&lt;/span&gt;DEFAULT};
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;StateType to_state{StateType&lt;span style="color:#f92672"&gt;::&lt;/span&gt;DEFAULT};
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;Timestamp transition_time; &lt;span style="color:#75715e"&gt;// timestamp when to_state start
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;TransitionReason reason{TransitionReason&lt;span style="color:#f92672"&gt;::&lt;/span&gt;EMPTY};
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;enum&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;class&lt;/span&gt; &lt;span style="color:#a6e22e"&gt;StateType&lt;/span&gt; { LANE_FOLLOW, LANE_CHANGE, DEFAULT &lt;span style="color:#f92672"&gt;=&lt;/span&gt; LANE_FOLLOW };
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;// transition reason
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;enum&lt;/span&gt; &lt;span style="color:#66d9ef"&gt;class&lt;/span&gt; &lt;span style="color:#a6e22e"&gt;TransitionReason&lt;/span&gt; {
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; EMPTY,
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; RESET,
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; START_LANE_CHANGE,
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; FINISH_LANE_CHANGE,
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; CANCEL_LANE_CHANGE_FROM_LEFT,
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; CANCEL_LANE_CHANGE_FROM_RIGHT
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;};
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;如果非启动reset状态，存在上帧的决策。更新上帧决策rote对应的各种lane&lt;/p&gt;
+&lt;p&gt;GenerateTrajectory 调用栈&lt;/p&gt;</description></item><item><title>check</title><link>https://jler666.github.io/tools/hiy3org3xc8y7e6a/</link><pubDate>Sat, 29 Mar 2025 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/hiy3org3xc8y7e6a/</guid><description>&lt;p&gt;进行统一的代码风格并进行代码静态检查，git commit时利用pre-commit检查,hook有clang-format,cppcheck,cpplint&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-plain" data-lang="plain"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo apt-get update
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo pip install clang-format
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo apt install python3-pkg-resources python3-pygments
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo apt install cppcheck cppcheck-gui python3-setuptools ttf-bitstream-vera
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo pip install cpplint
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;sudo pip install pre-commit
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;配置&lt;/p&gt;
+&lt;p&gt;cd到对应仓库 pre-commpreit install&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-plain" data-lang="plain"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;cd到对应仓库
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;echo &amp;#34;repos:
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; - repo: https://gitee.com/rxzh/pre-commit-hooks
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; rev: v1.0
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; hooks:
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; - id: clang-format
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; args: [&amp;#34;-i&amp;#34;,&amp;#34;--style=file&amp;#34;]
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; - id: cppcheck
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; - id: cpplint
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; args: [&amp;#34;--linelength=120&amp;#34;,&amp;#34;--filter=-legal/copyright,-whitespace,-readability/fn_size, -build/include_what_you_use&amp;#34;]
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&amp;#34; &amp;gt; .pre-commit-config.yaml
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;git add &amp;amp; git commit clang-format会自动修改不符合规定的代码，但是cppcheck及cpplint回检查出的问题需要手动修改，然后再次git add&lt;/p&gt;</description></item><item><title>perf+火焰图</title><link>https://jler666.github.io/tools/qilae6qautnwqasl/</link><pubDate>Thu, 27 Mar 2025 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/qilae6qautnwqasl/</guid><description>&lt;p&gt;perf安装:
+sudo apt-get install linux-tools-common
+perf &amp;ndash;version
+会提醒是否安装成功，没有安装成功会提醒目前的核版本对应的安装命令&lt;/p&gt;
+&lt;p&gt;You may need to install the following packages for this specific kernel: // 核对应版，用这个&lt;/p&gt;
+&lt;p&gt;linux-tools-5.15.0-53-generic&lt;/p&gt;
+&lt;p&gt;linux-cloud-tools-5.15.0-53-generic&lt;/p&gt;
+&lt;p&gt;You may also want to install one of the following packages to keep up to date: // 最新版&lt;/p&gt;
+&lt;p&gt;linux-tools-generic&lt;/p&gt;
+&lt;p&gt;linux-cloud-tools-generic&lt;/p&gt;
+&lt;p&gt;sudo apt-get install linux-tools-5.15.0-53-generic linux-cloud-tools-5.15.0-53-generic&lt;/p&gt;
+&lt;p&gt;可能会报找不到库那就用最新版，最新版可兼容老版&lt;/p&gt;
+&lt;p&gt;火焰图仓库，主要是perf脚本
+&lt;a href="https://github.com/brendangregg/FlameGraph"&gt;https://github.com/brendangregg/FlameGraph&lt;/a&gt;&lt;/p&gt;</description></item><item><title>ub22 c++开发环境配置</title><link>https://jler666.github.io/tools/gkr37izyb0m6davd/</link><pubDate>Sat, 09 Nov 2024 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/gkr37izyb0m6davd/</guid><description>&lt;p&gt;docker环境:&lt;/p&gt;
+&lt;p&gt;1 docker安装&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://www.runoob.com/docker/ubuntu-docker-install.html"&gt;https://www.runoob.com/docker/ubuntu-docker-install.html&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://mirrors.tuna.tsinghua.edu.cn/help/docker-ce/"&gt;https://mirrors.tuna.tsinghua.edu.cn/help/docker-ce/&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://segmentfault.com/a/1190000044229597"&gt;https://segmentfault.com/a/1190000044229597&lt;/a&gt; &amp;ndash; this one ok&lt;/p&gt;
+&lt;p&gt;(1)卸载已安装旧版docker&lt;/p&gt;
+&lt;p&gt;for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do apt-get remove $ pkg; done (2)安装依赖 sudo apt-get install \ apt-transport-https \ ca-certificates \ curl \ gnupg-agent \ software-properties-common (3)信任 Docker 的 GPG 公钥并添加仓库： ```plain (1) sudo install -m 0755 -d /etc/apt/keyrings (2) curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 国内换成中科大源 curl -fsSL https://mirrors.ustc.edu.cn/docker-ce/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg (3) sudo chmod a+r /etc/apt/keyrings/docker.gpg (4) 清华源 echo \ "deb [arch= $(dpkg &amp;ndash;print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] &lt;a href="https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu"&gt;https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu&lt;/a&gt; &lt;br&gt;
+&amp;ldquo;$ (. /etc/os-release &amp;&amp; echo " $VERSION_CODENAME&amp;rdquo;)&amp;quot; stable&amp;quot; | &lt;br&gt;
+tee /etc/apt/sources.list.d/docker.list &amp;gt; /dev/null
+中科大源
+echo &lt;br&gt;
+&amp;ldquo;deb [arch=&amp;quot;$ (dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://mirrors.ustc.edu.cn/docker-ce/linux/ubuntu \ " $(. /etc/os-release &amp;amp;&amp;amp; echo &amp;ldquo;$ VERSION_CODENAME")" stable" | \ sudo tee /etc/apt/sources.list.d/docker.list \gt /dev/null (5) sudo apt-get update ``` sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin 将docker软件源改为中科大源 [https://segmentfault.com/a/1190000044229597](https://segmentfault.com/a/1190000044229597) vim /etc/docker/daemon.json ```plain { "registry-mirrors": [ "https://docker.mirrors.ustc.edu.cn/", "https://mirror.ccs.tencentyun.com", "https://hub-mirror.c.163.com", "https://mirror.baidubce.com" ] } ``` 安装docker compose 先进入root sudo -i curl -L "https://github.com/docker/compose/releases/download/vxxx(去git上找最新版本号)/docker-compose- $(uname -s)-$ (uname -m)" -o /usr/local/bin/docker-compose !! 注意有些版本是没有docker-compose-linux-x86_64的导致文件下不到，需要检查一下 curl下不来，直接去git上下，下载得到的就是一个二进制文件，然后放到/usr/local/bin下，记得给文件重命名为docker-compose # 授予执行权限 chmod +x /usr/local/bin/docker-compose # 显示安装后的版本信息 docker-compose --version docker重启: sudo systemctl restart docker 启动: sudo systemctl start docker 通过非root使用docker,需要使用下面命令: sudo groupadd docker &amp;&amp; sudo usermod -aG docker $USER &amp;amp;&amp;amp; newgrp docker&lt;/p&gt;</description></item><item><title>gdb</title><link>https://jler666.github.io/tools/nt4gu3ggl35ax6ly/</link><pubDate>Tue, 05 Sep 2023 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/nt4gu3ggl35ax6ly/</guid><description>&lt;p&gt;&lt;a href="http://www.unknownroad.com/rtfm/gdbtut/gdbtoc.html"&gt;http://www.unknownroad.com/rtfm/gdbtut/gdbtoc.html&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;backtrace 快捷 bt&lt;/p&gt;
+&lt;p&gt;打印当前函数调用栈&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-plain" data-lang="plain"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;(gdb) backtrace
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;#0 func2 (x=30) at test.c:5
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;#1 0x80483e6 in func1 (a=30) at test.c:10
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;#2 0x8048414 in main (argc=1, argv=0xbffffaf4) at test.c:19
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;#3 0x40037f5c in __libc_start_main () from /lib/libc.so.6
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;(gdb)
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;frame x (x为bt对应标号)&lt;/p&gt;
+&lt;p&gt;进入某个函数&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-plain" data-lang="plain"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;(gdb) frame 2
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;#2 0x8048414 in main (argc=1, argv=0xbffffaf4) at test.c:19
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;19 x = func1(x);
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;(gdb)
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;strong&gt;在当前frame的下&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;以下为几个打印当前函数信息的指令&lt;/p&gt;
+&lt;p&gt;info frame 打印出的都是地址信息不太直观&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-plain" data-lang="plain"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;(gdb) info frame
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;Stack level 2, frame at 0xbffffa8c:
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; eip = 0x8048414 in main (test.c:19); saved eip 0x40037f5c
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; called by frame at 0xbffffac8, caller of frame at 0xbffffa5c
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; source language c.
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; Arglist at 0xbffffa8c, args: argc=1, argv=0xbffffaf4
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; Locals at 0xbffffa8c, Previous frame&amp;#39;s sp is 0x0
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; Saved registers:
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; ebp at 0xbffffa8c, eip at 0xbffffa90
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;打印此函数内的局部变量(常用于调试)&lt;/p&gt;</description></item><item><title>debug</title><link>https://jler666.github.io/tools/kx02kpms4oyp13po/</link><pubDate>Thu, 03 Aug 2023 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/kx02kpms4oyp13po/</guid><description>&lt;p&gt;参考线话题没有发布&lt;/p&gt;
+&lt;p&gt;从decider/common/common_info.cc&amp;ndash;GetInteractionObstaclePairs&amp;ndash;current_reference_line开始往下查&lt;/p&gt;
+&lt;p&gt;curr_ref_line_ptr = dnp::DnpMapManager::Instance()-&amp;gt;GetCurrReferenceLine(&amp;amp;passable_info_); 此函数调用dnp的refline接口&lt;/p&gt;</description></item><item><title>编译</title><link>https://jler666.github.io/tools/bypav66lcfngedl5/</link><pubDate>Thu, 29 Jun 2023 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/bypav66lcfngedl5/</guid><description>&lt;p&gt;切换SDK&lt;/p&gt;
+&lt;p&gt;列举当前所有版本记录&lt;/p&gt;
+&lt;p&gt;crpilot_sdk&lt;/p&gt;
+&lt;p&gt;自动下载对应版本sdk&lt;/p&gt;
+&lt;p&gt;crpilot_sdk 指定版本&lt;/p&gt;
+&lt;p&gt;版本切换&lt;/p&gt;
+&lt;p&gt;bash downloaded.sdk&lt;/p&gt;
+&lt;p&gt;待开发工程放在src目录下&lt;/p&gt;
+&lt;p&gt;crmake默认编译优化选项为-O2 -s (最大程度优化代码)，自己调试时可在Cmakelist中添加add_compile_options(&amp;quot;-g -O0&amp;quot;) 不优化代码。&lt;strong&gt;但注意在代码合并时移除此选项&lt;/strong&gt;。&lt;/p&gt;
+&lt;p&gt;&lt;img alt="1688020710663-32f89add-ff46-43c2-a071-296307565c98.png" loading="lazy" src="https://jler666.github.io/images/KLhMBeUcjAso4zHe/1688020710663-32f89add-ff46-43c2-a071-296307565c98-475885.png"&gt;&lt;/p&gt;
+&lt;p&gt;使用ccache提高编译速度&lt;/p&gt;
+&lt;p&gt;在build文件夹中创建ccache文件夹&lt;/p&gt;
+&lt;p&gt;写进bash中&lt;/p&gt;
+&lt;p&gt;export CCACHE_DIR=/cowarobot/build-docker/.ccache&lt;/p&gt;
+&lt;p&gt;ccache -M 15G&lt;/p&gt;
+&lt;p&gt;ccache -s 看cache保存目录&lt;/p&gt;
+&lt;p&gt;ccache -C 清空ccache&lt;/p&gt;
+&lt;p&gt;crmake configure -DCMAKE_BUILD_TYPE=Debug&lt;/p&gt;
+&lt;p&gt;crmake -j6&lt;/p&gt;
+&lt;p&gt;如果修改后的文件结构发生变化需要先&lt;/p&gt;
+&lt;p&gt;crmake clean&lt;/p&gt;
+&lt;p&gt;再重新configure&lt;/p&gt;
+&lt;p&gt;有些头文件为了提供给其他人，在上次编译成功时会保存到build_docker/crpilot-x86_v2.4/include中，编译时也会检查这些头文件，当文件结构发生变化后，要将这里面的部分文件也删除，否则其中的文件依旧会变更前的内容。&lt;/p&gt;
+&lt;p&gt;sdk版本变化后需要从以下链接先将最新sdk下载(&lt;strong&gt;养成好习惯将老sdk备份 备份和替换的都是指的buid-docker/crpilot-x86_v2.4中除3rd链接外的其他所有东西&lt;/strong&gt;)&lt;/p&gt;
+&lt;p&gt;&lt;a href="http://crpilot.sandbox.cowarobot.cn/x86_v2.4/"&gt;http://crpilot.sandbox.cowarobot.cn/x86_v2.4/&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;将下载好的内容直接替换&lt;/p&gt;
+&lt;p&gt;在编译时新sdk可能缺一些lib文件，去老sdk中找直接替换&lt;/p&gt;
+&lt;p&gt;/usr/bin/ld: 找不到 -lnode&lt;/p&gt;
+&lt;p&gt;/usr/bin/ld: 找不到 -ltask&lt;/p&gt;
+&lt;p&gt;同时可能要更新simultor，下载后直接解压即可，下次运行仿真时直接使用新的可执行文件即可&lt;/p&gt;
+&lt;p&gt;当出现symbol lookup error错误时&lt;/p&gt;
+&lt;p&gt;T230803 10:11:13:078118 channel_manager.cc:113 Register COWA.De/cowarobot/build-docker/crpilot-x86_v2.4/bin/crload: symbol lookup error: /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so: undefined symbol: _ZNK4COWA6common14ReferencePoint1xEv&lt;/p&gt;
+&lt;p&gt;首先根据&lt;/p&gt;
+&lt;p&gt;nm -g -D /cowarobot/build-docker/crpilot-x86_v2.4/lib/&lt;a href="http://librouting.so"&gt;librouting.so&lt;/a&gt; | grep -B10 _ZNK4COWA6common14ReferencePoint1xEv
+输出：&lt;/p&gt;</description></item><item><title>命令</title><link>https://jler666.github.io/tools/bpf0vfgbcrtgtpl3/</link><pubDate>Thu, 29 Jun 2023 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/bpf0vfgbcrtgtpl3/</guid><description>&lt;p&gt;tar&lt;/p&gt;
+&lt;p&gt;tar -zcvf 压缩文件名 .tar.gz 被压缩文件名
+tar -zxvf 压缩文件名.tar.gz&lt;/p&gt;
+&lt;p&gt;whl安装&lt;/p&gt;
+&lt;p&gt;python -m pip install *.whl&lt;/p&gt;</description></item><item><title>代码中C++相关</title><link>https://jler666.github.io/tools/rrqqgb2xc45xthmg/</link><pubDate>Thu, 29 Jun 2023 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/rrqqgb2xc45xthmg/</guid><description>&lt;p&gt;unique_lock &amp;ndash; 互斥锁（mutex）的封装类&lt;/p&gt;
+&lt;p&gt;互斥锁mutex&lt;/p&gt;
+&lt;p&gt;互斥：在&lt;strong&gt;任意时刻只能有一个线程持有互斥锁并访问共享资源&lt;/strong&gt;。当一个线程已经获得了互斥锁，&lt;strong&gt;其他线程对该互斥锁的请求将会被阻塞&lt;/strong&gt;，直到持有互斥锁的线程将其释放。&lt;/p&gt;
+&lt;p&gt;可重入性：&lt;strong&gt;同一个线程可以多次获取同一个互斥锁而不会导致死锁&lt;/strong&gt;（deadlock），也就是说，&lt;strong&gt;互斥锁可以被递归地加锁和解锁&lt;/strong&gt;。&lt;/p&gt;
+&lt;p&gt;公平性：互斥锁通常采用&lt;strong&gt;先到先得的策略来分配锁的使用权&lt;/strong&gt;，**即等待时间最长的线程优先获得锁的使用权，**这样可以避免饥饿（starvation）情况的发生。&lt;/p&gt;
+&lt;p&gt;死锁风险：如果不正确地使用互斥锁，就可能会出现死锁的情况。例如，当一个线程在持有一个互斥锁的同时试图获取另一个互斥锁，而另一个线程正好持有这个互斥锁，那么两个线程都无法继续执行下去，从而导致死锁。&lt;/p&gt;
+&lt;p&gt;性能开销：由于互斥锁需要进行加锁和解锁操作，所以会带来一定的性能开销，尤其是在高并发的场景中。因此，在编写代码时应该尽可能地减少锁的使用，并且保证锁的作用范围尽可能小，以提高程序的并发性能。&lt;/p&gt;
+&lt;p&gt;std::recursive_mutex &amp;ndash; 可重入互斥锁（recursive mutex）&lt;/p&gt;
+&lt;p&gt;继承自std::mutex，并添加了可重入性（&lt;strong&gt;即同一个线程可以多次获取该锁 &amp;ndash; mutex中说的可递归地加锁和解锁&lt;/strong&gt;）的支持。与普通的互斥锁不同，当一个线程多次尝试获取std::recursive_mutex时，只有第一次获得锁才会阻塞，后面的请求会累积在该线程上，并通过解锁操作来依次释放锁。&lt;/p&gt;
+&lt;p&gt;使用std::recursive_mutex可以避免死锁和其他竞争条件（race condition）的出现，尤其是在递归调用的情况下非常有用。例如，&lt;strong&gt;在一个递归函数中，可能需要多次获取同一个锁来保护共享资源。如果使用普通的互斥锁，则在递归过程中可能会出现死锁的情况，因为线程在持有锁的同时又试图获取同一个锁。而使用std::recursive_mutex则可以避免这种情况的发生&lt;/strong&gt;，从而提高程序的鲁棒性和可靠性。&lt;/p&gt;
+&lt;p&gt;与std::mutex类似，std::recursive_mutex也提供了lock()、unlock()等方法来控制锁的获取和释放，以及try_lock()方法来尝试获取锁。此外，std::recursive_mutex还支持std::lock_guard和std::unique_lock等RAII（资源获取即初始化）类型的封装，使得锁的管理更加方便和安全。&lt;/p&gt;
+&lt;p&gt;需要注意的是，由于std::recursive_mutex支持递归调用，所以在使用时应该确保每次加锁和解锁成对出现，否则可能会导致严重的竞态条件和内存泄漏等问题。&lt;/p&gt;
+&lt;p&gt;std::unique_lock&lt;a href="std::recursive_mutex"&gt;std::recursive_mutex&lt;/a&gt; lock(mutex_); 锁局部变量在函数结束后自动释放&lt;/p&gt;
+&lt;p&gt;宏单例&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-cpp" data-lang="cpp"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;#define DECLARE_SINGLETON(classname) \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;public: \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;static classname *Instance() { \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;static std::atomic&amp;lt;classname*&amp;gt; instance = { nullptr }; \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;if (!instance) { \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;static std::once_flag flag; \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;std::call_once(flag, \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;[&amp;amp;] { instance.store(new (std::nothrow) classname()); }); \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;} \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;return instance.load(); \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;} \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;private: \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;classname(); \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;classname(const classname &amp;amp;) = delete; \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;classname &amp;amp;operator=(const classname &amp;amp;) = delete;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;strong&gt;std::async与furture对象&lt;/strong&gt;&lt;/p&gt;</description></item><item><title>仿真</title><link>https://jler666.github.io/tools/mz13i49kr7wtqwia/</link><pubDate>Thu, 29 Jun 2023 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/mz13i49kr7wtqwia/</guid><description>&lt;p&gt;重启后需要重新赋予权限&lt;/p&gt;
+&lt;p&gt;sudo chmod a+rw /var/run/docker.sock&lt;/p&gt;
+&lt;p&gt;才能./docker.py进入容器&lt;/p&gt;
+&lt;p&gt;指定根据名字进自己的docker&lt;/p&gt;
+&lt;p&gt;crpilot2-( x86.CRPilot-1.0 name)-( 2.4 version)&lt;/p&gt;
+&lt;p&gt;改docker.py内容&lt;/p&gt;
+&lt;p&gt;args.name = &amp;lsquo;crpilot2-%s-%s&amp;rsquo;%(args.version,args.name)&lt;/p&gt;
+&lt;p&gt;./docker.py &amp;ndash;name rember&lt;/p&gt;
+&lt;p&gt;args.name = &amp;lsquo;crpilot2-x86-2.4-remember&amp;rsquo;&lt;/p&gt;
+&lt;p&gt;./docker.py&lt;/p&gt;
+&lt;p&gt;改了名字后进入docker没有root权限，直接将Docker中attach的USER改为&amp;rsquo;root&amp;rsquo;&lt;/p&gt;
+&lt;p&gt;def attach(self):&lt;/p&gt;
+&lt;p&gt;print(&amp;ldquo;USER:&amp;quot;,USER)&lt;/p&gt;
+&lt;p&gt;self.run([&amp;lsquo;chmod -R 777 /var/log/&amp;rsquo;], user=&amp;lsquo;root&amp;rsquo;)&lt;/p&gt;
+&lt;p&gt;if os.path.exists(DIR+&amp;rsquo;/setup.bash&amp;rsquo;):&lt;/p&gt;
+&lt;p&gt;os.system(&amp;lsquo;docker exec -u %s -it %s /bin/bash &amp;ndash;rcfile /cowarobot/setup.bash&amp;rsquo;%(&amp;lsquo;root&amp;rsquo;, self.name))&lt;/p&gt;
+&lt;p&gt;else:&lt;/p&gt;
+&lt;p&gt;os.system(&amp;lsquo;docker exec -u %s -it %s /bin/bash&amp;rsquo;%(&amp;lsquo;root&amp;rsquo;, self.name)) def attach(self):&lt;/p&gt;
+&lt;p&gt;print(&amp;ldquo;USER:&amp;quot;,USER)&lt;/p&gt;
+&lt;p&gt;self.run([&amp;lsquo;chmod -R 777 /var/log/&amp;rsquo;], user=&amp;lsquo;root&amp;rsquo;)&lt;/p&gt;
+&lt;p&gt;if os.path.exists(DIR+&amp;rsquo;/setup.bash&amp;rsquo;):&lt;/p&gt;
+&lt;p&gt;os.system(&amp;lsquo;docker exec -u %s -it %s /bin/bash &amp;ndash;rcfile /cowarobot/setup.bash&amp;rsquo;%(&amp;lsquo;root&amp;rsquo;, self.name))&lt;/p&gt;</description></item><item><title>git 命令</title><link>https://jler666.github.io/tools/hx7cai1wxzxgrrw5/</link><pubDate>Wed, 28 Jun 2023 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/hx7cai1wxzxgrrw5/</guid><description>&lt;p&gt;拉远程分支&lt;/p&gt;
+&lt;p&gt;1 进入docker(注意git lab中填写的key要是在docker容器中生成的)&lt;/p&gt;
+&lt;p&gt;注意docker中的命令要加sudo才可行&lt;/p&gt;
+&lt;p&gt;当仓库变化 记得经常性地sudo chmod -R 777 CRPilot-1.0/&lt;/p&gt;
+&lt;p&gt;2 git config &amp;ndash;global &amp;ndash;add safe.directory /cowarobot/src/deciding'&lt;/p&gt;
+&lt;p&gt;git config &amp;ndash;global &amp;ndash;add safe.directory &amp;ldquo;*&amp;rdquo;&lt;/p&gt;
+&lt;p&gt;3 git remote add origin https://远程仓库地址/xxx.git&lt;/p&gt;
+&lt;p&gt;4 git pull origin 远程分支名&lt;/p&gt;
+&lt;p&gt;5 设置远程为上游&lt;/p&gt;
+&lt;p&gt;git branch &amp;ndash;set-upstream-to=origin/&amp;lt;远程分支名&amp;gt; &amp;lt;本地分支&amp;gt;&lt;/p&gt;
+&lt;p&gt;使用commit哈希创建本地新分支&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;git branch &lt;!-- raw HTML omitted --&gt; [&lt;!-- raw HTML omitted --&gt;]&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;拉远程分支后自己要修改，新建一个分支&lt;/p&gt;
+&lt;p&gt;** git checkout -b 新分支名 基于哪个分支名(父分支 可以是远程分支) or 某次提交commit的哈希值 # 创建新分支**&lt;/p&gt;
+&lt;p&gt;删除分支
+git branch -D 本地分支名&lt;/p&gt;</description></item><item><title>docker</title><link>https://jler666.github.io/tools/tkw53w/</link><pubDate>Fri, 17 Jun 2022 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/tkw53w/</guid><description>&lt;p&gt;查看docker向外的port&lt;/p&gt;
+&lt;p&gt;docker port docker镜像名&lt;/p&gt;
+&lt;p&gt;在本地拿到容器id&lt;/p&gt;
+&lt;p&gt;docker ps -a&lt;/p&gt;
+&lt;p&gt;在本地传文件到指定容器内路径&lt;/p&gt;
+&lt;p&gt;docker cp 本地文件路径 ID全称:容器内绝对路径&lt;/p&gt;</description></item><item><title>vim</title><link>https://jler666.github.io/tools/nbpxgl/</link><pubDate>Fri, 17 Jun 2022 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/nbpxgl/</guid><description>&lt;p&gt;1 安装vim-plug&lt;/p&gt;
+&lt;p&gt;不要用他github主页上提供的方法下载，没翻q下不了。直接在home目录下&lt;/p&gt;
+&lt;p&gt;git clone &lt;a href="https://github.com/junegunn/vim-plug"&gt;https://github.com/junegunn/vim-plug&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;mkdir -p ~/.vim/autoload/&lt;/p&gt;
+&lt;p&gt;cp ~/vim-plug/plug.vim ~/.vim/autoload/plug.vim&lt;/p&gt;
+&lt;p&gt;2 安装插件&lt;/p&gt;
+&lt;p&gt;在下面网站查找需要的vim插件&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://vimawesome.com/"&gt;https://vimawesome.com/&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;编辑 ~/.vimrc 文件中的内容，比如安装“vim-cpp-enhanced-highlight” 插件&lt;/p&gt;
+&lt;p&gt;set number&lt;/p&gt;
+&lt;p&gt;call plug#begin(&amp;rsquo;~/.vim/plugged')&lt;/p&gt;
+&lt;p&gt;Plug &amp;lsquo;octol/vim-cpp-enhanced-highlight&amp;rsquo;&lt;/p&gt;
+&lt;p&gt;call plug#end()&lt;/p&gt;
+&lt;p&gt;更新后,打开一个新的vim窗口在其中输入命令&lt;/p&gt;
+&lt;p&gt;:source ~/.vimrc&lt;/p&gt;
+&lt;p&gt;:PlugStatus #查看插件状态&lt;/p&gt;
+&lt;p&gt;:PlugInstall #安装之前在配置文件中声明的插件&lt;/p&gt;
+&lt;p&gt;打开 vim 使用命令 :PlugInstall 插件&lt;/p&gt;
+&lt;p&gt;打开 vim 使用命令 :PlugClean 插件&lt;/p&gt;
+&lt;h1 id="所有插件的都是在github上面获取的--httpsblog51ctocomu_115554172150626"&gt;所有插件的都是在Github上面获取的 &lt;a href="https://blog.51cto.com/u_11555417/2150626"&gt;https://blog.51cto.com/u_11555417/2150626&lt;/a&gt;&lt;/h1&gt;
+&lt;p&gt;&lt;a href="https://zhuanlan.zhihu.com/p/360981919"&gt;https://zhuanlan.zhihu.com/p/360981919&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://blog.51cto.com/u_11555417/2150626"&gt;
+&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;vscode安装&lt;/p&gt;
+&lt;p&gt;去官网获取下载的链接地址，如：&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://az764295.vo.msecnd.net/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb"&gt;https://az764295.vo.msecnd.net/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;改为用国内的镜像下载&lt;/p&gt;
+&lt;p&gt;修改其中的主机域名：az764295.vo.msecnd.net为 &lt;a href="https://link.zhihu.com/?target=http%3A//vscode.cdn.azure.cn/"&gt;vscode.cdn.azure.cn&lt;/a&gt;，即&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://link.zhihu.com/?target=http%3A//vscode.cdn.azure.cn/"&gt;https://vscode.cdn.azure.cn/stable/30d9c6cd9483b2cc586687151bcbcd635f373630/code_1.68.1-1655263094_amd64.deb&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;可以直接命令在ubuntu中vscode叫code&lt;/p&gt;
+&lt;p&gt;sudo snap install code &amp;ndash;classic&lt;/p&gt;
+&lt;p&gt;snap商店中下载的有问题 无法使用中文输入法
+卸载重新安装官方版本&lt;/p&gt;
+&lt;p&gt;sudo snap remove &amp;ndash;purge code&lt;/p&gt;
+&lt;p&gt;插件安装，在vim中执行&lt;/p&gt;
+&lt;p&gt;:PlugInstall&lt;/p&gt;</description></item><item><title>Git2</title><link>https://jler666.github.io/tools/iyz0p1/</link><pubDate>Sat, 04 Jun 2022 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/iyz0p1/</guid><description>&lt;p&gt;1 配置公私钥&lt;/p&gt;
+&lt;p&gt;生成ssh key并加到github 账号中&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://docs.github.com/cn/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account"&gt;https://docs.github.com/cn/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;ls -al ~/.ssh中查看是否以及存在ssh key&lt;/p&gt;
+&lt;p&gt;生成key的命令会更新，可以去下面网站中查看&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://docs.github.com/cn/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent"&gt;https://docs.github.com/cn/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;ssh-keygen -t ed25519 -C &amp;ldquo;&lt;a href="mailto:xxxxx@163.com"&gt;xxxxx@163.com&lt;/a&gt;&amp;rdquo;&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;ssh-keygen -t rsa -b 4096 -C &amp;ldquo;&lt;a href="mailto:xxxxx@163.com"&gt;xxxxx@163.com&lt;/a&gt;&amp;rdquo;&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;一路回车&lt;/p&gt;
+&lt;p&gt;&lt;img alt="1654414530921-f4b3e448-cd5b-4713-982c-d7cffb05dbce.png" loading="lazy" src="https://jler666.github.io/images/GxhA1dB48JuBCH2-/1654414530921-f4b3e448-cd5b-4713-982c-d7cffb05dbce-559752.png"&gt;&lt;/p&gt;
+&lt;p&gt;因为之前有用rsa生成过钥匙，这次又用ed25519 不同加密算法 生成钥匙，所以有两对。&lt;/p&gt;
+&lt;p&gt;.pub后缀的是公钥，要加到github的账号中。&lt;/p&gt;
+&lt;p&gt;在我们账号的profile&amp;ndash;edit profile&amp;ndash;ssh and GPGkeys。&lt;/p&gt;
+&lt;p&gt;2 创建个人仓库&lt;/p&gt;
+&lt;p&gt;在new Repositories后&lt;/p&gt;
+&lt;p&gt;在本地仓库目录下&lt;/p&gt;
+&lt;p&gt;git remote -v&lt;/p&gt;
+&lt;p&gt;发现为空，即当前仓库没有和任何远程仓库产生联系，所以要先进行remote配置&lt;/p&gt;
+&lt;p&gt;git remote add github(远程端名称，以后用这个名字代替远程仓库) &lt;a href="mailto:git@github.xxx"&gt;git@github.xxx&lt;/a&gt;/xxxxxx.git(采用ssh协议，去新的建的仓库中复制这个链接)
+&lt;strong&gt;git remote add github &lt;a href="mailto:git@github.com"&gt;git@github.com&lt;/a&gt;:xxx/xxxxxr.git&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;在添加完后，再git remote -v，可以看到了两个远端push fetech一个用于上传一个用于下载&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;git push github(远端仓库代指名) &amp;ndash;all(push所有当前分支)&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;注意如果远端的一些文件，本地没有(比如创建工程时的readme .gitignore license)，在push的时候会报错，git会提示你先fetch把这些文件先下载 (远端分支和本地分支同名会出现这种情况)&lt;/p&gt;
+&lt;p&gt;git pull (先fetch远端，将同名分支merge)&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;git fetch github(远端仓库) main(指定fetch的分支)&lt;/strong&gt;&lt;/p&gt;</description></item><item><title>Git1</title><link>https://jler666.github.io/tools/ofqick/</link><pubDate>Mon, 23 May 2022 00:00:00 +0000</pubDate><guid>https://jler666.github.io/tools/ofqick/</guid><description>&lt;p&gt;极客时间&lt;/p&gt;
+&lt;p&gt;分布式 版本管理服务器&lt;/p&gt;
+&lt;p&gt;服务端和客户端都有完整的版本库，脱离服务端客户端依旧可以管理版本。查看历史和版本比较等操作，都不需要访问服务器。&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://git-scm.com/book/zh/v2"&gt;https://git-scm.com/book/zh/v2&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;1 git的最小配置&lt;/p&gt;
+&lt;p&gt;配置user信息&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;git config &amp;ndash;global user.name &amp;lsquo;Tou&amp;rsquo;&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;git config &amp;ndash;global user.email &amp;lsquo;&lt;a href="mailto:wzl890123@163.com"&gt;wzl890123@163.com&lt;/a&gt;&amp;rsquo;&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;配置后，如果你变更版本信息将会记录并显示是谁变更了信息&lt;/p&gt;
+&lt;p&gt;global &amp;ndash; 对当前用户所有仓库有效&lt;/p&gt;
+&lt;p&gt;local &amp;ndash; 只对某个仓库有效&lt;/p&gt;
+&lt;p&gt;system &amp;ndash; 对系统所有登录的用户有效&lt;/p&gt;
+&lt;p&gt;显示当前git的config配置&lt;/p&gt;
+&lt;p&gt;git config &amp;ndash;list &amp;ndash;local&lt;/p&gt;
+&lt;p&gt;git config &amp;ndash;list &amp;ndash;global&lt;/p&gt;
+&lt;p&gt;git config &amp;ndash;list &amp;ndash;system&lt;/p&gt;
+&lt;p&gt;对某个仓库设置特定的用户，而不用上面设置的全局用户&lt;/p&gt;
+&lt;p&gt;在仓库路径下&lt;/p&gt;
+&lt;p&gt;git config &amp;ndash;add &amp;ndash;local user.name &amp;lsquo;用户名&amp;rsquo;&lt;/p&gt;
+&lt;p&gt;git config &amp;ndash;add &amp;ndash;local user.email &amp;lsquo;邮箱&amp;rsquo;&lt;/p&gt;
+&lt;p&gt;对于重复配置出现多个name和email的情况，可以直接edit .git/config 文件对config信息直接做修改&lt;/p&gt;
+&lt;p&gt;2 建git仓库&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;把已有的项目代码纳入Git管理&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;cd 项目代码&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;git init&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;2)新建的项目直接用Git管理&lt;/p&gt;
+&lt;p&gt;cd 文件夹&lt;/p&gt;
+&lt;p&gt;git init 新项目的名称&lt;/p&gt;</description></item></channel></rss>

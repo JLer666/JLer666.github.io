@@ -1,0 +1,176 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>强化学习 | CantBlog</title><meta name=keywords content><meta name=description content="强化学习理论与算法笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/rl/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/rl/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/rl/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/rl/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="强化学习"><meta property="og:description" content="强化学习理论与算法笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="强化学习"><meta name=twitter:description content="强化学习理论与算法笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"强化学习","item":"https://jler666.github.io/rl/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>强化学习</h1><div class=post-description>强化学习理论与算法笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>11 TRPO 3 如何保证新策略得分单调不降</h2></header><div class=entry-content><p>在9 TRPO 1中推导得到下式
+$ \eta(\pi^{'})=\eta(\pi)+E_{\tau\sim\pi^{'}}[\sum_{t=0}^{\infty}\gamma ^{t}A_{\pi}(s_{t},a_{t})] $
+因为
+$ \begin{gathered} E_{\tau\sim\pi^{'}}[\sum_{t=0}^{\infty}\gamma ^{t}A_{\pi}(s_{t},a_{t})],s_{0}\sim D,..,s_{t},a_{0},...,a_{t}\sim \pi^{'};\\=\sum_{t=0}^{\infty}\sum_{s}P(s_{t}=s|\pi^{'})\sum_{a}\pi^{'}(a|s)\gamma^{t}A_{\pi}(s,a) \end{gathered} $我们将gama提出对a求和号变为
+定义$ \rho_{\pi^{'}}(s)=P(s_{0}=s|\pi^{'})+\gamma P(s_{1}=s|\pi^{'}) +\gamma^{2} P(s_{2}=s|\pi^{'}) + ... $
+rho在给定策略下每个状态被访问到的频率这个频率是带折扣的，就是个记号，数学上的意义更大一些
+交换t,s求和顺序 将定义式代入
+$ \begin{gathered} E_{\tau\sim\pi^{'}}[\sum_{t=0}^{\infty}\gamma ^{t}A_{\pi}(s_{t},a_{t})],s_{0}\sim D,..,s_{t},a_{0},...,a_{t}\sim \pi^{'};\\=\sum_{s}\sum_{t=0}^{\infty}\gamma^{t}P(s_{t}=s|\pi^{'})\sum_{a}\pi^{'}(a|s)A_{\pi}(s,a) \\=\sum_{s}\rho_{\pi^{'}}(s_{t}=s)\sum_{a}\pi^{'}(a|s)\gamma^{t}A_{\pi}(s,a) \end{gathered} $
+$ \begin{gathered} \eta(\pi^{'})=\eta(\pi)+E_{\tau\sim\pi^{'}}[\sum_{t=0}^{\infty}\gamma ^{t}A_{\pi}(s_{t},a_{t})]\\=\eta(\pi)+E_{(s,a)\sim\pi^{'}}[\sum_{t=0}^{\infty}\gamma ^{t}A_{\pi}(s_{t},a_{t})]\\ =\eta(\pi)+\sum_{s}\rho_{\pi^{'}}(s_{t}=s)\sum_{a}\pi^{'}(a|s)A_{\pi}(s,a) \end{gathered} $
+定义
+$ \begin{gathered} L_{\pi}(\pi^{'})=\eta(\pi)+E_{s\sim\pi,a\sim\pi^{'}}[\sum_{t=0}^{\infty}\gamma ^{t}A_{\pi}(s_{t},a_{t})]\\=\eta(\pi)+\sum_{s}\rho_{\pi}(s_t=s)\sum_{a}\pi^{'}(a|s)A_{\pi}(s,a) \end{gathered} $
+L的s轨迹是在pi下采样得到的，n的s轨迹是在pi’下采样得到的
+因为pi’是我们待求的策略，这个策略都没求出来怎么用pi’去采样轨迹 怎么能直接求 rou $ \rho_{\pi^{'}}(s)=P(s_{0}=s|\pi^{'})+\gamma P(s_{1}=s|\pi^{'}) +\gamma^{2} P(s_{2}=s|\pi^{'}) + ... $这个概率，L用rou pi去近似rou pi’，忽略策略改变引起的某个某个状态出现概率的改变。就是我们之前说的important sampling 中$ P_{\pi^{'}}(s_t) $与$ P_{\pi}(s_t) $分别为在pi’和pi策略下出现状态st的概率，这个概率很难计算，但是可以感性地想下如果每次策略更新的幅度不大即pi’与pi很像，那么pi’和pi策略下出现状态st的概率其实是非常接近的，这两项是近似相等可以互相约去的。
+$ \overline{A}(s_t)=E_{a\sim \pi^{'}}[A_\pi(s_t,a_t)] $之前有定义和推导的
+...</p></div><footer class=entry-footer><span title=2022-02-06T00:00:00+00:00>创建于 2022-02-06</span>&nbsp;·&nbsp;<span title=2022-04-14T00:00:00+00:00>最后修改于 2022-04-14</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 11 TRPO 3 如何保证新策略得分单调不降" href=https://jler666.github.io/rl/vbsi0l/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>12 TRPO 4 最终问题的描述形式</h2></header><div class=entry-content><p>$ M_i(\pi) = L_{\pi_i}(\pi)-C\underset{s}{max}D_{KL}(\pi_i(\cdot|s)||\pi(\cdot|s)) $
+待优化函数$ \underset{\pi_{i+1}}{max} L_{\pi_i}(\pi_{i+1})-C\underset{s}{max}D_{KL}(\pi_i(\cdot|s)||\pi_{i+1}(\cdot|s)) $
+可以将上面的式子写成待优化函数和约束条件的形式
+L-CD的表达式非常复杂 直接优化是很复杂的，所以用了近似的方法 首先用了拉格朗日乘数法的原理 使得最优化问题转换为下式有约束条件的优化。δ理论上是与C有关的常数，但没有办法精确求解所以只能人为设定。
+$ \underset{\pi_{\theta}}{max} L_{\pi_{\theta_{old}}}(\pi_{\theta})s.t.\,\underset{s}{max}D_{KL}(\pi_{\theta_{old}}(\cdot|s)||\pi_{\theta}(\cdot|s)) \leqslant \delta $
+对KL散度的最大值做约束，这实际上是对所有状态的KL散度做约束$ C=\frac{4\gamma\varepsilon}{(1-\gamma)^{2}} $这样约束条件就是无穷多个 无法求解，所以实际实现中将这个约束条件放松变为对平均KL散度做约束。
+$ \underset{\pi_{\theta}}{max} L_{\pi_{\theta_{old}}}(\pi_{\theta})s.t.\,D_{KL}^{\rho_{\theta_{old}}}(\pi_{\theta_{old}}||\pi_{\theta}) \lt \delta $
+将L展开
+$ \begin{gathered} \underset{\theta}{max}L_{\pi_{\theta_{old}}}(\pi_{\theta})=\underset{\theta}{max}\,\eta(\pi_{\theta_{old}})+E_{s\sim\pi_{\theta_{old}},a\sim\pi_{\theta}}[\sum_{t=0}^{\infty}\gamma ^{t}A_{\pi_{\theta_{old}}}(s_{t},a_{t})]\\=\underset{\theta}{max}\,\eta(\pi_{\theta_{old}})+\sum_{s}\rho_{\pi_{\theta_{old}}}(s)\sum_{a}\pi_{\theta}(a|s)A_{\pi_{\theta_{old}}}(s,a)]\\\eta(\pi_{\theta_{old}})\,is\,constant\therefore\\=\underset{\theta}{max}\,\sum_{s}\rho_{\pi_{\theta_{old}}}(s)\sum_{a}\pi_{\theta}(a|s)A_{\pi_{\theta_{old}}}(s,a)]\\s.t.\,D_{KL}^{\rho_{\pi_{\theta_{old}}}}(\pi_{\theta_{old}}||\pi_{\theta})\leqslant \delta \end{gathered} $ $ D_{KL}^{\rho_{\pi_{\theta_{old}}}}(\pi_{\theta_{old}}||\pi_{\theta})=E_{s\sim \rho_{\theta_{old}}}[D_{KL}(\pi_{\theta_{old}}(\cdot|s)||\pi_{\theta}(\cdot|s))] $因为限制了KL散度所以我们可以认为$ P_{\pi^{'}}(s_t) $与$ P_{\pi}(s_t) $相等，使用important sampling 后
+$ \begin{gathered} \sum_{a}\pi_{\theta}(a|s_i)A_{\pi_{\theta_{old}}}(s_i,a)]=E_{a\sim\pi_{\theta}}[A_{\pi_{\theta_{old}}}(s_i,a)]\\=E_{a\sim\pi_{\theta_{old}}}[\frac{P_{\pi_\theta}(s_i,a)}{P_{\pi_{\theta_{old}}}(s_i,a)}]A_{\pi_{\theta_{old}}}(s_i,a)]\\=E_{a\sim\pi_{\theta_{old}}}[\frac{P_{\pi_\theta}(a|s_i)P_{\pi_{\theta}}(s_i)}{P_{\pi_{\theta_{old}}}(a|s_i)P_{\pi_{\theta_{old}}}(s_i)}]A_{\pi_{\theta_{old}}}(s_i,a)] \\=E_{a\sim\pi_{\theta_{old}}}[\frac{P_{\pi_\theta}(a|s_i)}{P_{\pi_{\theta_{old}}}(a|s_i)}]A_{\pi_{\theta_{old}}}(s_i,a)]\\=E_{a\sim\pi_{\theta_{old}}}[\frac{\pi_\theta(a|s_i)}{\pi_{\theta_{old}}(a|s_i)}]A_{\pi_{\theta_{old}}}(s_i,a)] \end{gathered} $
+得到了用于训练的式子
+$ \begin{gathered} \underset{\theta}{max}\,\sum_{s}\rho_{\pi_{\theta_{old}}}(s)\sum_{a}\pi_{\theta}(a|s)A_{\pi_{\theta_{old}}}(s,a)\\=\underset{\theta}{max}\,\sum_{s}\rho_{\pi_{\theta_{old}}}(s)\cdot\pi_{\theta_{old}}(a|s)\sum_{a}\frac{\pi_{\theta}(a|s)}{\pi_{\theta_{old}}(a|s)}A_{\pi_{\theta_{old}}}(s,a)\\=\underset{\theta}{max}\,\sum_{s}\rho_{\pi_{\theta_{old}}}(s,a)\sum_{a}\frac{\pi_{\theta}(a|s)}{\pi_{\theta_{old}}(a|s)}A_{\pi_{\theta_{old}}}(s,a)\\=E_{s\sim\rho_{\pi_{\theta_{old}}},a\sim\pi_{\theta_{old}}}[\frac{\pi_{\theta}(a|s)}{\pi_{\theta_{old}}(a|s)}A_{\pi_{\theta_{old}}}(s,a)]\\s.t.\,E_{s\sim \rho_{\theta_{old}}}[D_{KL}(\pi_{\theta_{old}}(\cdot|s)||\pi_{\theta}(\cdot|s))]\leqslant \delta \end{gathered} $
+$ \rho_{\pi_{\theta_{old}}} $是在老策略下遇到各种状态的折扣概率
+将待优化函数中的动作这一层期望展开
+$ \begin{gathered} \sum_{s}\rho_{\pi_{\theta_{old}}}(s)\sum_{a}\pi_{\theta}(a|s)A_{\pi_{\theta_{old}}}(s,a)\\=\sum_{s}\rho_{\pi_{\theta_{old}}}(s)\sum_{a}\pi_{\theta}(a|s)[Q_{\pi_{\theta_{old}}}(s,a)-V_{\pi_{\theta_{old}}}(s)]\\=\sum_{s}\rho_{\pi_{\theta_{old}}}(s)\sum_{a}\pi_{\theta}(a|s)Q_{\pi_{\theta_{old}}}(s,a)-\sum_{s}\rho_{\pi_{\theta_{old}}}(s)V_{\pi_{\theta_{old}}}(s)\sum_{a}\pi_{\theta}(a|s)\\=\sum_{s}\rho_{\pi_{\theta_{old}}}(s)\sum_{a}\pi_{\theta}(a|s)Q_{\pi_{\theta_{old}}}(s,a)-\sum_{s}\rho_{\pi_{\theta_{old}}}(s)V_{\pi_{\theta_{old}}}(s)\cdot 1 \end{gathered} $
+可以看出优势项中的V与要求导的参数θ无关
+所以可以将待优化函数改写为
+$ \begin{gathered} \underset{\theta}{max}\sum_{s}\rho_{\pi_{\theta_{old}}}(s)\sum_{a}\pi_{\theta}(a|s)Q_{\pi_{\theta_{old}}}(s,a)\\=E_{s\sim\rho_{\pi_{\theta_{old}}},a\sim\pi_{\theta_{old}}}[\frac{\pi_{\theta}(a|s)}{\pi_{\theta_{old}}(a|s)}Q_{\pi_{\theta_{old}}}(s,a)]\\s.t.\,E_{s\sim \rho_{\theta_{old}}}[D_{KL}(\pi_{\theta_{old}}(\cdot|s)||\pi_{\theta}(\cdot|s))]\leqslant \delta \end{gathered} $
+...</p></div><footer class=entry-footer><span title=2022-02-06T00:00:00+00:00>创建于 2022-02-06</span>&nbsp;·&nbsp;<span title=2022-09-06T00:00:00+00:00>最后修改于 2022-09-06</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 12 TRPO 4 最终问题的描述形式" href=https://jler666.github.io/rl/nex66w/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>10 TRPO 2 一次策略更新优势函数变化的上界</h2></header><div class=entry-content><p>下面计算一下如果令$ P_{\pi^{'}}(s_t)=P_{\pi}(s_t) $将会导致的最大误差是多少，我们需要求pi’使这个误差在可以接受的范围内
+设$ P(\pi(s)\neq\pi^{'}(s))\,=\,P(a\neq \widehat{a})\leqslant \alpha $，我们假设在面对同样的状态时，更新后的策略最多只有α的概率会采取与更新前的策略不一样的动作，α越大说明更新前后的策略差异越大。
+证在相同状态下新策略优势的上界
+定义$ \begin{gathered} \widehat{A}(s_t)=E_{a\sim \pi^{'}}[A_\pi(s_t,a_t)]-E_{a\sim \pi}[A_\pi(s_t,a_t)]\\=E_{(a,\widehat{a})\sim(\pi,\pi^{'})}[A_\pi(s_t,\widehat{a}_t)-A_\pi(s_t,a_t)] \end{gathered} $
+在两个不同策略下采取的动作下，得到的优势函数的期望的差。如果这个差越大说明更新前后策略的变化越大。
+其中$ E_{a\sim\pi}[A_\pi(s_t,a_t)]=E_{a\sim\pi}[Q_\pi(s_t,a_t)-V_\pi(s_t)]=E_{a\sim\pi}[Q_\pi(s_t,a_t)]-E_{a\sim\pi}[V_\pi(s_t)]=E_{a\sim\pi}[V_\pi(s_t)]-E_{a\sim\pi}[V_\pi(s_t)]=0 $
+$ \widehat{A}(s_t)=E_{a\sim \pi^{'}}[A_\pi(s_t,a_t)]-E_{a\sim \pi}[A_\pi(s_t,a_t)]=E_{a\sim \pi^{'}}[A_\pi(s_t,a_t)] $定义A-(和A^其实是同一个东西 为了表达清楚所以用了两个符号下面都用A-)表示在状态st下新策略pi’相对于老策略pi的优势$ \begin{gathered} \overline{A}(s_t)=E_{a\sim \pi^{'}}[A_\pi(s_t,a_t)]=\widehat{A}(s_t)=E_{(a,\widehat{a})\sim(\pi,\pi^{'})}[A_\pi(s_t,\widehat{a}_t)-A_\pi(s_t,a_t)]\\=P(a\neq\widehat{a})E_{(a,\widehat{a})\sim(\pi,\pi^{'}),a\neq\widehat(a)}[A_\pi(s_t,\widehat{a}_t)-A_\pi(s_t,a_t)]+P(a=\widehat{a})E_{(a,\widehat{a})\sim(\pi,\pi^{'}),a=\widehat{a}}[A_\pi(s_t,\widehat{a}_t)-A_\pi(s_t,a_t)] \end{gathered} $其中当a=a^则期望里面的A(s,a^)-A(s,a)=0所以$ P(a=\widehat{a})E_{(a,\widehat{a})\sim(\pi,\pi^{'}),a=\widehat{a}}[A_\pi(s_t,\widehat{a}_t)-A_\pi(s_t,a_t)]=P(a=\widehat{a})\cdot 0=0 $
+所以得到$ \overline{A}(s_t)=P(a\neq\widehat{a})E_{(a,\widehat{a})\sim(\pi,\pi^{'}),a\neq\widehat(a)}[A_\pi(s_t,\widehat{a}_t)-A_\pi(s_t,a_t)] $
+现在来计算|A-|的上界首先$ P(\pi(s)\neq\pi^{'}(s))\,=\,P(a\neq \widehat{a})\leqslant \alpha $所以$ max\,|P(a)\neq\widehat{a}|=\alpha $，其中$ max\,|A_\pi(s_t,\widehat{a}_t)-A_\pi(s_t,a_t)]|\leqslant \underset{s,a}{max}|A_\pi(s_t,a_t)]|+\underset{s,a}{max}|A_\pi(s_t,a_t)]|=2\underset{s,a}{max}|A_\pi(s_t,a_t)]| $得
+证得$ |\overline{A}(s_t)|\leqslant2\alpha\,\underset{s,a}{max}|A_\pi(s_t,a_t)]| $在两个不同策略下采取的动作下，得到的优势函数的期望的差，有上界即更新前后策略的变化程度是有上界的。A-表示在状态st下新策略pi’相对于老策略pi的优势,这个优势是有上界的
+接下来我们需要看下在不同策略下采样得到的状态，这些状态的A-差多少，即看在pi’策略下采样得到的st的策略pi’优势 和 在pi策略下采样得到的st的策略pi’优势相差多少， 如果相差大则说明$ P_{\pi^{'}}(s_t) $与$ P_{\pi}(s_t) $(分别为在pi’和pi策略下出现状态st的概率)这两个概率相差很大
+证 原策略得到的状态轨迹下和新策略得到的状态轨迹下 新策略优势变化量的上界
+设nt表示在t时刻之前策略pi和策略pi’产生不同动作的次数
+（i&lt;t时满足ai!=a^i的次数）
+$ E_{s\sim \pi^{'}}[\overline{A}(s_t)]=P(n_t=0)E_{s\sim \pi^{'},n_t=0}[\overline{A}(s_t)]+P(n_t\gt 0)E_{s\sim \pi^{'},n_t\gt 0}[\overline{A}(s_t)] $
+$ E_{s\sim \pi}[\overline{A}(s_t)]=P(n_t=0)E_{s\sim \pi,n_t=0}[\overline{A}(s_t)]+P(n_t\gt 0)E_{s\sim \pi,n_t\gt 0}[\overline{A}(s_t)] $
+...</p></div><footer class=entry-footer><span title=2022-02-05T00:00:00+00:00>创建于 2022-02-05</span>&nbsp;·&nbsp;<span title=2022-04-14T00:00:00+00:00>最后修改于 2022-04-14</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 10 TRPO 2 一次策略更新优势函数变化的上界" href=https://jler666.github.io/rl/bgts6s/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>9 TRPO 1 策略得分差的变式</h2></header><div class=entry-content><p>在上一节中，我们介绍了自然梯度法。具体而言，我们原本以参数 θ在参数空间的距离来衡量策略之间的差别，但是这种度量会严重依赖于你人为设计的策略网络$ \pi_{\theta} $的结构。采用了费舍尔信息矩阵之后，就相当于用策略 $ \pi $之间的KL散度来衡量策略之前的差别。这样，策略之间的距离度量就不依赖于你的人为设计，这无疑是一个“更好的度量”。
+在优化算法中(牛顿法)，我们可以用目标函数 的海森阵来更好衡量$ \pi $之间的差别，这个海森阵就是比参数空间的欧式距离更好的度量。但是求$ J(\pi_{\theta}) $关于θ的海森阵 对于强化学习来说这个计算量是无法接受的。所以NPG退而求其次用KL散度作为这种度量。最优化中的信赖域方法（Trust Region Method）和近似点方法（Proximal Point Method）类比于TRPO与PPO算法（KL penalty version）。它们背后的基本原理都是“更好地度量策略分布之间的距离”，而它们的实际表现形式都是“控制策略更新的步长”、“控制单调提升”。
+为了讲清TRPO需要先讲TRPO的前作Approximately Optimal Approximate，
+这篇提出一种Conservative Policy Iteration algorithm，可以在较小步数内，找到近似最优策略(Approximately Optimal Policy)。
+状态价值函数，动作状态价值函数的TD定义是
+$ V_{\pi}(s_{i})=E[\sum_{i=0}^{\infty}\gamma ^{i}R(s_{i+1})]=R(s_{i})+\gamma E[V_{\pi}(s_{i+1})|s_{i}] $
+为当前状态为st后未来得到的总收益的期望。
+$ Q_{\pi}(s_{i},a_{i})=E[\sum_{i=0}^{\infty}\gamma ^{i}R(s_{i+1},a_{i+1})]=R(s_{i},a_{i})+\gamma E[Q_{\pi}(s_{i+1},a_{i+1})|s_{i},a_{i}]=R(s_{i},a_{i})+\gamma E[V_{\pi}(s_{i+1})|s_{i},\pi] $为当前状态是st在此状态下采取动作at后未来得到的总收益的期望。
+$ A_{\pi}(s_{t},a_{t})=Q_{\pi}(s_{t},a_{t})-V_{\pi}(s_{t})=E_{s_{t+1}\sim P(s_{t+1}|s_{t},a_{t})}[R(s_{t},a_{t})+\gamma V_{\pi}(s_{t+1})-V_{\pi}(s_{t})] $优势函数之前有讲过就是动作状态奖励-状态奖励，减去一个baseline来突出这个动作at的真实作用是好还是坏。
+定义在策略下的未来状态分布 又叫折扣访问频率。
+$ d_{\pi,D}(s)=P(s_{0}=s)+\gamma P(s_{1}=s) +\gamma^{2} P(s_{2}=s) + ... $表示在策略和初始分布D=P(s0)下状态s被访问到的频率这个频率是带折扣的。—E下标可以理解为条件，在这个条件下求相应对象的期望值。
+先定义一下$ \begin{gathered} Q_{\pi}(s_{t},a_{t})=E_{s_{t+1},a_{t+1},...\sim \pi}[\sum_{i=0}^{\infty}\gamma ^{i}R(s_{t+i},a_{t+i})]\\ V_{\pi}(s_{t})=E_{a_{t},s_{t+1},a_{t+1},...\sim \pi}[\sum_{i=0}^{\infty}\gamma ^{i}R(s_{t+i},a_{t+i})] \end{gathered} $
+设$ \pi $为老策略$ \pi^{'} $为新策略，$ \eta(\pi)=E_{\tau\sim\pi}[\sum\gamma ^{i}R(s,a)] $为在老策略$ \pi $下采样到的轨迹涛的总奖励期望，$ \eta(\pi^{'})=E_{\tau\sim\pi^{'}}[\sum\gamma ^{i}R(s,a)] $为为在新策略下采样到的轨迹涛(和之前的轨迹是不一样的)的总奖励期望。观察新策略是否优于老策略有一个很明显的指标就是将新老策略的得分相减大于0说明策略有提升，$ \eta(\pi^{'})-\eta(\pi)\gt 0 $
+...</p></div><footer class=entry-footer><span title=2022-02-05T00:00:00+00:00>创建于 2022-02-05</span>&nbsp;·&nbsp;<span title=2022-04-10T00:00:00+00:00>最后修改于 2022-04-10</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 9 TRPO 1 策略得分差的变式" href=https://jler666.github.io/rl/bm6adz/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>8 自然梯度法NPG 4 算法流程与总结</h2></header><div class=entry-content><p>自然梯度法计算流程
+1对模型进行正向传播计算$ L(\theta)=-ln\,p(x|\theta) $在强化学习改进的PG中应该是$ L(\theta)=-\sum_{i=0}^{m}\sum_{t=0}^{T-1}A(a_{i,t},s_{i,t})ln\,\pi_{\theta}(a_{i,t}|s_{i,t})/m $
+2对L求梯度$ \triangledown_{\theta}L(\theta) $
+3计算经验费舍尔信息阵
+$ E[\triangledown log\,p(x|\theta)\triangledown log\,p(x|\theta)^{T}]\approx F=\sum_{i=1}^{N}\triangledown log\,p(x|\theta)\triangledown log\,p(x|\theta)^{T}/N $
+$ \underset{y=p(x|\theta)}{E}[\triangledown ln\,y\triangledown ln\,y^{T}]\approx F $
+将p(x|θ)这个整体看作是个随机变量，并对以这个随机变量组成的式子求期望。
+(假设在θ参数下xi出现的概率都相等则协方差均值就是这个期望的近似)
+在强化学习中的$ p(x|\theta) $应该为$ p(a|s,\theta)\equiv \pi_{\theta}(a|s) $这样计算出来的F应该是$ F(\theta)=\sum_{i=1}^{M}p(s_{i}|\pi_{\theta})\sum_{j=1}^{N}\triangledown log\,\pi_{\theta} (a_{j}|s_{i})\triangledown log\,\pi_{\theta} (a_{j}|s_{i})^{T}/N $，$ p(s_{i}|\pi_{\theta})\equiv p_{\theta}(s_{i}) $为在策略pi theta下出现状态si的概率(这个概率其实非常难求(MC采样后统计?) 在PG中也遇到了 在这无法忽略求这个概率)。这个F阵很难求
+4计算自然梯度
+$ \widetilde{\triangledown_{\theta}}L(\theta) = F^{-1}\triangledown_{\theta}L(\theta) $** 矩阵逆也很难求**
+5更新参数
+$ \theta^{'}=\theta + d =\theta - lr\widetilde{\triangledown_{\theta}}L(\theta) $
+总结
+待优化函数为对数似然函数希望优化参数使似然概率最大，在所有可能由参数θ实现的策略似然函数构成的空间中移动(在似然函数空间上移动 而不仅仅是在θ参数空间上移动)，由于策略似然函数本身是一个概率分布，我们称这个空间为分布空间，因此在这个分布空间而不是参数空间中采取最陡峭的下降方向对优化更有意义，我们需要定义一个分布空间中的二范数距离概念来衡量不同似然函数之间的距离(类比θ参数空间中用欧式距离作二范数来衡量不同参数θ之间的距离)。
+我们使用KL散度来作为分布空间的距离衡量量。将KL散度作为对数似然函数的优化限制，再将优化限制利用拉格朗日乘数法直接加到待优化函数中，KL散度直接计算需要知道θ’这个我们优化完了才知道的参数，我们无法直接计算只能将θ’=θ+d中的d作为未知量，将KL散度泰勒展开展开成含d的式子，但由于KL散度的泰勒展开的无导数项，一阶导数项都为0所以至少展开到二次导数项。
+求二次导就需要求海森阵但计算量太大，费舍尔信息阵与海森阵有关计算量稍微少点，所以用FIM替代海森阵计算KL的二次导数项，自然梯度的本质就是将KL散度约束直接加到待优化的式子中，并将KL散度利用FIM阵的计算方法计算其二次展开含d的近似项代替KL散度本身，待优化式子对d求导求出最优的参数更新量d=dθ。
+参考
+https://agustinus.kristia.de/techblog/2018/03/14/natural-gradient/
+本人水平拉跨，哪里写不对的地方请大佬们赐教</p></div><footer class=entry-footer><span title=2022-02-04T00:00:00+00:00>创建于 2022-02-04</span>&nbsp;·&nbsp;<span title=2022-04-06T00:00:00+00:00>最后修改于 2022-04-06</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 8 自然梯度法NPG 4 算法流程与总结" href=https://jler666.github.io/rl/xy6dz8/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>7 自然梯度法NPG 3 FIM(费舍尔阵)和KL散度的关系</h2></header><div class=entry-content><p>KL散度是分布空间的距离度量，FIM定义了分布空间的局部曲率(不严格是二阶导数 海森阵本身就是描述函数的二阶导数)
+费舍尔信息阵F是两个分布$ p(x|\theta) $和$ p(x|\theta^{'}) $之间关于θ’的KL散度的海森阵在θ’=θ处的评估。KL散度对θ’求海森阵，并求当θ’=θ时的结果就是FIM信息阵
+证：
+首先KL散度可以拆成熵和交叉熵两项
+$ D_{KL}(p(x|\theta)||p(x|\theta^{'}))=\int p(x|\theta)ln\,\frac{p(x|\theta)}{p(x|\theta^{'})}dx $
+$ =\sum_{x}p(x|\theta)[ln\,p(x|\theta)-ln\,p(x|\theta^{'})]=\sum_{x}p(x|\theta)ln\,p(x|\theta)-\sum_{x}p(x|\theta)ln\,p(x|\theta^{'}) $
+$ p(x|\theta) $的熵减$ p(x|\theta) $与$ p(x|\theta^{'}) $的交叉熵
+$ =\underset{p(x|\theta)}{E}[ln\,p(x|\theta)]-\underset{p(x|\theta)}{E}[ln\,p(x|\theta^{'})] $(也可以写成这样)
+KL散度对θ’求一阶导
+$ \triangledown_{\theta^{'}}D_{KL}(p(x|\theta)||p(x|\theta^{'}))=\triangledown_{\theta^{'}}[\sum_{x}p(x|\theta)ln\,p(x|\theta)-\sum_{x}p(x|\theta)ln\,p(x|\theta^{'})] $
+$ =-\sum_{x}p(x|\theta)\triangledown_{\theta^{'}}ln\,p(x|\theta^{'}) $
+KL散度对θ’求二阶导
+$ \triangledown_{\theta^{'}}^{2}D_{KL}(p(x|\theta)||p(x|\theta^{'}))=-\sum_{x}p(x|\theta)\triangledown_{\theta^{'}}^{2}ln\,p(x|\theta^{'}) $
+对KL散度对θ’求海森阵，并求当θ’=θ时的结果
+$ \begin{gathered} H(D_{KL}(p(x|\theta)||p(x|\theta^{'})))|_{\theta^{'}=\theta}\\=\triangledown_{\theta^{'}}^{2}[\sum_{x}p(x|\theta)ln\,p(x|\theta)-\sum_{x}p(x|\theta)ln\,p(x|\theta^{'})]|_{\theta^{'}=\theta}\\=-\sum_{x}p(x|\theta)\triangledown_{\theta^{'}}^{2}ln\,p(x|\theta^{'})|_{\theta^{'}=\theta} \end{gathered} $
+KL散度对θ’求海森阵$ =-\sum_{x}p(x|\theta)H(ln\,p(x|\theta))=-E[H(ln\,p(x|\theta))]=F $
+**其中 **$ -\underset{y_{i}=p(x_{i}|\theta)}{\sum}yH(lny)=-\underset{y}{E}[H(lny)] $将p(x|θ)这个整体看作是个随机变量，并对以这个随机变量组成的式子求期望。
+其中$ \triangledown_{\theta^{'}}^{2}ln\,p(x|\theta^{'})=J(\triangledown ln\,p(x|\theta^{'}))=J(\frac{\triangledown p(x|\theta^{'})}{p(x|\theta^{'})}) $
+$ =\frac{H(p(x|\theta^{'}))p(x|\theta^{'})^{T}-\triangledown p(x|\theta^{'})\triangledown p(x|\theta^{'})^{T}}{p(x|\theta^{'})p(x|\theta^{'})^{T}} $ (除法求导规则)
+$ =\frac{H(p(x|\theta^{'}))}{p(x|\theta^{'})}-\frac{\triangledown p(x|\theta^{'})}{ p(x|\theta^{'})}(\frac{\triangledown p(x|\theta^{'})}{ p(x|\theta^{'})})^{T} $
+再求θ’=θ处的值
+$ \triangledown_{\theta^{'}}^{2}ln\,p(x|\theta^{'})|_{\theta^{'}=\theta}=\frac{H(p(x|\theta))}{p(x|\theta)}-\frac{\triangledown p(x|\theta)}{ p(x|\theta)}(\frac{\triangledown p(x|\theta)}{ p(x|\theta)})^{T}=H_{\theta}(ln\,p(x|\theta)) $–对数似然函数对θ的海森阵。
+证毕 得结论KL散度对θ’求海森阵，并求当θ’=θ时的结果就是FIM信息阵
+分布空间的最速下降法
+...</p></div><footer class=entry-footer><span title=2022-02-04T00:00:00+00:00>创建于 2022-02-04</span>&nbsp;·&nbsp;<span title=2022-04-05T00:00:00+00:00>最后修改于 2022-04-05</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 7 自然梯度法NPG 3 FIM(费舍尔阵)和KL散度的关系" href=https://jler666.github.io/rl/gx753y/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>6 自然梯度法NPG 2 分布空间与KL散度</h2></header><div class=entry-content><p>分布空间与KL散度
+一个概率模型用它的似然$ p(x|\theta) $来表示(在强化学习中的$ p(x|\theta) $应该为$ p(a|s,\theta)==\pi_{\theta}(a|s) $**在上面有提到 这里我们不把问题放在强化学习环境下 就当作是个优化问题 要最大化这个似然函数 其实在强化学习中我们也是 通过优化theta最大化 奖励*对数策略似然 **$ ln\,\pi_{\theta}(a|s) $来得到最大奖励策略)，我们想最大化这个似然函数等同于最小化$ L(\theta)=-log\,p(x|\theta) $。
+通常最小化L的方法是梯度下降，在这种情况下移动的方向由$ -\triangledown_{\theta}L(\theta) $给出，这是当前参数空间中围绕当前θ值的局部邻域中最陡峭的下降方向,形式上有
+$ \frac{\triangledown_{\theta}L(\theta)}{||\triangledown_{\theta}L(\theta)||}=\displaystyle \lim_{ \varepsilon \to 0}\underset{s.t.||d||\leqslant \varepsilon}{arg\,min\,L(\theta+d)/\varepsilon} $
+||||为二范数，在参数theta的圆形邻域内(以θ为圆心，以$ \varepsilon $为半径)不超过这个范围，选取一个向量d使得新参数θ+d 的L为这个圆形邻域的最小L。这里采用欧式距离作为二范数的计算，因此梯度下降的优化建立在参数θ空间的欧式距离上。但是我们的目标是最小化损失L，在所有可能由参数θ实现的似然函数构成的空间中移动(在似然函数空间上移动 而不仅仅是在θ参数空间上移动)，由于似然函数本身是一个概率分布，我们称这个空间为分布空间，因此在这个分布空间而不是参数空间中采取最陡峭的下降方向对优化更有意义，我们需要定义一个分布空间中的二范数距离概念来衡量不同似然函数之间的距离(类比θ参数空间中用欧式距离作二范数来衡量不同参数θ之间的距离)。
+梯度下降的优化建立在θ参数空间的欧式距离上
+自然梯度的优化建立在p(x|θ)的分布空间的KL散度上
+一种最常用与衡量两个分布的距离(相似度)的方法是KL散度(KL-divergence)又叫相对熵 度量使用q(网络输出分布)分布来近似p(真实分布)分布时所损失的信息量。 当q==p输出0
+$ D_{KL}(p(x)||q(x))=\int p(x)ln\,\frac{p(x)}{q(x)}dx $
+下图显示了在参数空间中使用欧式距离可能遇到的问题。下图中的两个分布都是高斯分布均值分别为-2，2方差都为2。
+下图中均值分别为-2，2方差都为0.5。
+根据欧式距离两个分布的距离就是红线，两张图的两个分布间的欧式距离都是2-(-2)=4，然而如果是考虑分布空间的KL散度两幅图中的两个分布的距离(相似程度 q分布来近似p分布时所损失的信息量)明显是不同的，所以在分布空间中两幅图中的两个分布的距离是不同的，第一张图中两个分布曲线下方重叠的部分比第二张图多所以第一幅图的KL散度要低于第二幅图，因此如果只是在参数空间中处理问题就无法将由参数本身导致的分布信息纳入考虑。
+$ D_{KL}(p(x)||q(x))=\int p(x)ln\,\frac{p(x)}{q(x)}dx=\sum_{x}p(x)(ln\,p(x)-ln\,q(x))=\sum_{x}p(x)ln\frac{1}{q(x)}-\sum_{x}p(x)ln\frac{1}{p(x)} $
+两个分布差异越大KL散度越大，度量使用q分布来近似p分布时所损失的信息量。数据的熵$ H=-\sum_{x}p(x)log\,p(x) $这里的对数没有确定底数可以是2、e、10，如果以2为底可以把计算出来的熵值H看作将p(x)分布的信息编码所需要的最少二进制位个数，KL散度计算时也以2为底则表示用其分布来近似p分布产生的信息损失(以二进制位数来计)。
+KL散度衡量了两个分布的距离，KL散度是非对称的，因此不算一个严格的距离函数(p到q的KL散度!=q到p的KL散度)。
+比如有一个真实分布p由两个高斯分布混合而成
+在我们不知道p分布的情况下，尝试使用一个普通的高斯分布来q来近似p,我们以p,q的KL散度为loss不断优化q的均值与方差,来减小loss,以期望q能够近似分布p。
+以KL散度为loss函数有两种取法1 $ q^{*}=\underset{q}{arg\,min}\,D_{KL}(p||q) $ 2$ q^{*}=\underset{q}{arg\,min}\,D_{KL}(q||p) $
+1为在使用q分布来近似p分布时所损失的信息量。2为用p分布近似q分布时所损失的信息量。分别用这两个loss来优化q分布最终得到
+1结果中q分布在尽量接近p这个双峰的总体分布，但因为q本身的信息量就是比p这个两个高斯混合的分布少(q模型深度不够深 欠拟合)
+2 p去逼近q，但是我们优化的是q所以只能改变q的参数去贴近p分布，最终q分布会在p的双峰中随机选择一个峰去贴合。
+...</p></div><footer class=entry-footer><span title=2022-02-04T00:00:00+00:00>创建于 2022-02-04</span>&nbsp;·&nbsp;<span title=2022-04-02T00:00:00+00:00>最后修改于 2022-04-02</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 6 自然梯度法NPG 2 分布空间与KL散度" href=https://jler666.github.io/rl/mr4gke/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>5 自然梯度法NPG 1 海森阵与费舍尔信息量</h2></header><div class=entry-content><p>在策略梯度法中，策略$ \pi_{\theta} $和它的参数θ是一一对应的。所以，我们把θ当成自变量，把期望效用J(θ)当成是θ的函数。在算法中，我们要预先设定一个步长lr，然后迭代地计算J关于θ的梯度，并让θ沿着梯度方向前进给定的步长lr。在实际运行策略梯度法的时候，有时会出现忽然的“模型崩溃”。比如我们发现随着训练迭代，模型的效果正在稳步提升，但在某一步中模型的效果忽然大幅下降，然后几乎又要从头再来。发生这种情况的主要原因是因为我们人为设定了步长并一直保持不变。在有的θ处沿着梯度前进lr会使得目标函数充分上升，有的θ处可能上升的不充分，而有的θ处沿着梯度前进lr或许会“走过”了最优点，使得目标函数大幅下降。在每个θ处将步长都统一设定为lr不变无疑是不合理的。换句话说，用策略的参数空间中的距离作为策略之间的度量是不合理的。对于在参数空间中θ之间距离1为的参数θ’，对应的$ \pi_{\theta} $和$ \pi_{\theta^{'}} $之间的实际差距非常不确定。同样在参数θ空间相差1，可能意味着对应策略相差很大，也可能意味着对应的策略相差很小。这正是问题所在。
+对这个问题的解决方法可以使用牛顿法二次展开，以正交阵H诱导一个二范数，在算法中迭代地沿着H-1g的方向前进。H为J关于θ的二次导数阵(Hessian矩阵 海森矩阵)。用H定义的二范数可以更好地度量J(θ)之间的差距(看上面关于牛顿法的解释)。但J(θ)的二阶导数阵的计算量太大，退一步不要求度量J(θ)之间的差距而寻找一种方法先度量$ \pi_{\theta} $之间的距离(J(θ)的函数中包含$ \pi_{\theta} $)。
+研究者认为，在策略的度量不应该基于坐标选择定义（即和参数θ与网络结构有关），而应该定义在策略的流形上。换句话说，我们要找到一个距离可以定义各种策略$ \pi $之间的差别，不受到定义θ与网络结构的影响。一个很自然的想法是利用KL散度来定义两个分布$ \pi $之间的区别。在这里，我们需要用到费雪信息矩阵（Fisher Information Matrix，简称FIM）。这里我们直接给出其公式：
+从FIM的定义不难看出，FIM是一个正定矩阵。以它诱导的范数，就可以衡量两个分布之间的KL散度，也是两个分布之间一个比较合适的距离。如果p是一个参数为θ的分布，则FIM应该是一个θ的函数G(θ)。在G(θ)诱导的范数下，如果θ’在参数空间中和θ距离为1，则意味着θ’对应的分布和θ对应的分布相差相应的KL散度不会像之前θ距离为1 则策略相差可能大也可能小。因此KL散度是一个关于“策略之间距离”(两个策略的相似程度)的很好的度量。
+往下的篇幅都是自然梯度法详细推导
+x1,x2,..,x服从一个概率分布p(x|θ),θ为待优化参数。
+则似然函数 $ L(x,\theta)=\prod_{i=1}^{n}p(x_{i}|\theta) $为了通过优化θ得到Maximum Likelihood Estimate，需要让log Likelihood的一阶导为0来解得$ \theta^{*} $，这个log Likelihood的一阶导也叫score function$ \frac{d\,log\,L}{d\theta}=\sum_{i=1}^{n}\frac{d\,log\,p(x_{i}|\theta)}{d\theta} $定义$ s(\theta)=\triangledown_{\theta}log\,p(x|\theta) $
+score function就是对数似然函数的梯度
+费舍尔信息的定义
+$ p_{\theta}(x)=p(x|\theta) $,$ p(\tau|\theta)=p_{\theta}(\tau) $(在θ参数下出现轨迹涛的概率)在θ参数下出现x的概率。在强化学习中的$ p(x|\theta) $应该为$ p(a|s,\theta)==\pi_{\theta}(a|s) $
+我们模型的评分期望值为0
+证 $ E[s(\theta)]=0 $
+$ E[s(\theta)]=E[\triangledown log\,p(x|\theta)]=\int p(x|\theta)\triangledown log\,p(x|\theta)dx $
+这个期望中x是随机变量所以求期望要对x积分，求期望的内容*x出现概率对x积分
+$ \int \frac{\triangledown p(x|\theta)}{p(x|\theta)}p(x|\theta) dx $ –用loglikelihood trick将 $ \frac{\triangledown p(x|\theta)}{p(x|\theta)}=\triangledown log\,p(x|\theta) $ (其实是ln)
+...</p></div><footer class=entry-footer><span title=2022-02-03T00:00:00+00:00>创建于 2022-02-03</span>&nbsp;·&nbsp;<span title=2022-04-01T00:00:00+00:00>最后修改于 2022-04-01</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 5 自然梯度法NPG 1 海森阵与费舍尔信息量" href=https://jler666.github.io/rl/dk17ph/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>4 信赖域方法与近似点方法</h2></header><div class=entry-content><p>梯度算法的效果并不好。其核心原因就在于难以确定合适的步长。让策略$ \pi_{\theta} $沿着$ J(\theta) $上升的方向，向前前进给定的步长lr*dJ/dθ。Actor-Critic方法仅仅相当于提供一种更好的方法计算梯度（可以减少估计梯度的方差），但其仍然是一个梯度上升法。然而，在很多优化问题中，梯度(下降or上升)算法的效果并不好。其核心原因就在于难以确定合适的步长。
+如果说PG对应于优化中的梯度下降法的话，那么TRPO和PPO确实就对应于优化中的信赖域方法和近似点法。
+梯度下降法求函数最小值：梯度下降法邻域内一次展开近似，并通过公式直接求得这个一次函数在邻域内的最值点就是$ x_{k+1}=x_{k}-lr\cdot g(x_{k}) $这条公式，因为邻域的限制无法一次求到最值，需要不断迭代更新。
+f(x)在当前位置xk一阶泰勒展开f(x)=f(xk)+g(xk)(x-xk)，沿着梯度方向g(xk)下降就可以最快地下降，但是**一阶泰勒展开只适用于很小的邻域，**在较大的范围内会不准确，所以人为设定步长lr只要lr不太大则f(xk-lr*g(xk))应该比f(xk)更小。
+我们之前的PG与AC方法相当于没有g(x)的表达式(dJ/dθ的显示表达式)，而是用不同的方法通过数据估计得到了g(x)的估计值(采用诸如GAE的技巧权衡g(x)的偏差和方差)。
+这种方法是最简单的梯度法(线搜索)，但大部分线搜索方法都不太适合求解$ J(\theta) $这种很复杂的函数的优化。梯度法有个很大的缺点对于病态问题收敛速度非常慢例如$ f(x)=x^{T}H x $当H矩阵的条件数很大时其优化路径会呈现出S型走位需要多步才能达到最优点，即使采取精确搜索，找到梯度方向上的极值点任然需要多步才能到达最优点。
+为了解决梯度法的缺点，一种方法是采用牛顿法在xk位置二阶泰勒展开
+f(x) = f(xk)+g(xk)(x-xk)+(x-xk)TH(xk)(x-xk)/2 H为二阶梯度阵
+对于$ f(x)=x^{T}H x $当这个正定二次型有唯一的极值点甚至不需要考虑步长直接$ x_{k+1}=x_{k}-H^{-1}(x_{k})g(x_{k}) $可以一步到位。对于一般的凸函数采取给定的步长来优化
+$ x_{k+1}=x_{k}-H^{-1}(x_{k})g(x_{k}) $二次近似并一次近似更精确，这个下降的方向H-1g也更精确。 可以通过这样的角度来理解牛顿法，想象牛顿法是将空间给捏圆再采取梯度法。这是因为对于凸函数的局部二次近似是一个椭球xTHx，将其乘上H-1就变成了一个球xTx，所以x沿着H-1g的方向前进可以看成将局部空间捏圆之后再进行梯度下降。
+从另个角度描述梯度法和牛顿法,对f(x)做一阶泰勒展开将其近似为线性函数f(xk)+g(xk)(x-xk),由于一阶泰勒展开仅仅能在比较小的邻域内近似的比较好，所以x就只能限定在xk的邻域内，在xk的邻域内找上面的这个线性函数的最小值。如果空间的范数是二范数(欧几里得距离)且限定x到xk的二范数||x-xk||2(距离)小于等于lr，则最小值点就是梯度法给出的xk-lrg(xk)。当更改空间的二范数定义为||x||2=xTHx 且限定x到xk的二范数||x-xk||2小于等于lr*gTH-1g 那么在这个范围内的线性函数(xk)+g(xk)(x-xk))的最小值点是xk-lrH-1(xk)g(xk)。
+将空间二范数定义为||x||2=xTHx 是有特殊意义的，这种范数比普通二范数更好
+，这相当于是按照函数局部二次导数将空间捏圆后x与xk的距离。当两个点在这种范数的意义下相差不多(距离近)，则这两个点处f的取值应该也相差不多。两个点之间在这种范数意义下的距离，能够衡量这两个点处的f的取值差别，
+牛顿法原来是对局部二次展开优化，并且不限范围在全局寻找最优点(因为展开成二次函数 二次函数是一定有最值点的所以可以直接全局找最值点 而一次函数是没有最值点的所以需要邻域的限制)。
+而梯度法则是对局部一次展开优化，但由于一次展开是线性的没有全局最优点，所以我们只能限定步长，在这种视角下牛顿法和梯度法像两个完全不同的方法无法在同一个框架内考虑。 但是像上面写的一样将牛顿法也改写为 对局部一次展开优化，并利用新的范数(捏圆的空间)来限定这个一定范围。将两种方法统一了，两种方法的区别在于二者使用的范数不同 目的都是局部一次展开优化。
+信赖域方法与近似点方法
+从随机初始点出发迭代求解 含约束的优化问题
+为了求解优化问题需要将f在一定领域中泰勒展开用低幂次的函数来近似当前函数(近似函数 一次 二次 方便求局部最小)。但是由于局部展开只能在较小的邻域内成立(梯度下降法 解法就需要将待优化函数f在邻域内一次展开 并去找这个一次近似函数的最小值 只有在x一定的邻域范围内 这个一次函数能够近似f范围大了一次函数就与f差别比较大了无法精确近似 从结果来看就是lr大了梯度下降法不能很好地找到最优值。
+**牛顿法也同理 牛顿法是将f在邻域内二次展开 当领域范围大了二次函数在大邻域内也是无法很好的近似f **)，过大找出的最优点效果不好，过小则需要迭代多次。这个邻域大小其实就是lr的大小。
+$ \underset{x}{arg\,min}\,f(x);s.t.||x-x_{k}||_{2}^{2}\leqslant lr $求f最小值 并对x的邻域加限制以实现展开的一次二次函数能在邻域内近似f(即梯度下降法和牛顿法能更快地收敛)
+...</p></div><footer class=entry-footer><span title=2022-02-03T00:00:00+00:00>创建于 2022-02-03</span>&nbsp;·&nbsp;<span title=2022-03-29T00:00:00+00:00>最后修改于 2022-03-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 4 信赖域方法与近似点方法" href=https://jler666.github.io/rl/wu9y3u/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>3 添加策略熵来引入随机探索，以及一些补充</h2></header><div class=entry-content><p>DQN采用的是-greedy的探索方法，1-的概率按照argmaxQ(s,a)选择a，而以的概率随机选择一个a。PG和DQN是完全不同的，它没有一个充当环境估计的Q网络来估计某个客观价值，而是要直接输出最佳策略。PG需要我们随机采样很多轨迹，才能求出$ J_{\theta^{'}}(\theta) =E_{(a^n_{t},s^n_{t})\sim\theta^{'} }[\frac{\pi_{\theta}(a^n_{t}|s^n_{t})}{\pi_{\theta^{'}}(a^n_{t}|s^n_{t})}\cdot A_{\theta^{'}}(s^n_{t},a^n_{t})] $这个期望的较准确的估计。我们希望采样出的轨迹更加多样，这样求出来的这个期望才稍微准确些。
+策略网络天然就具有探索的方式–它输出的本来就是的概率，我们可以根据这个策略概率分布去随机抽样a,则得到的涛自然就是具有多样性。但是这样的探索力度还是有所欠缺(在训练的后期很多$ \pi_{\theta}(a|s) $接近1，也就确定了策略不再探索)。
+熵函数定义为$ H(s)=\sum{_{a}}\pi_{\theta}(s,a)ln\;\pi_{\theta}(s,a) $，表示面对输入状态s时，策略网络输出的a的概率分布的熵。若a的概率分布越均匀，熵越大，越混乱，采取的动作越随机，它决策中(s,a)越丰富，决策出来的轨迹就越多样。设在策略$ \pi_{\theta}(s,a) $下状态s的分布为$ P_{\theta}(s) $。定义策略函数的熵为不同状态下熵的期望值: $ E_{\theta}[H(s)]=\int_{s}P_{\theta}(s)H(s)ds $
+向待优化函数中增加这一鼓励探索的熵函数
+$ J_{\theta^{'}}(\theta) =E_{(a^n_{t},s^n_{t})\sim\theta^{'} }[\frac{\pi_{\theta}(a^n_{t}|s^n_{t})}{\pi_{\theta^{'}}(a^n_{t}|s^n_{t})}\cdot A_{\theta^{'}}(s^n_{t},a^n_{t})]+\alpha E_{\theta}[H(s)] $我们希望J越大越好也隐含了希望策略的熵越大越好(探索的越多越好)，最大化总奖励的同时希望决策也同样具有多样性。α越高，就代表我们越重视多种不同的经验，越会努力去尝试让自己人生丰富多彩。
+无任何trick的PG程序里
+reward 中保存着G0,G1,..Gt,…GT
+for log_prob, reward in zip(policy.saved_log_probs, rewards): policy_loss.append(- log_prob * reward) # optimizer优化是将loss极小化 而我们是想得到最大奖励 所以将loss = -log_prob*reward将loss极小化就是将log_prob*reward极大化 optimizer.zero_grad() policy_loss = torch.stack(policy_loss).sum() # 求总loss policy_loss.backward() optimizer.step()# 优化 # 之前学的笔记上都是 dJ(θ)/dθ的公式 而我们现在要写的 policy_loss是J(θ)所以要反推一下!!!!!!! # d sum_loss/dθ = d Σ(当前eps的每一步)(- log_prob * reward)/dθ = Σ(当前eps的每一步)(- d log_prob/dθ * reward) # 等同于Σ(当前eps的每一步)(- d log pi(w)(a|s)/dθ * Gt) 连续动作PG
+...</p></div><footer class=entry-footer><span title=2022-02-02T00:00:00+00:00>创建于 2022-02-02</span>&nbsp;·&nbsp;<span title=2022-03-28T00:00:00+00:00>最后修改于 2022-03-28</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 3 添加策略熵来引入随机探索，以及一些补充" href=https://jler666.github.io/rl/ndi39k/></a></article><footer class=page-footer><nav class=pagination><a class=prev href=https://jler666.github.io/rl/>«&nbsp;Prev&nbsp;
+</a><a class=next href=https://jler666.github.io/rl/page/3/>Next&nbsp;&nbsp;»</a></nav></footer></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

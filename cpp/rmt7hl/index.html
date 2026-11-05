@@ -1,0 +1,312 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux多进程开发7 信号相关函数2 | CantBlog</title><meta name=keywords content><meta name=description content='sigprocmask函数使用
+sigprocmask用于修改内核的信号集 将自定义信号集设置到内核的信号集中，内核未决信号集无法修改(只能获取 通过sigpending)即这个函数用于修改阻塞信号集
+int sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
+int sigpending(sigset_t *set);
+/*
+    每个进程都有自己的PCB 都有自己的未决信号集和阻塞信号集
+    int sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
+    用于将自定义的信号集设置到内核中
+    how 如何对内核阻塞信号集进行处理
+       SIG_BLOCK 将用户设置的阻塞信号添加到内核中 即用户的信号集中设置为1的信号 在内核信号集中的对应位置也设置为1
+       用户信号集设置为0的部分 则内核信号集中对应位置保留不变 内核信号集 mask = mask | set
+
+       SIG_UNBLOCK 根据set将内核信号集的对应位置解除阻塞   即用户的信号集中设置为1的信号 在内核信号集中的对应位置设置为0(解除阻塞)
+       用户信号集设置为0的部分 则内核信号集中对应位置保留不变  内核信号集 mask = mask & (~set)
+       SIG_SETMASK  用自定义的信号集 替换内核中PCB的阻塞信号集
+       set 用户已经初始化好的用户自定义的信号集
+       oldset 传出参数 保存着上次(这次设置之前)内核中阻塞信号集的值
+    返回值 成功0 失败-1(有两种错误 分别会设置两种错误号
+                        EFAULT set或oldset指向了此进程虚拟地址外
+                        EINVAL how指定错误)
+    int sigpending(sigset_t *set);
+    用与获取内核中的 未决信号集 set为传出的未决信号集
+    返回值 0成功 -1失败
+\*/
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <signal.h> //sigprocmask
+#include <sys/time.h>
+int main()
+{
+    //编写一个程序 把所有的常规信号(1-31)的未决状态打印到屏幕
+    //设置某些信号阻塞再通过键盘产生这些信号 这样的话这些信号状态就是未决的
+    //设置2、3号信号阻塞  2、3号信号可由键盘直接产生
+    sigset_t set;
+    sigemptyset(&amp;set);
+    //将2、3号信号添加到信号集中
+    sigaddset(&amp;set, SIGINT);
+    sigaddset(&amp;set, SIGQUIT);
+    //修改内核中的阻塞信号集为set
+    sigprocmask(SIG_BLOCK, &amp;set, NULL);
+    sigset_t pending_set_now;
+    sigemptyset(&amp;pending_set_now);
+    while (1)
+    {
+        sigpending(&amp;pending_set_now);
+        //遍历输出1-31位未决信号集
+        for (int i = 0; i <= 31; i++)
+        {
+            if (sigismember(&amp;pending_set_now, i) == 1) //是未决信号
+            {
+                printf("1");
+            }
+            else if (sigismember(&amp;pending_set_now, i) == 0)
+            {
+                printf("0");
+            }
+            else
+            {
+                perror("sigismember:");
+                return -1;
+            }
+        }
+        printf("\n");
+        sleep(1);
+        //解除阻塞
+        // sigprocmask(SIG_UNBLOCK, &amp;set, NULL);
+    }
+    return 0;
+}
+sigaction信号捕捉函数'><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/rmt7hl/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/rmt7hl/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/rmt7hl/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux多进程开发7 信号相关函数2"><meta property="og:description" content='sigprocmask函数使用
+sigprocmask用于修改内核的信号集 将自定义信号集设置到内核的信号集中，内核未决信号集无法修改(只能获取 通过sigpending)即这个函数用于修改阻塞信号集
+int sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
+int sigpending(sigset_t *set);
+/* 每个进程都有自己的PCB 都有自己的未决信号集和阻塞信号集 int sigprocmask(int how,const sigset_t *set,sigset_t *oldset); 用于将自定义的信号集设置到内核中 how 如何对内核阻塞信号集进行处理 SIG_BLOCK 将用户设置的阻塞信号添加到内核中 即用户的信号集中设置为1的信号 在内核信号集中的对应位置也设置为1 用户信号集设置为0的部分 则内核信号集中对应位置保留不变 内核信号集 mask = mask | set SIG_UNBLOCK 根据set将内核信号集的对应位置解除阻塞 即用户的信号集中设置为1的信号 在内核信号集中的对应位置设置为0(解除阻塞) 用户信号集设置为0的部分 则内核信号集中对应位置保留不变 内核信号集 mask = mask & (~set) SIG_SETMASK 用自定义的信号集 替换内核中PCB的阻塞信号集 set 用户已经初始化好的用户自定义的信号集 oldset 传出参数 保存着上次(这次设置之前)内核中阻塞信号集的值 返回值 成功0 失败-1(有两种错误 分别会设置两种错误号 EFAULT set或oldset指向了此进程虚拟地址外 EINVAL how指定错误) int sigpending(sigset_t *set); 用与获取内核中的 未决信号集 set为传出的未决信号集 返回值 0成功 -1失败 \*/ #include <unistd.h> #include <stdio.h> #include <stdlib.h> #include <sys/types.h> #include <signal.h> //sigprocmask #include <sys/time.h> int main() { //编写一个程序 把所有的常规信号(1-31)的未决状态打印到屏幕 //设置某些信号阻塞再通过键盘产生这些信号 这样的话这些信号状态就是未决的 //设置2、3号信号阻塞 2、3号信号可由键盘直接产生 sigset_t set; sigemptyset(&amp;set); //将2、3号信号添加到信号集中 sigaddset(&amp;set, SIGINT); sigaddset(&amp;set, SIGQUIT); //修改内核中的阻塞信号集为set sigprocmask(SIG_BLOCK, &amp;set, NULL); sigset_t pending_set_now; sigemptyset(&amp;pending_set_now); while (1) { sigpending(&amp;pending_set_now); //遍历输出1-31位未决信号集 for (int i = 0; i <= 31; i++) { if (sigismember(&amp;pending_set_now, i) == 1) //是未决信号 { printf("1"); } else if (sigismember(&amp;pending_set_now, i) == 0) { printf("0"); } else { perror("sigismember:"); return -1; } } printf("\n"); sleep(1); //解除阻塞 // sigprocmask(SIG_UNBLOCK, &amp;set, NULL); } return 0; } sigaction信号捕捉函数'><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-16T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux多进程开发7 信号相关函数2"><meta name=twitter:description content='sigprocmask函数使用
+sigprocmask用于修改内核的信号集 将自定义信号集设置到内核的信号集中，内核未决信号集无法修改(只能获取 通过sigpending)即这个函数用于修改阻塞信号集
+int sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
+int sigpending(sigset_t *set);
+/* 每个进程都有自己的PCB 都有自己的未决信号集和阻塞信号集 int sigprocmask(int how,const sigset_t *set,sigset_t *oldset); 用于将自定义的信号集设置到内核中 how 如何对内核阻塞信号集进行处理 SIG_BLOCK 将用户设置的阻塞信号添加到内核中 即用户的信号集中设置为1的信号 在内核信号集中的对应位置也设置为1 用户信号集设置为0的部分 则内核信号集中对应位置保留不变 内核信号集 mask = mask | set SIG_UNBLOCK 根据set将内核信号集的对应位置解除阻塞 即用户的信号集中设置为1的信号 在内核信号集中的对应位置设置为0(解除阻塞) 用户信号集设置为0的部分 则内核信号集中对应位置保留不变 内核信号集 mask = mask & (~set) SIG_SETMASK 用自定义的信号集 替换内核中PCB的阻塞信号集 set 用户已经初始化好的用户自定义的信号集 oldset 传出参数 保存着上次(这次设置之前)内核中阻塞信号集的值 返回值 成功0 失败-1(有两种错误 分别会设置两种错误号 EFAULT set或oldset指向了此进程虚拟地址外 EINVAL how指定错误) int sigpending(sigset_t *set); 用与获取内核中的 未决信号集 set为传出的未决信号集 返回值 0成功 -1失败 \*/ #include <unistd.h> #include <stdio.h> #include <stdlib.h> #include <sys/types.h> #include <signal.h> //sigprocmask #include <sys/time.h> int main() { //编写一个程序 把所有的常规信号(1-31)的未决状态打印到屏幕 //设置某些信号阻塞再通过键盘产生这些信号 这样的话这些信号状态就是未决的 //设置2、3号信号阻塞 2、3号信号可由键盘直接产生 sigset_t set; sigemptyset(&amp;set); //将2、3号信号添加到信号集中 sigaddset(&amp;set, SIGINT); sigaddset(&amp;set, SIGQUIT); //修改内核中的阻塞信号集为set sigprocmask(SIG_BLOCK, &amp;set, NULL); sigset_t pending_set_now; sigemptyset(&amp;pending_set_now); while (1) { sigpending(&amp;pending_set_now); //遍历输出1-31位未决信号集 for (int i = 0; i <= 31; i++) { if (sigismember(&amp;pending_set_now, i) == 1) //是未决信号 { printf("1"); } else if (sigismember(&amp;pending_set_now, i) == 0) { printf("0"); } else { perror("sigismember:"); return -1; } } printf("\n"); sleep(1); //解除阻塞 // sigprocmask(SIG_UNBLOCK, &amp;set, NULL); } return 0; } sigaction信号捕捉函数'><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux多进程开发7 信号相关函数2","item":"https://jler666.github.io/cpp/rmt7hl/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux多进程开发7 信号相关函数2","name":"Linux多进程开发7 信号相关函数2","description":"sigprocmask函数使用\nsigprocmask用于修改内核的信号集 将自定义信号集设置到内核的信号集中，内核未决信号集无法修改(只能获取 通过sigpending)即这个函数用于修改阻塞信号集\nint sigprocmask(int how,const sigset_t *set,sigset_t *oldset);\nint sigpending(sigset_t *set);\n/* 每个进程都有自己的PCB 都有自己的未决信号集和阻塞信号集 int sigprocmask(int how,const sigset_t *set,sigset_t *oldset); 用于将自定义的信号集设置到内核中 how 如何对内核阻塞信号集进行处理 SIG_BLOCK 将用户设置的阻塞信号添加到内核中 即用户的信号集中设置为1的信号 在内核信号集中的对应位置也设置为1 用户信号集设置为0的部分 则内核信号集中对应位置保留不变 内核信号集 mask = mask | set SIG_UNBLOCK 根据set将内核信号集的对应位置解除阻塞 即用户的信号集中设置为1的信号 在内核信号集中的对应位置设置为0(解除阻塞) 用户信号集设置为0的部分 则内核信号集中对应位置保留不变 内核信号集 mask = mask \u0026amp; (~set) SIG_SETMASK 用自定义的信号集 替换内核中PCB的阻塞信号集 set 用户已经初始化好的用户自定义的信号集 oldset 传出参数 保存着上次(这次设置之前)内核中阻塞信号集的值 返回值 成功0 失败-1(有两种错误 分别会设置两种错误号 EFAULT set或oldset指向了此进程虚拟地址外 EINVAL how指定错误) int sigpending(sigset_t *set); 用与获取内核中的 未决信号集 set为传出的未决信号集 返回值 0成功 -1失败 \\*/ #include \u0026lt;unistd.h\u0026gt; #include \u0026lt;stdio.h\u0026gt; #include \u0026lt;stdlib.h\u0026gt; #include \u0026lt;sys/types.h\u0026gt; #include \u0026lt;signal.h\u0026gt; //sigprocmask #include \u0026lt;sys/time.h\u0026gt; int main() { //编写一个程序 把所有的常规信号(1-31)的未决状态打印到屏幕 //设置某些信号阻塞再通过键盘产生这些信号 这样的话这些信号状态就是未决的 //设置2、3号信号阻塞 2、3号信号可由键盘直接产生 sigset_t set; sigemptyset(\u0026amp;set); //将2、3号信号添加到信号集中 sigaddset(\u0026amp;set, SIGINT); sigaddset(\u0026amp;set, SIGQUIT); //修改内核中的阻塞信号集为set sigprocmask(SIG_BLOCK, \u0026amp;set, NULL); sigset_t pending_set_now; sigemptyset(\u0026amp;pending_set_now); while (1) { sigpending(\u0026amp;pending_set_now); //遍历输出1-31位未决信号集 for (int i = 0; i \u0026lt;= 31; i++) { if (sigismember(\u0026amp;pending_set_now, i) == 1) //是未决信号 { printf(\u0026#34;1\u0026#34;); } else if (sigismember(\u0026amp;pending_set_now, i) == 0) { printf(\u0026#34;0\u0026#34;); } else { perror(\u0026#34;sigismember:\u0026#34;); return -1; } } printf(\u0026#34;\\n\u0026#34;); sleep(1); //解除阻塞 // sigprocmask(SIG_UNBLOCK, \u0026amp;set, NULL); } return 0; } sigaction信号捕捉函数\n","keywords":[],"articleBody":"sigprocmask函数使用\nsigprocmask用于修改内核的信号集 将自定义信号集设置到内核的信号集中，内核未决信号集无法修改(只能获取 通过sigpending)即这个函数用于修改阻塞信号集\nint sigprocmask(int how,const sigset_t *set,sigset_t *oldset);\nint sigpending(sigset_t *set);\n/* 每个进程都有自己的PCB 都有自己的未决信号集和阻塞信号集 int sigprocmask(int how,const sigset_t *set,sigset_t *oldset); 用于将自定义的信号集设置到内核中 how 如何对内核阻塞信号集进行处理 SIG_BLOCK 将用户设置的阻塞信号添加到内核中 即用户的信号集中设置为1的信号 在内核信号集中的对应位置也设置为1 用户信号集设置为0的部分 则内核信号集中对应位置保留不变 内核信号集 mask = mask | set SIG_UNBLOCK 根据set将内核信号集的对应位置解除阻塞 即用户的信号集中设置为1的信号 在内核信号集中的对应位置设置为0(解除阻塞) 用户信号集设置为0的部分 则内核信号集中对应位置保留不变 内核信号集 mask = mask \u0026 (~set) SIG_SETMASK 用自定义的信号集 替换内核中PCB的阻塞信号集 set 用户已经初始化好的用户自定义的信号集 oldset 传出参数 保存着上次(这次设置之前)内核中阻塞信号集的值 返回值 成功0 失败-1(有两种错误 分别会设置两种错误号 EFAULT set或oldset指向了此进程虚拟地址外 EINVAL how指定错误) int sigpending(sigset_t *set); 用与获取内核中的 未决信号集 set为传出的未决信号集 返回值 0成功 -1失败 \\*/ #include #include #include #include #include //sigprocmask #include int main() { //编写一个程序 把所有的常规信号(1-31)的未决状态打印到屏幕 //设置某些信号阻塞再通过键盘产生这些信号 这样的话这些信号状态就是未决的 //设置2、3号信号阻塞 2、3号信号可由键盘直接产生 sigset_t set; sigemptyset(\u0026set); //将2、3号信号添加到信号集中 sigaddset(\u0026set, SIGINT); sigaddset(\u0026set, SIGQUIT); //修改内核中的阻塞信号集为set sigprocmask(SIG_BLOCK, \u0026set, NULL); sigset_t pending_set_now; sigemptyset(\u0026pending_set_now); while (1) { sigpending(\u0026pending_set_now); //遍历输出1-31位未决信号集 for (int i = 0; i \u003c= 31; i++) { if (sigismember(\u0026pending_set_now, i) == 1) //是未决信号 { printf(\"1\"); } else if (sigismember(\u0026pending_set_now, i) == 0) { printf(\"0\"); } else { perror(\"sigismember:\"); return -1; } } printf(\"\\n\"); sleep(1); //解除阻塞 // sigprocmask(SIG_UNBLOCK, \u0026set, NULL); } return 0; } sigaction信号捕捉函数\n前面讲的signal也是用于信号捕捉\n#include int sigaction(int signum, const struct sigaction *act,\nstruct sigaction *oldact);\n改变信号的处理动作\n/* #include int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact); 检查或改变信号的处理动作(捕获信号 并按我们规定的函数进行回调) signum 要捕捉信号的宏值(编号) act 对这个信号的处理动作 struct sigaction { void (*sa_handler)(int);//void ...(int)函数的指针 指向的是信号回调函数 void (*sa_sigaction)(int, siginfo_t *, void *); sa_sigaction则是另一个信号处理函数，它有三个参数，可以获得关于信号的更详细的信息。当 sa_flags 成员的值 包含了 SA_SIGINFO 标志时，系统将使用 sa_sigaction 函数作为信号处理函数，否则使用 sa_handler 作为信号处理 函数。在某些系统中，成员 sa_handler 与 sa_sigaction 被放在联合体中，因此使用时不要同时设置。 函数指针void ...(int, siginfo_t *, void *) 三个参数分别是sig 捕获的信号的编号，info siginfo_t包含了超详细的信号信息(太长了自己去man2看这个结构体) void * ucontext 指向ucontext_t类型的结构体 sigset_t sa_mask; //信号集类型sigset_t 临时阻塞信号集，在信号回调函数执行期间需要被阻塞的信号集，在回调执行完后就不阻塞了 int sa_flags; 指定信号的处理方式 可以为0表示 用sa_handler来回调处理信号 SA_NOCLDSTOP SA_NOCLDWAIT (since Linux 2.6) SA_NODEFER SA_ONSTACK SA_RESETHAND SA_RESTART SA_RESTORER SA_SIGINFO (since Linux 2.2) 用sa_sigaction来回调处理信号 void (*sa_restorer)(void);//已废弃 指定null }; oldact 上次对这个信号进行的处理动作，传出参数 可不使用传null 成功返回 0 失败返回-1 \\*/ #include #include #include #include #include #include void sig_handler(int num); int main() { //注册SIGALRM的信号的回调函数 struct sigaction act; act.sa_flags = 0; //表示使用sa_handler来进行函数回调 act.sa_handler = sig_handler; sigaction(SIGALRM, \u0026act, NULL); sigemptyset(\u0026act.sa_mask); //清空临时阻塞信号集表示 不回调时阻塞任何信号 struct itimerval new_value; new_value.it_interval.tv_sec = 2; //定时器周期时间 new_value.it_interval.tv_usec = 0; //虽然用不到微秒 但还是设置一下 否则是个随机值 负数的话 是tv_sec-|tv_usec| 正数的话是tv_sec+tv_usec new_value.it_value.tv_sec = 3; //过多长时间第一次启动定时器 new_value.it_value.tv_usec = 0; // //过3秒后启动定时器 定时器周期为2秒 setitimer(ITIMER_REAL, \u0026new_value, NULL); //不需要上次的定时器属性 所以old传的是null 非阻塞立即向下执行 while (1) ; //不断地 等待定时器触发回调函数 } void sig_handler(int num) { printf(\"捕获到的信号编号为：%d\\n\", num); //num=14 SIGALRM } 内核实现信号捕捉的过程\n| |\n| — |\n对于同一信号比如SIGALRM信号，在信号被回调捕获后未决信号集中SIGALRM信号对应的位置变为0，此时如果又有SIGALRM信号发出，未决信号集SIGALRM信号对应的位置变为1，如果上次的SIGALRM函数还未执行完成，则这个未决的SIGALRM信号会被阻塞直到上次SIGALRM回调执行完成后，后面的这次SIGALRM信号才有机会被回调函数处理。即在执行某一信号回调时，会自动阻塞同类型的信号。\n在回调函数中使用的是临时阻塞信号集sa_mask，在回调函数处理完回到主流程中又切换为内核的阻塞信号集。\n常规信号在递达之前产生多次只计一次，而实时信号在递达之前产生多次可以依次放在一个队列里。用户只能获取未决信号集值，无法改变其值。\n(1-31)信号集无法记录目前有多少个xxx信号未决或阻塞，只能知道目前有xxx信号未决或阻塞。—不支持排队 (33-64)支持排队能记录有几个同类型信号未决或阻塞，分别是哪些发出\nSIGCHILD信号\nSIGCHILD信号产生的条件\n子进程终止时\n子进程收到SIGSTOP信号 停止时\n子进程处在停止态，接受到SIGCONT后唤醒时\n以上三种条件都会给父进程发送SIGCHILD信号，父进程默认忽略该信号\n可利用SIGCHILD信号解决僵尸进程(子进程结束但父进程没有wait去回收子进程资源 导致子进程变为僵尸进程)的问题。wait是阻塞的所以最好wait不要写在父进程的主流程里，而是写在SIGCHILD信号的回调函数里。\n/* 使用SIGCHLD信号解决僵尸进程的问题 \\*/ #include #include #include #include #include #include #include void sig_handler(int num); int main() { //为了防止 回调函数还没注册成功 就已经有子进程死亡了 先阻塞SIGCHLD信号 sigset_t set; sigemptyset(\u0026set); sigaddset(\u0026set, SIGCHLD); sigprocmask(SIG_BLOCK, \u0026set, NULL); //创建一些子进程 pid_t pid; for (int i = 0; i \u003c 20; i++) //为当前进程创建20个子进程 { pid = fork(); if (pid == 0) //进这里的是子进程 不能再让子进程去创建孙子进程 { break; } else { ; } } if (pid \u003e 0) //父进程 { //捕捉子进程死亡时发送的SIGCHILD信号 //注册SIGCHLD的信号的回调函数 struct sigaction act; act.sa_flags = 0; //表示使用sa_handler来进行函数回调 act.sa_handler = sig_handler; sigaction(SIGCHLD, \u0026act, NULL); sigemptyset(\u0026act.sa_mask); //清空临时阻塞信号集表示 不回调时阻塞任何信号 //注册完回调函数后 解除SG的阻塞 sigprocmask(SIG_UNBLOCK, \u0026set, NULL); while (1) { printf(\"parent pid: %d\\n\", getpid()); sleep(2); //wait 一次回收一个子进程(阻塞) or waitpid 一次回收一个子进程(可设置非阻塞) //waitpid pid \u003c -1 等待所有子进程的group id = -pid //waitpid pid = -1等待所有子进程 pid = 0 等待所有与当前进程有一样group id的子进程 //waitpid pid \u003e 0 等待多有进程号为指定pid的进程 //waitpid 成功回收返回子进程的pid 若为非阻塞没回收但是还有子进程活着的时候返回0 子进程都死亡返回-1 } } else if (pid == 0) //子进程 { printf(\"child pid: %d\\n\", getpid()); } } void sig_handler(int num) { printf(\"捕获到的信号编号为：%d\\n\", num); //num=14 SIGALRM //回收子进程资源 if (num == SIGCHLD) { //wait(NULL); //回收子进程资源 //20个信号这样 并不能完全回收 //当多个信号连续到来会造成后面来的信号被忽略 //在执行相依信号的回调函数体时 那个信号是被阻塞的 //,所以当子进程死亡 发出多个SG信号 SG信号都是未决的 只有第一个信号 //(1-31)信号集无法记录目前有多少个xxx信号未决或阻塞， //只能知道目前有xxx信号未决或阻塞。---不支持排队 // 从开始注册信号到注册成功这段时间里，有n个SIGCHID信号产生的话， // 那么第一个产生的SIGCHID会抢先将未决位置为1，余下的n-1个SIGCHID被丢弃， // 然后当阻塞解除之后，信号处理函数发现这时候对应信号的未决位为1，继而执行函数处理该信号， // 处理函数中的while循环顺带将其他n-1子进程也一网打尽了，在这期间未决位的状态只经历了两次变化，即0-\u003e1-\u003e0 while (1) // 一次信号触发为了防止 有连续的SG信号到来 有的信号没看到 这里用个循环回收连续(很快)死亡的子进程的资源 { //死循环 快速地检查是否有子进程死亡 快速地回收 //回调函数 占用的是父进程的资源 相当于暂时中断 去处理这个信号 处理完回到父进程 //waitpid 和 SIGCHLD 没关系，即使是某个子进程对应的 SIGCHLD 丢失了， //只要父进程在任何一个时刻调用了 waitpid，那么这个进程还是可以被回收的 int ret = waitpid(-1, NULL, WNOHANG); //回收所有子进程资源 不阻塞 一次调用回收一个子进程资源 if (ret \u003e 0) //回收到了一个子进程 printf(\"child %d die\\n\", ret); else if (ret == 0) //还有子进程 在运行 break; //回到父进程 else if (ret == -1) //无子进程在运行 break; //回到父进程 } } } ","wordCount":"621","inLanguage":"en","datePublished":"2022-03-16T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/rmt7hl/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux多进程开发7 信号相关函数2</h1><div class=post-meta><span title=2022-03-16T00:00:00+00:00>创建于 2022-03-16</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>sigprocmask函数使用</strong></p><p>sigprocmask用于修改内核的信号集 将自定义信号集设置到内核的信号集中，内核未决信号集无法修改(只能获取 通过sigpending)即这个函数用于修改阻塞信号集</p><p>int sigprocmask(int how,const sigset_t *set,sigset_t *oldset);</p><p>int sigpending(sigset_t *set);</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    每个进程都有自己的PCB 都有自己的未决信号集和阻塞信号集
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    用于将自定义的信号集设置到内核中
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    how 如何对内核阻塞信号集进行处理
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       SIG_BLOCK 将用户设置的阻塞信号添加到内核中 即用户的信号集中设置为1的信号 在内核信号集中的对应位置也设置为1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       用户信号集设置为0的部分 则内核信号集中对应位置保留不变 内核信号集 mask = mask | set
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       SIG_UNBLOCK 根据set将内核信号集的对应位置解除阻塞   即用户的信号集中设置为1的信号 在内核信号集中的对应位置设置为0(解除阻塞)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       用户信号集设置为0的部分 则内核信号集中对应位置保留不变  内核信号集 mask = mask &amp; (~set)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       SIG_SETMASK  用自定义的信号集 替换内核中PCB的阻塞信号集
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       set 用户已经初始化好的用户自定义的信号集
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       oldset 传出参数 保存着上次(这次设置之前)内核中阻塞信号集的值
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    返回值 成功0 失败-1(有两种错误 分别会设置两种错误号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                        EFAULT set或oldset指向了此进程虚拟地址外
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                        EINVAL how指定错误)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int sigpending(sigset_t *set);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    用与获取内核中的 未决信号集 set为传出的未决信号集
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    返回值 0成功 -1失败
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;signal.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//sigprocmask
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/time.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//编写一个程序 把所有的常规信号(1-31)的未决状态打印到屏幕
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//设置某些信号阻塞再通过键盘产生这些信号 这样的话这些信号状态就是未决的
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//设置2、3号信号阻塞  2、3号信号可由键盘直接产生
+</span></span></span><span style=display:flex><span>    sigset_t set;
+</span></span><span style=display:flex><span>    sigemptyset(<span style=color:#f92672>&amp;</span>set);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//将2、3号信号添加到信号集中
+</span></span></span><span style=display:flex><span>    sigaddset(<span style=color:#f92672>&amp;</span>set, SIGINT);
+</span></span><span style=display:flex><span>    sigaddset(<span style=color:#f92672>&amp;</span>set, SIGQUIT);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//修改内核中的阻塞信号集为set
+</span></span></span><span style=display:flex><span>    sigprocmask(SIG_BLOCK, <span style=color:#f92672>&amp;</span>set, NULL);
+</span></span><span style=display:flex><span>    sigset_t pending_set_now;
+</span></span><span style=display:flex><span>    sigemptyset(<span style=color:#f92672>&amp;</span>pending_set_now);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        sigpending(<span style=color:#f92672>&amp;</span>pending_set_now);
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//遍历输出1-31位未决信号集
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;=</span> <span style=color:#ae81ff>31</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (sigismember(<span style=color:#f92672>&amp;</span>pending_set_now, i) <span style=color:#f92672>==</span> <span style=color:#ae81ff>1</span>) <span style=color:#75715e>//是未决信号
+</span></span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                printf(<span style=color:#e6db74>&#34;1&#34;</span>);
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (sigismember(<span style=color:#f92672>&amp;</span>pending_set_now, i) <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                printf(<span style=color:#e6db74>&#34;0&#34;</span>);
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                perror(<span style=color:#e6db74>&#34;sigismember:&#34;</span>);
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>        sleep(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//解除阻塞
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// sigprocmask(SIG_UNBLOCK, &amp;set, NULL);
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>sigaction信号捕捉函数</strong></p><p>前面讲的signal也是用于信号捕捉</p><p>#include &lt;signal.h></p><p>int sigaction(int signum, const struct sigaction *act,</p><p>struct sigaction *oldact);</p><p>改变信号的处理动作</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    #include &lt;signal.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int sigaction(int signum, const struct sigaction *act,
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                struct sigaction *oldact);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    检查或改变信号的处理动作(捕获信号 并按我们规定的函数进行回调)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    signum 要捕捉信号的宏值(编号)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    act 对这个信号的处理动作
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        struct sigaction {
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        void     (*sa_handler)(int);//void ...(int)函数的指针  指向的是信号回调函数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        void     (*sa_sigaction)(int, siginfo_t *, void *);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        sa_sigaction则是另一个信号处理函数，它有三个参数，可以获得关于信号的更详细的信息。当 sa_flags 成员的值
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        包含了 SA_SIGINFO 标志时，系统将使用 sa_sigaction 函数作为信号处理函数，否则使用 sa_handler 作为信号处理
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        函数。在某些系统中，成员 sa_handler 与 sa_sigaction 被放在联合体中，因此使用时不要同时设置。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        函数指针void ...(int, siginfo_t *, void *)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        三个参数分别是sig 捕获的信号的编号，info siginfo_t包含了超详细的信号信息(太长了自己去man2看这个结构体)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        void * ucontext 指向ucontext_t类型的结构体
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        sigset_t   sa_mask;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        //信号集类型sigset_t  临时阻塞信号集，在信号回调函数执行期间需要被阻塞的信号集，在回调执行完后就不阻塞了
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        int        sa_flags;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        指定信号的处理方式
+</span></span></span><span style=display:flex><span><span style=color:#75715e>           可以为0表示 用sa_handler来回调处理信号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>           SA_NOCLDSTOP
+</span></span></span><span style=display:flex><span><span style=color:#75715e>           SA_NOCLDWAIT (since Linux 2.6)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>           SA_NODEFER
+</span></span></span><span style=display:flex><span><span style=color:#75715e>           SA_ONSTACK
+</span></span></span><span style=display:flex><span><span style=color:#75715e>           SA_RESETHAND
+</span></span></span><span style=display:flex><span><span style=color:#75715e>           SA_RESTART
+</span></span></span><span style=display:flex><span><span style=color:#75715e>           SA_RESTORER
+</span></span></span><span style=display:flex><span><span style=color:#75715e>           SA_SIGINFO (since Linux 2.2) 用sa_sigaction来回调处理信号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        void     (*sa_restorer)(void);//已废弃 指定null
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    };
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    oldact 上次对这个信号进行的处理动作，传出参数 可不使用传null
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    成功返回 0 失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;signal.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/time.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>sig_handler</span>(<span style=color:#66d9ef>int</span> num);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//注册SIGALRM的信号的回调函数
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sigaction</span> act;
+</span></span><span style=display:flex><span>    act.sa_flags <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//表示使用sa_handler来进行函数回调
+</span></span></span><span style=display:flex><span>    act.sa_handler <span style=color:#f92672>=</span> sig_handler;
+</span></span><span style=display:flex><span>    sigaction(SIGALRM, <span style=color:#f92672>&amp;</span>act, NULL);
+</span></span><span style=display:flex><span>    sigemptyset(<span style=color:#f92672>&amp;</span>act.sa_mask); <span style=color:#75715e>//清空临时阻塞信号集表示 不回调时阻塞任何信号
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>itimerval</span> new_value;
+</span></span><span style=display:flex><span>    new_value.it_interval.tv_sec <span style=color:#f92672>=</span> <span style=color:#ae81ff>2</span>;  <span style=color:#75715e>//定时器周期时间
+</span></span></span><span style=display:flex><span>    new_value.it_interval.tv_usec <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//虽然用不到微秒 但还是设置一下 否则是个随机值 负数的话 是tv_sec-|tv_usec| 正数的话是tv_sec+tv_usec
+</span></span></span><span style=display:flex><span>    new_value.it_value.tv_sec <span style=color:#f92672>=</span> <span style=color:#ae81ff>3</span>;  <span style=color:#75715e>//过多长时间第一次启动定时器
+</span></span></span><span style=display:flex><span>    new_value.it_value.tv_usec <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//过3秒后启动定时器 定时器周期为2秒
+</span></span></span><span style=display:flex><span>    setitimer(ITIMER_REAL, <span style=color:#f92672>&amp;</span>new_value, NULL); <span style=color:#75715e>//不需要上次的定时器属性 所以old传的是null 非阻塞立即向下执行
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        ; <span style=color:#75715e>//不断地 等待定时器触发回调函数
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>sig_handler</span>(<span style=color:#66d9ef>int</span> num)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;捕获到的信号编号为：%d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, num); <span style=color:#75715e>//num=14 SIGALRM
+</span></span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>内核实现信号捕捉的过程</p><p>| <img alt=1647399775877-6f61dbf7-07d1-4be1-8cca-b40f6a23930f.png loading=lazy src=/images/kOUOtS-V7PwAfClB/1647399775877-6f61dbf7-07d1-4be1-8cca-b40f6a23930f-955133.png> |</p><p>| &mdash; |</p><p>对于同一信号比如SIGALRM信号，在信号被回调捕获后未决信号集中SIGALRM信号对应的位置变为0，此时如果又有SIGALRM信号发出，未决信号集SIGALRM信号对应的位置变为1，如果上次的SIGALRM函数还未执行完成，则这个未决的SIGALRM信号会被阻塞直到上次SIGALRM回调执行完成后，后面的这次SIGALRM信号才有机会被回调函数处理。<strong>即在执行某一信号回调时，会自动阻塞同类型的信号。</strong></p><p>在回调函数中使用的是临时阻塞信号集sa_mask，在回调函数处理完回到主流程中又切换为内核的阻塞信号集。</p><p>常规信号在递达之前产生多次只计一次，而实时信号在递达之前产生多次可以依次放在一个队列里。用户只能获取未决信号集值，无法改变其值。</p><p>(1-31)信号集无法记录目前有多少个xxx信号未决或阻塞，只能知道目前有xxx信号未决或阻塞。&mdash;不支持排队 (33-64)支持排队能记录有几个同类型信号未决或阻塞，分别是哪些发出</p><p><strong>SIGCHILD信号</strong></p><p>SIGCHILD信号产生的条件</p><p>子进程终止时</p><p>子进程收到SIGSTOP信号 停止时</p><p>子进程处在停止态，接受到SIGCONT后唤醒时</p><p>以上三种条件都会给父进程发送SIGCHILD信号，父进程默认忽略该信号</p><p>可利用SIGCHILD信号解决僵尸进程(子进程结束但父进程没有wait去回收子进程资源 导致子进程变为僵尸进程)的问题。wait是阻塞的所以最好wait不要写在父进程的主流程里，而是写在SIGCHILD信号的回调函数里。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    使用SIGCHLD信号解决僵尸进程的问题
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;signal.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/time.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/wait.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>sig_handler</span>(<span style=color:#66d9ef>int</span> num);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//为了防止 回调函数还没注册成功 就已经有子进程死亡了 先阻塞SIGCHLD信号
+</span></span></span><span style=display:flex><span>    sigset_t set;
+</span></span><span style=display:flex><span>    sigemptyset(<span style=color:#f92672>&amp;</span>set);
+</span></span><span style=display:flex><span>    sigaddset(<span style=color:#f92672>&amp;</span>set, SIGCHLD);
+</span></span><span style=display:flex><span>    sigprocmask(SIG_BLOCK, <span style=color:#f92672>&amp;</span>set, NULL);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建一些子进程
+</span></span></span><span style=display:flex><span>    pid_t pid;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>20</span>; i<span style=color:#f92672>++</span>) <span style=color:#75715e>//为当前进程创建20个子进程
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        pid <span style=color:#f92672>=</span> fork();
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//进这里的是子进程 不能再让子进程去创建孙子进程
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            ;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//父进程
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//捕捉子进程死亡时发送的SIGCHILD信号
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//注册SIGCHLD的信号的回调函数
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sigaction</span> act;
+</span></span><span style=display:flex><span>        act.sa_flags <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//表示使用sa_handler来进行函数回调
+</span></span></span><span style=display:flex><span>        act.sa_handler <span style=color:#f92672>=</span> sig_handler;
+</span></span><span style=display:flex><span>        sigaction(SIGCHLD, <span style=color:#f92672>&amp;</span>act, NULL);
+</span></span><span style=display:flex><span>        sigemptyset(<span style=color:#f92672>&amp;</span>act.sa_mask); <span style=color:#75715e>//清空临时阻塞信号集表示 不回调时阻塞任何信号
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//注册完回调函数后 解除SG的阻塞
+</span></span></span><span style=display:flex><span>        sigprocmask(SIG_UNBLOCK, <span style=color:#f92672>&amp;</span>set, NULL);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;parent pid: %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, getpid());
+</span></span><span style=display:flex><span>            sleep(<span style=color:#ae81ff>2</span>);
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//wait 一次回收一个子进程(阻塞) or waitpid 一次回收一个子进程(可设置非阻塞)
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//waitpid pid &lt; -1 等待所有子进程的group id = -pid
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//waitpid pid = -1等待所有子进程 pid = 0 等待所有与当前进程有一样group id的子进程
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//waitpid pid &gt; 0 等待多有进程号为指定pid的进程
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//waitpid 成功回收返回子进程的pid  若为非阻塞没回收但是还有子进程活着的时候返回0  子进程都死亡返回-1
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//子进程
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;child pid: %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, getpid());
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>sig_handler</span>(<span style=color:#66d9ef>int</span> num)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;捕获到的信号编号为：%d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, num); <span style=color:#75715e>//num=14 SIGALRM
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//回收子进程资源
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (num <span style=color:#f92672>==</span> SIGCHLD)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//wait(NULL); //回收子进程资源
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//20个信号这样 并不能完全回收
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//当多个信号连续到来会造成后面来的信号被忽略
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//在执行相依信号的回调函数体时 那个信号是被阻塞的
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//,所以当子进程死亡 发出多个SG信号 SG信号都是未决的 只有第一个信号
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//(1-31)信号集无法记录目前有多少个xxx信号未决或阻塞，
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//只能知道目前有xxx信号未决或阻塞。---不支持排队
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 从开始注册信号到注册成功这段时间里，有n个SIGCHID信号产生的话，
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 那么第一个产生的SIGCHID会抢先将未决位置为1，余下的n-1个SIGCHID被丢弃，
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 然后当阻塞解除之后，信号处理函数发现这时候对应信号的未决位为1，继而执行函数处理该信号，
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 处理函数中的while循环顺带将其他n-1子进程也一网打尽了，在这期间未决位的状态只经历了两次变化，即0-&gt;1-&gt;0
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>) <span style=color:#75715e>// 一次信号触发为了防止 有连续的SG信号到来 有的信号没看到 这里用个循环回收连续(很快)死亡的子进程的资源
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//死循环 快速地检查是否有子进程死亡 快速地回收
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//回调函数 占用的是父进程的资源 相当于暂时中断 去处理这个信号 处理完回到父进程
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//waitpid 和 SIGCHLD 没关系，即使是某个子进程对应的 SIGCHLD 丢失了，
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//只要父进程在任何一个时刻调用了 waitpid，那么这个进程还是可以被回收的
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> waitpid(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>, NULL, WNOHANG); <span style=color:#75715e>//回收所有子进程资源 不阻塞 一次调用回收一个子进程资源
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>)                          <span style=color:#75715e>//回收到了一个子进程
+</span></span></span><span style=display:flex><span>                printf(<span style=color:#e6db74>&#34;child %d die</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, ret);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)  <span style=color:#75715e>//还有子进程 在运行
+</span></span></span><span style=display:flex><span>                <span style=color:#66d9ef>break</span>;          <span style=color:#75715e>//回到父进程
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>) <span style=color:#75715e>//无子进程在运行
+</span></span></span><span style=display:flex><span>                <span style=color:#66d9ef>break</span>;          <span style=color:#75715e>//回到父进程
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

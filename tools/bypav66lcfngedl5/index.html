@@ -1,0 +1,106 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>编译 | CantBlog</title><meta name=keywords content><meta name=description content='切换SDK
+列举当前所有版本记录
+crpilot_sdk
+自动下载对应版本sdk
+crpilot_sdk 指定版本
+版本切换
+bash downloaded.sdk
+待开发工程放在src目录下
+crmake默认编译优化选项为-O2 -s (最大程度优化代码)，自己调试时可在Cmakelist中添加add_compile_options("-g -O0")  不优化代码。但注意在代码合并时移除此选项。
+
+使用ccache提高编译速度
+在build文件夹中创建ccache文件夹
+写进bash中
+export CCACHE_DIR=/cowarobot/build-docker/.ccache
+ccache -M 15G
+ccache -s 看cache保存目录
+ccache -C 清空ccache
+crmake configure -DCMAKE_BUILD_TYPE=Debug
+crmake -j6
+如果修改后的文件结构发生变化需要先
+crmake clean
+再重新configure
+有些头文件为了提供给其他人，在上次编译成功时会保存到build_docker/crpilot-x86_v2.4/include中，编译时也会检查这些头文件，当文件结构发生变化后，要将这里面的部分文件也删除，否则其中的文件依旧会变更前的内容。
+sdk版本变化后需要从以下链接先将最新sdk下载(养成好习惯将老sdk备份  备份和替换的都是指的buid-docker/crpilot-x86_v2.4中除3rd链接外的其他所有东西)
+http://crpilot.sandbox.cowarobot.cn/x86_v2.4/
+将下载好的内容直接替换
+在编译时新sdk可能缺一些lib文件，去老sdk中找直接替换
+/usr/bin/ld: 找不到 -lnode
+/usr/bin/ld: 找不到 -ltask
+同时可能要更新simultor，下载后直接解压即可，下次运行仿真时直接使用新的可执行文件即可
+当出现symbol lookup error错误时
+T230803 10:11:13:078118	channel_manager.cc:113 Register COWA.De/cowarobot/build-docker/crpilot-x86_v2.4/bin/crload: symbol lookup error: /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so: undefined symbol: _ZNK4COWA6common14ReferencePoint1xEv
+首先根据
+nm -g -D /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so | grep -B10 _ZNK4COWA6common14ReferencePoint1xEv
+输出：'><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/tools/bypav66lcfngedl5/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/tools/bypav66lcfngedl5/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/tools/bypav66lcfngedl5/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="编译"><meta property="og:description" content='切换SDK
+列举当前所有版本记录
+crpilot_sdk
+自动下载对应版本sdk
+crpilot_sdk 指定版本
+版本切换
+bash downloaded.sdk
+待开发工程放在src目录下
+crmake默认编译优化选项为-O2 -s (最大程度优化代码)，自己调试时可在Cmakelist中添加add_compile_options("-g -O0") 不优化代码。但注意在代码合并时移除此选项。
+使用ccache提高编译速度
+在build文件夹中创建ccache文件夹
+写进bash中
+export CCACHE_DIR=/cowarobot/build-docker/.ccache
+ccache -M 15G
+ccache -s 看cache保存目录
+ccache -C 清空ccache
+crmake configure -DCMAKE_BUILD_TYPE=Debug
+crmake -j6
+如果修改后的文件结构发生变化需要先
+crmake clean
+再重新configure
+有些头文件为了提供给其他人，在上次编译成功时会保存到build_docker/crpilot-x86_v2.4/include中，编译时也会检查这些头文件，当文件结构发生变化后，要将这里面的部分文件也删除，否则其中的文件依旧会变更前的内容。
+sdk版本变化后需要从以下链接先将最新sdk下载(养成好习惯将老sdk备份 备份和替换的都是指的buid-docker/crpilot-x86_v2.4中除3rd链接外的其他所有东西)
+http://crpilot.sandbox.cowarobot.cn/x86_v2.4/
+将下载好的内容直接替换
+在编译时新sdk可能缺一些lib文件，去老sdk中找直接替换
+/usr/bin/ld: 找不到 -lnode
+/usr/bin/ld: 找不到 -ltask
+同时可能要更新simultor，下载后直接解压即可，下次运行仿真时直接使用新的可执行文件即可
+当出现symbol lookup error错误时
+T230803 10:11:13:078118	channel_manager.cc:113 Register COWA.De/cowarobot/build-docker/crpilot-x86_v2.4/bin/crload: symbol lookup error: /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so: undefined symbol: _ZNK4COWA6common14ReferencePoint1xEv
+首先根据
+nm -g -D /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so | grep -B10 _ZNK4COWA6common14ReferencePoint1xEv 输出：'><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="tools"><meta property="article:published_time" content="2023-06-29T00:00:00+00:00"><meta property="article:modified_time" content="2023-08-28T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="编译"><meta name=twitter:description content='切换SDK
+列举当前所有版本记录
+crpilot_sdk
+自动下载对应版本sdk
+crpilot_sdk 指定版本
+版本切换
+bash downloaded.sdk
+待开发工程放在src目录下
+crmake默认编译优化选项为-O2 -s (最大程度优化代码)，自己调试时可在Cmakelist中添加add_compile_options("-g -O0") 不优化代码。但注意在代码合并时移除此选项。
+使用ccache提高编译速度
+在build文件夹中创建ccache文件夹
+写进bash中
+export CCACHE_DIR=/cowarobot/build-docker/.ccache
+ccache -M 15G
+ccache -s 看cache保存目录
+ccache -C 清空ccache
+crmake configure -DCMAKE_BUILD_TYPE=Debug
+crmake -j6
+如果修改后的文件结构发生变化需要先
+crmake clean
+再重新configure
+有些头文件为了提供给其他人，在上次编译成功时会保存到build_docker/crpilot-x86_v2.4/include中，编译时也会检查这些头文件，当文件结构发生变化后，要将这里面的部分文件也删除，否则其中的文件依旧会变更前的内容。
+sdk版本变化后需要从以下链接先将最新sdk下载(养成好习惯将老sdk备份 备份和替换的都是指的buid-docker/crpilot-x86_v2.4中除3rd链接外的其他所有东西)
+http://crpilot.sandbox.cowarobot.cn/x86_v2.4/
+将下载好的内容直接替换
+在编译时新sdk可能缺一些lib文件，去老sdk中找直接替换
+/usr/bin/ld: 找不到 -lnode
+/usr/bin/ld: 找不到 -ltask
+同时可能要更新simultor，下载后直接解压即可，下次运行仿真时直接使用新的可执行文件即可
+当出现symbol lookup error错误时
+T230803 10:11:13:078118	channel_manager.cc:113 Register COWA.De/cowarobot/build-docker/crpilot-x86_v2.4/bin/crload: symbol lookup error: /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so: undefined symbol: _ZNK4COWA6common14ReferencePoint1xEv
+首先根据
+nm -g -D /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so | grep -B10 _ZNK4COWA6common14ReferencePoint1xEv 输出：'><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"开发工具","item":"https://jler666.github.io/tools/"},{"@type":"ListItem","position":2,"name":"编译","item":"https://jler666.github.io/tools/bypav66lcfngedl5/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"编译","name":"编译","description":"切换SDK\n列举当前所有版本记录\ncrpilot_sdk\n自动下载对应版本sdk\ncrpilot_sdk 指定版本\n版本切换\nbash downloaded.sdk\n待开发工程放在src目录下\ncrmake默认编译优化选项为-O2 -s (最大程度优化代码)，自己调试时可在Cmakelist中添加add_compile_options(\u0026quot;-g -O0\u0026quot;) 不优化代码。但注意在代码合并时移除此选项。\n使用ccache提高编译速度\n在build文件夹中创建ccache文件夹\n写进bash中\nexport CCACHE_DIR=/cowarobot/build-docker/.ccache\nccache -M 15G\nccache -s 看cache保存目录\nccache -C 清空ccache\ncrmake configure -DCMAKE_BUILD_TYPE=Debug\ncrmake -j6\n如果修改后的文件结构发生变化需要先\ncrmake clean\n再重新configure\n有些头文件为了提供给其他人，在上次编译成功时会保存到build_docker/crpilot-x86_v2.4/include中，编译时也会检查这些头文件，当文件结构发生变化后，要将这里面的部分文件也删除，否则其中的文件依旧会变更前的内容。\nsdk版本变化后需要从以下链接先将最新sdk下载(养成好习惯将老sdk备份 备份和替换的都是指的buid-docker/crpilot-x86_v2.4中除3rd链接外的其他所有东西)\nhttp://crpilot.sandbox.cowarobot.cn/x86_v2.4/\n将下载好的内容直接替换\n在编译时新sdk可能缺一些lib文件，去老sdk中找直接替换\n/usr/bin/ld: 找不到 -lnode\n/usr/bin/ld: 找不到 -ltask\n同时可能要更新simultor，下载后直接解压即可，下次运行仿真时直接使用新的可执行文件即可\n当出现symbol lookup error错误时\nT230803 10:11:13:078118\tchannel_manager.cc:113 Register COWA.De/cowarobot/build-docker/crpilot-x86_v2.4/bin/crload: symbol lookup error: /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so: undefined symbol: _ZNK4COWA6common14ReferencePoint1xEv\n首先根据\nnm -g -D /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so | grep -B10 _ZNK4COWA6common14ReferencePoint1xEv 输出：\n","keywords":[],"articleBody":"切换SDK\n列举当前所有版本记录\ncrpilot_sdk\n自动下载对应版本sdk\ncrpilot_sdk 指定版本\n版本切换\nbash downloaded.sdk\n待开发工程放在src目录下\ncrmake默认编译优化选项为-O2 -s (最大程度优化代码)，自己调试时可在Cmakelist中添加add_compile_options(\"-g -O0\") 不优化代码。但注意在代码合并时移除此选项。\n使用ccache提高编译速度\n在build文件夹中创建ccache文件夹\n写进bash中\nexport CCACHE_DIR=/cowarobot/build-docker/.ccache\nccache -M 15G\nccache -s 看cache保存目录\nccache -C 清空ccache\ncrmake configure -DCMAKE_BUILD_TYPE=Debug\ncrmake -j6\n如果修改后的文件结构发生变化需要先\ncrmake clean\n再重新configure\n有些头文件为了提供给其他人，在上次编译成功时会保存到build_docker/crpilot-x86_v2.4/include中，编译时也会检查这些头文件，当文件结构发生变化后，要将这里面的部分文件也删除，否则其中的文件依旧会变更前的内容。\nsdk版本变化后需要从以下链接先将最新sdk下载(养成好习惯将老sdk备份 备份和替换的都是指的buid-docker/crpilot-x86_v2.4中除3rd链接外的其他所有东西)\nhttp://crpilot.sandbox.cowarobot.cn/x86_v2.4/\n将下载好的内容直接替换\n在编译时新sdk可能缺一些lib文件，去老sdk中找直接替换\n/usr/bin/ld: 找不到 -lnode\n/usr/bin/ld: 找不到 -ltask\n同时可能要更新simultor，下载后直接解压即可，下次运行仿真时直接使用新的可执行文件即可\n当出现symbol lookup error错误时\nT230803 10:11:13:078118\tchannel_manager.cc:113 Register COWA.De/cowarobot/build-docker/crpilot-x86_v2.4/bin/crload: symbol lookup error: /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so: undefined symbol: _ZNK4COWA6common14ReferencePoint1xEv\n首先根据\nnm -g -D /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so | grep -B10 _ZNK4COWA6common14ReferencePoint1xEv 输出：\n000000000028bba6 W _ZNK4COWA5hdmap9LanePoint4typeEv\n00000000002ee136 W _ZNK4COWA6common10SLBoundary14boundary_pointEv\n00000000002ee07c W _ZNK4COWA6common10SLBoundary5end_lEv\n00000000002ee054 W _ZNK4COWA6common10SLBoundary5end_sEv\n00000000002ee068 W _ZNK4COWA6common10SLBoundary7start_lEv\n00000000002ee042 W _ZNK4COWA6common10SLBoundary7start_sEv\nU _ZNK4COWA6common14ReferencePoint11DebugStringB5cxx11Ev\nU _ZNK4COWA6common14ReferencePoint11ToPathPointEd\nU _ZNK4COWA6common14ReferencePoint1lEv\nU _ZNK4COWA6common14ReferencePoint1sEv\nU _ZNK4COWA6common14ReferencePoint1xEv\nReferencePoint1xEv为00000000002ee042地址往下第6个\n找到\n-C为人可读，-A10为移动地址\nnm -g -C -D /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so | grep -A10 00000000002ee042\n根据出现的第一个地址，查询对应的函数\n00000000002ee042 W COWA::common::SLBoundary::start_s() const\nU COWA::common::ReferencePoint::DebugStringabi:cxx11 const\nU COWA::common::ReferencePoint::ToPathPoint(double) const\nU COWA::common::ReferencePoint::l() const\nU COWA::common::ReferencePoint::s() const\nU COWA::common::ReferencePoint::x() const\nU COWA::common::ReferencePoint::y() const\nU COWA::common::ReferencePoint::z() const\nU COWA::common::ReferencePoint::GetIdabi:cxx11 const\nU COWA::common::ReferencePoint::kappa() const\nU COWA::common::ReferencePoint::ToVec() const\nReferencePoint1xEv为00000000002ee042地址往下第6个为\nU COWA::common::ReferencePoint::x() const\n即此函数未定义\nc++filt插件可自动找到对应接口\n在CRMAKE中’‘‘处添加\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n并重新configure\n后在build-docker/build中会出现compile_commands.json，后可看到每个文件的实际编译指令，可看到其std版本\n","wordCount":"162","inLanguage":"en","datePublished":"2023-06-29T00:00:00Z","dateModified":"2023-08-28T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/tools/bypav66lcfngedl5/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">编译</h1><div class=post-meta><span title=2023-06-29T00:00:00+00:00>创建于 2023-06-29</span>&nbsp;·&nbsp;<span title=2023-08-28T00:00:00+00:00>最后修改于 2023-08-28</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p>切换SDK</p><p>列举当前所有版本记录</p><p>crpilot_sdk</p><p>自动下载对应版本sdk</p><p>crpilot_sdk 指定版本</p><p>版本切换</p><p>bash downloaded.sdk</p><p>待开发工程放在src目录下</p><p>crmake默认编译优化选项为-O2 -s (最大程度优化代码)，自己调试时可在Cmakelist中添加add_compile_options("-g -O0") 不优化代码。<strong>但注意在代码合并时移除此选项</strong>。</p><p><img alt=1688020710663-32f89add-ff46-43c2-a071-296307565c98.png loading=lazy src=/images/KLhMBeUcjAso4zHe/1688020710663-32f89add-ff46-43c2-a071-296307565c98-475885.png></p><p>使用ccache提高编译速度</p><p>在build文件夹中创建ccache文件夹</p><p>写进bash中</p><p>export CCACHE_DIR=/cowarobot/build-docker/.ccache</p><p>ccache -M 15G</p><p>ccache -s 看cache保存目录</p><p>ccache -C 清空ccache</p><p>crmake configure -DCMAKE_BUILD_TYPE=Debug</p><p>crmake -j6</p><p>如果修改后的文件结构发生变化需要先</p><p>crmake clean</p><p>再重新configure</p><p>有些头文件为了提供给其他人，在上次编译成功时会保存到build_docker/crpilot-x86_v2.4/include中，编译时也会检查这些头文件，当文件结构发生变化后，要将这里面的部分文件也删除，否则其中的文件依旧会变更前的内容。</p><p>sdk版本变化后需要从以下链接先将最新sdk下载(<strong>养成好习惯将老sdk备份 备份和替换的都是指的buid-docker/crpilot-x86_v2.4中除3rd链接外的其他所有东西</strong>)</p><p><a href=http://crpilot.sandbox.cowarobot.cn/x86_v2.4/>http://crpilot.sandbox.cowarobot.cn/x86_v2.4/</a></p><p>将下载好的内容直接替换</p><p>在编译时新sdk可能缺一些lib文件，去老sdk中找直接替换</p><p>/usr/bin/ld: 找不到 -lnode</p><p>/usr/bin/ld: 找不到 -ltask</p><p>同时可能要更新simultor，下载后直接解压即可，下次运行仿真时直接使用新的可执行文件即可</p><p>当出现symbol lookup error错误时</p><p>T230803 10:11:13:078118 channel_manager.cc:113 Register COWA.De/cowarobot/build-docker/crpilot-x86_v2.4/bin/crload: symbol lookup error: /cowarobot/build-docker/crpilot-x86_v2.4/lib/librouting.so: undefined symbol: _ZNK4COWA6common14ReferencePoint1xEv</p><p>首先根据</p><p>nm -g -D /cowarobot/build-docker/crpilot-x86_v2.4/lib/<a href=http://librouting.so>librouting.so</a> | grep -B10 _ZNK4COWA6common14ReferencePoint1xEv
+输出：</p><p>000000000028bba6 W _ZNK4COWA5hdmap9LanePoint4typeEv</p><p>00000000002ee136 W _ZNK4COWA6common10SLBoundary14boundary_pointEv</p><p>00000000002ee07c W _ZNK4COWA6common10SLBoundary5end_lEv</p><p>00000000002ee054 W _ZNK4COWA6common10SLBoundary5end_sEv</p><p>00000000002ee068 W _ZNK4COWA6common10SLBoundary7start_lEv</p><p>00000000002ee042 W _ZNK4COWA6common10SLBoundary7start_sEv</p><p>U _ZNK4COWA6common14ReferencePoint11DebugStringB5cxx11Ev</p><p>U _ZNK4COWA6common14ReferencePoint11ToPathPointEd</p><p>U _ZNK4COWA6common14ReferencePoint1lEv</p><p>U _ZNK4COWA6common14ReferencePoint1sEv</p><p>U _ZNK4COWA6common14ReferencePoint1xEv</p><p>ReferencePoint1xEv为00000000002ee042地址往下第6个</p><p>找到</p><p>-C为人可读，-A10为移动地址</p><p>nm -g -C -D /cowarobot/build-docker/crpilot-x86_v2.4/lib/<a href=http://librouting.so>librouting.so</a> | grep -A10 00000000002ee042</p><p>根据出现的第一个地址，查询对应的函数</p><p>00000000002ee042 W COWA::common::SLBoundary::start_s() const</p><p>U COWA::common::ReferencePoint::DebugString<a href>abi:cxx11</a> const</p><p>U COWA::common::ReferencePoint::ToPathPoint(double) const</p><p>U COWA::common::ReferencePoint::l() const</p><p>U COWA::common::ReferencePoint::s() const</p><p>U COWA::common::ReferencePoint::x() const</p><p>U COWA::common::ReferencePoint::y() const</p><p>U COWA::common::ReferencePoint::z() const</p><p>U COWA::common::ReferencePoint::GetId<a href>abi:cxx11</a> const</p><p>U COWA::common::ReferencePoint::kappa() const</p><p>U COWA::common::ReferencePoint::ToVec() const</p><p>ReferencePoint1xEv为00000000002ee042地址往下第6个为</p><p>U COWA::common::ReferencePoint::x() const</p><p>即此函数未定义</p><p>c++filt插件可自动找到对应接口</p><p>在CRMAKE中&rsquo;&lsquo;&lsquo;处添加</p><p>set(CMAKE_EXPORT_COMPILE_COMMANDS ON)</p><p>并重新configure</p><p>后在build-docker/build中会出现compile_commands.json，后可看到每个文件的实际编译指令，可看到其std版本</p></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

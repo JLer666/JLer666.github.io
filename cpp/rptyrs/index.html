@@ -1,0 +1,431 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux多进程开发4 有名管道介绍及使用 | CantBlog</title><meta name=keywords content><meta name=description content='有名管道介绍及使用
+匿名管道，由于没有名字，只能用于有亲缘关系的进程间通信(通过进程fork 拷贝内核区的文件描述符这个机制来实现)，为了克服这个缺点提出了有名管道(FIFO 先入先出)。
+有名管道(FIFO 也是由环形队列实现)不同于匿名管道之处在于它提供路径名与这个管道关联，以FIFO的文件形式存在于文件系统中，并且其打开方式与打开一个普通文件的方式是一样的，这样即使与FIFO的创建进程不存在亲缘关系的进程，只要可以访问该路径就可以彼此通过FIFO互相通信，因此通过FIFO不相关的进程也能交换数据。
+一旦打开了FIFO，就能在它上面使用与操作匿名管道和其他文件的系统调用一样的I/O系统调用(如read、write、close)，与管道一样，FIFO也有一个写入端和读取端，并且从管道中读取数据的顺序与写入的顺序是一样的(先入先出)。
+FIFO与pipe(匿名管道)的不同点：
+1 FIFO在文件中作为一个特殊文件存在，但是FIFO中的内容却存放在内存中(内核中的一个缓存区中)
+2 当使用FIFO的进程退出后，FIFO文件将继续保存在文件系统中以便以后使用
+3 FIFO有名字，不相关的进程可以通过打开有名管道进行通信
+有名管道的使用
+通过命令创建有名管道 mkfifo 管道名
+通过函数创建有名管道
+#include <sys/types.h>
+#include <sys/stat.h>
+int mkfifo(const char *pathname,mode_t mode);
+一旦使用mkfifo创建了一个FIFO就可以用open，常见的文件IO操作含糊书(close read wirte unlink删除)都可以用于FIFO文件
+FIFO严格遵顼先入先出，对管道及FIFO的读总是从开始处返回数据(单向队列队首数据)，对它们的写则把数据添加到末尾(向单向队列队尾添加数据)，FIFO文件不支持诸如lseek()等文件定位操作。
+一个为只读(写)而打开(open)的管道的进程会阻塞(阻塞在open),直到另一个进程以包含写(读)的方式打开相同的管道，才不会继续阻塞而是继续向下运行。
+1 当指向管道写端的fd都close了,此时有进程从管道读端读数据，若此时管道中有剩余数据则读取剩余数据，直到剩余数据被读完后，再次read返回0(读到文件末尾read是返回0的  读出现异常是返回-1的)。
+2 有指向管道写端的文件描述符没有关闭(管道写端的引用计数大于0)并且没有进程向管道写端写数据，此时将管道内数据读空后再继续读是出现read阻塞，直到有进程写了一些数据，read读到返回读到的字节数。
+3 所有的指向管道读端的文件描述符 都关闭了(管道读端的引用计数为0)，此时有进程向管道中写数据，那么该进程会收到一个信号SIGPIPE，通常这个信号会导致进程异常终止。
+4 有指向管道读端的文件描述符没有关闭(管道读端的引用计数大于0)并且没有进程从管道读端读数据，此时有进程向管道中写数据，在管道写满后，再次调用写write会导致写进程阻塞，直到管道中有空位write才不会阻塞并返回写入的字节数。
+//为了实验 还需要创建两个进程 我们通过两个.c文件来实现
+//这个.c为写fifo进程
+
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <stdlib.h>
+#include <unistd.h> //acess
+#include <fcntl.h>  //open
+#include <string.h> //strlen
+int main()
+{
+    //判断文件是否存在
+    int ret = access("f1", F_OK); //判断叫这个名字的文件是否存在
+    if (ret == 0)                 //return 0 表示管道以存在
+    {
+        ;
+    }
+    else
+    {
+        int ret = mkfifo("f1", 0664);
+        if (ret == -1)
+        {
+            perror("mkfifo:");
+            return -1;
+        }
+    }
+    //打开管道
+    // 这个进程只向管道里写数据 所以以只写的方式打开管道
+    int fd = open("f1", O_WRONLY); //以只写的形式打开 若没有其他线程以包含读的方式打开文件 这个open会一直阻塞在这!!!!
+    if (fd == -1)
+    {
+        perror("open:");
+        return -1;
+    }
+    //写数据
+    for (int i = 0; i < 100; i++)
+    {
+        char buf[1024];
+        sprintf(buf, "hello %d\n", i);  //向buf中写数据
+        printf("write data:%s\n", buf); //打印当前buf中的字符数据
+        write(fd, buf, stelen(buf));    //向管道中写数据
+        sleep(1);
+    }
+    //当所有读端都关闭 此时有写线程向管道中写数据会收到SIGPIPE信号导致进程直接异常退出
+    close(fd); //关闭管道
+    return 0;
+}
+
+//为了实验 还需要创建两个进程 我们通过两个.c文件来实现
+//这个.c为读fifo进程
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <stdlib.h>
+#include <unistd.h> //acess
+#include <fcntl.h>  //open
+int main()
+{
+    //判断文件是否存在
+
+    int ret = access("f1", F_OK); //判断叫这个名字的文件是否存在
+    if (ret == 0)                 //return 0 表示管道以存在
+    {
+        ;
+    }
+    else
+    {
+        int ret = mkfifo("f1", 0664);
+        if (ret == -1)
+        {
+            perror("mkfifo:");
+            return -1;
+        }
+    }
+    //打开管道
+    // 这个进程只读管道里的数据 所以以只读的方式打开管道
+    int fd = open("f1", O_RDONLY); //以只读的形式打开 若没有其他线程以包含写的方式打开文件 这个open会一直阻塞在这!!!!
+    if (fd == -1)
+    {
+        perror("open:");
+        return -1;
+    }
+    //读数据
+    while (1)
+    {
+        char buf[1024] = {0};
+        int len = read(fd, buf, sizeof(buf));
+        //当写端关闭 并且管道中无数据 返回len=0
+        if (len == 0)
+            break;
+        printf("recv buf %s\n", buf);
+        memset(buf, 0, sizeof(buf));
+    }
+    close(fd); //关闭管道
+    return 0;
+}
+有名管道实现简单版聊天功能'><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/rptyrs/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/rptyrs/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/rptyrs/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux多进程开发4 有名管道介绍及使用"><meta property="og:description" content='有名管道介绍及使用
+匿名管道，由于没有名字，只能用于有亲缘关系的进程间通信(通过进程fork 拷贝内核区的文件描述符这个机制来实现)，为了克服这个缺点提出了有名管道(FIFO 先入先出)。
+有名管道(FIFO 也是由环形队列实现)不同于匿名管道之处在于它提供路径名与这个管道关联，以FIFO的文件形式存在于文件系统中，并且其打开方式与打开一个普通文件的方式是一样的，这样即使与FIFO的创建进程不存在亲缘关系的进程，只要可以访问该路径就可以彼此通过FIFO互相通信，因此通过FIFO不相关的进程也能交换数据。
+一旦打开了FIFO，就能在它上面使用与操作匿名管道和其他文件的系统调用一样的I/O系统调用(如read、write、close)，与管道一样，FIFO也有一个写入端和读取端，并且从管道中读取数据的顺序与写入的顺序是一样的(先入先出)。
+FIFO与pipe(匿名管道)的不同点：
+1 FIFO在文件中作为一个特殊文件存在，但是FIFO中的内容却存放在内存中(内核中的一个缓存区中)
+2 当使用FIFO的进程退出后，FIFO文件将继续保存在文件系统中以便以后使用
+3 FIFO有名字，不相关的进程可以通过打开有名管道进行通信
+有名管道的使用
+通过命令创建有名管道 mkfifo 管道名
+通过函数创建有名管道
+#include <sys/types.h>
+#include <sys/stat.h>
+int mkfifo(const char *pathname,mode_t mode);
+一旦使用mkfifo创建了一个FIFO就可以用open，常见的文件IO操作含糊书(close read wirte unlink删除)都可以用于FIFO文件
+FIFO严格遵顼先入先出，对管道及FIFO的读总是从开始处返回数据(单向队列队首数据)，对它们的写则把数据添加到末尾(向单向队列队尾添加数据)，FIFO文件不支持诸如lseek()等文件定位操作。
+一个为只读(写)而打开(open)的管道的进程会阻塞(阻塞在open),直到另一个进程以包含写(读)的方式打开相同的管道，才不会继续阻塞而是继续向下运行。
+1 当指向管道写端的fd都close了,此时有进程从管道读端读数据，若此时管道中有剩余数据则读取剩余数据，直到剩余数据被读完后，再次read返回0(读到文件末尾read是返回0的 读出现异常是返回-1的)。
+2 有指向管道写端的文件描述符没有关闭(管道写端的引用计数大于0)并且没有进程向管道写端写数据，此时将管道内数据读空后再继续读是出现read阻塞，直到有进程写了一些数据，read读到返回读到的字节数。
+3 所有的指向管道读端的文件描述符 都关闭了(管道读端的引用计数为0)，此时有进程向管道中写数据，那么该进程会收到一个信号SIGPIPE，通常这个信号会导致进程异常终止。
+4 有指向管道读端的文件描述符没有关闭(管道读端的引用计数大于0)并且没有进程从管道读端读数据，此时有进程向管道中写数据，在管道写满后，再次调用写write会导致写进程阻塞，直到管道中有空位write才不会阻塞并返回写入的字节数。
+//为了实验 还需要创建两个进程 我们通过两个.c文件来实现 //这个.c为写fifo进程 #include <stdio.h> #include <sys/types.h> #include <sys/stat.h> #include <stdlib.h> #include <unistd.h> //acess #include <fcntl.h> //open #include <string.h> //strlen int main() { //判断文件是否存在 int ret = access("f1", F_OK); //判断叫这个名字的文件是否存在 if (ret == 0) //return 0 表示管道以存在 { ; } else { int ret = mkfifo("f1", 0664); if (ret == -1) { perror("mkfifo:"); return -1; } } //打开管道 // 这个进程只向管道里写数据 所以以只写的方式打开管道 int fd = open("f1", O_WRONLY); //以只写的形式打开 若没有其他线程以包含读的方式打开文件 这个open会一直阻塞在这!!!! if (fd == -1) { perror("open:"); return -1; } //写数据 for (int i = 0; i < 100; i++) { char buf[1024]; sprintf(buf, "hello %d\n", i); //向buf中写数据 printf("write data:%s\n", buf); //打印当前buf中的字符数据 write(fd, buf, stelen(buf)); //向管道中写数据 sleep(1); } //当所有读端都关闭 此时有写线程向管道中写数据会收到SIGPIPE信号导致进程直接异常退出 close(fd); //关闭管道 return 0; } //为了实验 还需要创建两个进程 我们通过两个.c文件来实现 //这个.c为读fifo进程 #include <stdio.h> #include <sys/types.h> #include <sys/stat.h> #include <stdlib.h> #include <unistd.h> //acess #include <fcntl.h> //open int main() { //判断文件是否存在 int ret = access("f1", F_OK); //判断叫这个名字的文件是否存在 if (ret == 0) //return 0 表示管道以存在 { ; } else { int ret = mkfifo("f1", 0664); if (ret == -1) { perror("mkfifo:"); return -1; } } //打开管道 // 这个进程只读管道里的数据 所以以只读的方式打开管道 int fd = open("f1", O_RDONLY); //以只读的形式打开 若没有其他线程以包含写的方式打开文件 这个open会一直阻塞在这!!!! if (fd == -1) { perror("open:"); return -1; } //读数据 while (1) { char buf[1024] = {0}; int len = read(fd, buf, sizeof(buf)); //当写端关闭 并且管道中无数据 返回len=0 if (len == 0) break; printf("recv buf %s\n", buf); memset(buf, 0, sizeof(buf)); } close(fd); //关闭管道 return 0; } 有名管道实现简单版聊天功能'><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-15T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux多进程开发4 有名管道介绍及使用"><meta name=twitter:description content='有名管道介绍及使用
+匿名管道，由于没有名字，只能用于有亲缘关系的进程间通信(通过进程fork 拷贝内核区的文件描述符这个机制来实现)，为了克服这个缺点提出了有名管道(FIFO 先入先出)。
+有名管道(FIFO 也是由环形队列实现)不同于匿名管道之处在于它提供路径名与这个管道关联，以FIFO的文件形式存在于文件系统中，并且其打开方式与打开一个普通文件的方式是一样的，这样即使与FIFO的创建进程不存在亲缘关系的进程，只要可以访问该路径就可以彼此通过FIFO互相通信，因此通过FIFO不相关的进程也能交换数据。
+一旦打开了FIFO，就能在它上面使用与操作匿名管道和其他文件的系统调用一样的I/O系统调用(如read、write、close)，与管道一样，FIFO也有一个写入端和读取端，并且从管道中读取数据的顺序与写入的顺序是一样的(先入先出)。
+FIFO与pipe(匿名管道)的不同点：
+1 FIFO在文件中作为一个特殊文件存在，但是FIFO中的内容却存放在内存中(内核中的一个缓存区中)
+2 当使用FIFO的进程退出后，FIFO文件将继续保存在文件系统中以便以后使用
+3 FIFO有名字，不相关的进程可以通过打开有名管道进行通信
+有名管道的使用
+通过命令创建有名管道 mkfifo 管道名
+通过函数创建有名管道
+#include <sys/types.h>
+#include <sys/stat.h>
+int mkfifo(const char *pathname,mode_t mode);
+一旦使用mkfifo创建了一个FIFO就可以用open，常见的文件IO操作含糊书(close read wirte unlink删除)都可以用于FIFO文件
+FIFO严格遵顼先入先出，对管道及FIFO的读总是从开始处返回数据(单向队列队首数据)，对它们的写则把数据添加到末尾(向单向队列队尾添加数据)，FIFO文件不支持诸如lseek()等文件定位操作。
+一个为只读(写)而打开(open)的管道的进程会阻塞(阻塞在open),直到另一个进程以包含写(读)的方式打开相同的管道，才不会继续阻塞而是继续向下运行。
+1 当指向管道写端的fd都close了,此时有进程从管道读端读数据，若此时管道中有剩余数据则读取剩余数据，直到剩余数据被读完后，再次read返回0(读到文件末尾read是返回0的 读出现异常是返回-1的)。
+2 有指向管道写端的文件描述符没有关闭(管道写端的引用计数大于0)并且没有进程向管道写端写数据，此时将管道内数据读空后再继续读是出现read阻塞，直到有进程写了一些数据，read读到返回读到的字节数。
+3 所有的指向管道读端的文件描述符 都关闭了(管道读端的引用计数为0)，此时有进程向管道中写数据，那么该进程会收到一个信号SIGPIPE，通常这个信号会导致进程异常终止。
+4 有指向管道读端的文件描述符没有关闭(管道读端的引用计数大于0)并且没有进程从管道读端读数据，此时有进程向管道中写数据，在管道写满后，再次调用写write会导致写进程阻塞，直到管道中有空位write才不会阻塞并返回写入的字节数。
+//为了实验 还需要创建两个进程 我们通过两个.c文件来实现 //这个.c为写fifo进程 #include <stdio.h> #include <sys/types.h> #include <sys/stat.h> #include <stdlib.h> #include <unistd.h> //acess #include <fcntl.h> //open #include <string.h> //strlen int main() { //判断文件是否存在 int ret = access("f1", F_OK); //判断叫这个名字的文件是否存在 if (ret == 0) //return 0 表示管道以存在 { ; } else { int ret = mkfifo("f1", 0664); if (ret == -1) { perror("mkfifo:"); return -1; } } //打开管道 // 这个进程只向管道里写数据 所以以只写的方式打开管道 int fd = open("f1", O_WRONLY); //以只写的形式打开 若没有其他线程以包含读的方式打开文件 这个open会一直阻塞在这!!!! if (fd == -1) { perror("open:"); return -1; } //写数据 for (int i = 0; i < 100; i++) { char buf[1024]; sprintf(buf, "hello %d\n", i); //向buf中写数据 printf("write data:%s\n", buf); //打印当前buf中的字符数据 write(fd, buf, stelen(buf)); //向管道中写数据 sleep(1); } //当所有读端都关闭 此时有写线程向管道中写数据会收到SIGPIPE信号导致进程直接异常退出 close(fd); //关闭管道 return 0; } //为了实验 还需要创建两个进程 我们通过两个.c文件来实现 //这个.c为读fifo进程 #include <stdio.h> #include <sys/types.h> #include <sys/stat.h> #include <stdlib.h> #include <unistd.h> //acess #include <fcntl.h> //open int main() { //判断文件是否存在 int ret = access("f1", F_OK); //判断叫这个名字的文件是否存在 if (ret == 0) //return 0 表示管道以存在 { ; } else { int ret = mkfifo("f1", 0664); if (ret == -1) { perror("mkfifo:"); return -1; } } //打开管道 // 这个进程只读管道里的数据 所以以只读的方式打开管道 int fd = open("f1", O_RDONLY); //以只读的形式打开 若没有其他线程以包含写的方式打开文件 这个open会一直阻塞在这!!!! if (fd == -1) { perror("open:"); return -1; } //读数据 while (1) { char buf[1024] = {0}; int len = read(fd, buf, sizeof(buf)); //当写端关闭 并且管道中无数据 返回len=0 if (len == 0) break; printf("recv buf %s\n", buf); memset(buf, 0, sizeof(buf)); } close(fd); //关闭管道 return 0; } 有名管道实现简单版聊天功能'><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux多进程开发4 有名管道介绍及使用","item":"https://jler666.github.io/cpp/rptyrs/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux多进程开发4 有名管道介绍及使用","name":"Linux多进程开发4 有名管道介绍及使用","description":"有名管道介绍及使用\n匿名管道，由于没有名字，只能用于有亲缘关系的进程间通信(通过进程fork 拷贝内核区的文件描述符这个机制来实现)，为了克服这个缺点提出了有名管道(FIFO 先入先出)。\n有名管道(FIFO 也是由环形队列实现)不同于匿名管道之处在于它提供路径名与这个管道关联，以FIFO的文件形式存在于文件系统中，并且其打开方式与打开一个普通文件的方式是一样的，这样即使与FIFO的创建进程不存在亲缘关系的进程，只要可以访问该路径就可以彼此通过FIFO互相通信，因此通过FIFO不相关的进程也能交换数据。\n一旦打开了FIFO，就能在它上面使用与操作匿名管道和其他文件的系统调用一样的I/O系统调用(如read、write、close)，与管道一样，FIFO也有一个写入端和读取端，并且从管道中读取数据的顺序与写入的顺序是一样的(先入先出)。\nFIFO与pipe(匿名管道)的不同点：\n1 FIFO在文件中作为一个特殊文件存在，但是FIFO中的内容却存放在内存中(内核中的一个缓存区中)\n2 当使用FIFO的进程退出后，FIFO文件将继续保存在文件系统中以便以后使用\n3 FIFO有名字，不相关的进程可以通过打开有名管道进行通信\n有名管道的使用\n通过命令创建有名管道 mkfifo 管道名\n通过函数创建有名管道\n#include \u0026lt;sys/types.h\u0026gt;\n#include \u0026lt;sys/stat.h\u0026gt;\nint mkfifo(const char *pathname,mode_t mode);\n一旦使用mkfifo创建了一个FIFO就可以用open，常见的文件IO操作含糊书(close read wirte unlink删除)都可以用于FIFO文件\nFIFO严格遵顼先入先出，对管道及FIFO的读总是从开始处返回数据(单向队列队首数据)，对它们的写则把数据添加到末尾(向单向队列队尾添加数据)，FIFO文件不支持诸如lseek()等文件定位操作。\n一个为只读(写)而打开(open)的管道的进程会阻塞(阻塞在open),直到另一个进程以包含写(读)的方式打开相同的管道，才不会继续阻塞而是继续向下运行。\n1 当指向管道写端的fd都close了,此时有进程从管道读端读数据，若此时管道中有剩余数据则读取剩余数据，直到剩余数据被读完后，再次read返回0(读到文件末尾read是返回0的 读出现异常是返回-1的)。\n2 有指向管道写端的文件描述符没有关闭(管道写端的引用计数大于0)并且没有进程向管道写端写数据，此时将管道内数据读空后再继续读是出现read阻塞，直到有进程写了一些数据，read读到返回读到的字节数。\n3 所有的指向管道读端的文件描述符 都关闭了(管道读端的引用计数为0)，此时有进程向管道中写数据，那么该进程会收到一个信号SIGPIPE，通常这个信号会导致进程异常终止。\n4 有指向管道读端的文件描述符没有关闭(管道读端的引用计数大于0)并且没有进程从管道读端读数据，此时有进程向管道中写数据，在管道写满后，再次调用写write会导致写进程阻塞，直到管道中有空位write才不会阻塞并返回写入的字节数。\n//为了实验 还需要创建两个进程 我们通过两个.c文件来实现 //这个.c为写fifo进程 #include \u0026lt;stdio.h\u0026gt; #include \u0026lt;sys/types.h\u0026gt; #include \u0026lt;sys/stat.h\u0026gt; #include \u0026lt;stdlib.h\u0026gt; #include \u0026lt;unistd.h\u0026gt; //acess #include \u0026lt;fcntl.h\u0026gt; //open #include \u0026lt;string.h\u0026gt; //strlen int main() { //判断文件是否存在 int ret = access(\u0026#34;f1\u0026#34;, F_OK); //判断叫这个名字的文件是否存在 if (ret == 0) //return 0 表示管道以存在 { ; } else { int ret = mkfifo(\u0026#34;f1\u0026#34;, 0664); if (ret == -1) { perror(\u0026#34;mkfifo:\u0026#34;); return -1; } } //打开管道 // 这个进程只向管道里写数据 所以以只写的方式打开管道 int fd = open(\u0026#34;f1\u0026#34;, O_WRONLY); //以只写的形式打开 若没有其他线程以包含读的方式打开文件 这个open会一直阻塞在这!!!! if (fd == -1) { perror(\u0026#34;open:\u0026#34;); return -1; } //写数据 for (int i = 0; i \u0026lt; 100; i++) { char buf[1024]; sprintf(buf, \u0026#34;hello %d\\n\u0026#34;, i); //向buf中写数据 printf(\u0026#34;write data:%s\\n\u0026#34;, buf); //打印当前buf中的字符数据 write(fd, buf, stelen(buf)); //向管道中写数据 sleep(1); } //当所有读端都关闭 此时有写线程向管道中写数据会收到SIGPIPE信号导致进程直接异常退出 close(fd); //关闭管道 return 0; } //为了实验 还需要创建两个进程 我们通过两个.c文件来实现 //这个.c为读fifo进程 #include \u0026lt;stdio.h\u0026gt; #include \u0026lt;sys/types.h\u0026gt; #include \u0026lt;sys/stat.h\u0026gt; #include \u0026lt;stdlib.h\u0026gt; #include \u0026lt;unistd.h\u0026gt; //acess #include \u0026lt;fcntl.h\u0026gt; //open int main() { //判断文件是否存在 int ret = access(\u0026#34;f1\u0026#34;, F_OK); //判断叫这个名字的文件是否存在 if (ret == 0) //return 0 表示管道以存在 { ; } else { int ret = mkfifo(\u0026#34;f1\u0026#34;, 0664); if (ret == -1) { perror(\u0026#34;mkfifo:\u0026#34;); return -1; } } //打开管道 // 这个进程只读管道里的数据 所以以只读的方式打开管道 int fd = open(\u0026#34;f1\u0026#34;, O_RDONLY); //以只读的形式打开 若没有其他线程以包含写的方式打开文件 这个open会一直阻塞在这!!!! if (fd == -1) { perror(\u0026#34;open:\u0026#34;); return -1; } //读数据 while (1) { char buf[1024] = {0}; int len = read(fd, buf, sizeof(buf)); //当写端关闭 并且管道中无数据 返回len=0 if (len == 0) break; printf(\u0026#34;recv buf %s\\n\u0026#34;, buf); memset(buf, 0, sizeof(buf)); } close(fd); //关闭管道 return 0; } 有名管道实现简单版聊天功能\n","keywords":[],"articleBody":"有名管道介绍及使用\n匿名管道，由于没有名字，只能用于有亲缘关系的进程间通信(通过进程fork 拷贝内核区的文件描述符这个机制来实现)，为了克服这个缺点提出了有名管道(FIFO 先入先出)。\n有名管道(FIFO 也是由环形队列实现)不同于匿名管道之处在于它提供路径名与这个管道关联，以FIFO的文件形式存在于文件系统中，并且其打开方式与打开一个普通文件的方式是一样的，这样即使与FIFO的创建进程不存在亲缘关系的进程，只要可以访问该路径就可以彼此通过FIFO互相通信，因此通过FIFO不相关的进程也能交换数据。\n一旦打开了FIFO，就能在它上面使用与操作匿名管道和其他文件的系统调用一样的I/O系统调用(如read、write、close)，与管道一样，FIFO也有一个写入端和读取端，并且从管道中读取数据的顺序与写入的顺序是一样的(先入先出)。\nFIFO与pipe(匿名管道)的不同点：\n1 FIFO在文件中作为一个特殊文件存在，但是FIFO中的内容却存放在内存中(内核中的一个缓存区中)\n2 当使用FIFO的进程退出后，FIFO文件将继续保存在文件系统中以便以后使用\n3 FIFO有名字，不相关的进程可以通过打开有名管道进行通信\n有名管道的使用\n通过命令创建有名管道 mkfifo 管道名\n通过函数创建有名管道\n#include #include int mkfifo(const char *pathname,mode_t mode);\n一旦使用mkfifo创建了一个FIFO就可以用open，常见的文件IO操作含糊书(close read wirte unlink删除)都可以用于FIFO文件\nFIFO严格遵顼先入先出，对管道及FIFO的读总是从开始处返回数据(单向队列队首数据)，对它们的写则把数据添加到末尾(向单向队列队尾添加数据)，FIFO文件不支持诸如lseek()等文件定位操作。\n一个为只读(写)而打开(open)的管道的进程会阻塞(阻塞在open),直到另一个进程以包含写(读)的方式打开相同的管道，才不会继续阻塞而是继续向下运行。\n1 当指向管道写端的fd都close了,此时有进程从管道读端读数据，若此时管道中有剩余数据则读取剩余数据，直到剩余数据被读完后，再次read返回0(读到文件末尾read是返回0的 读出现异常是返回-1的)。\n2 有指向管道写端的文件描述符没有关闭(管道写端的引用计数大于0)并且没有进程向管道写端写数据，此时将管道内数据读空后再继续读是出现read阻塞，直到有进程写了一些数据，read读到返回读到的字节数。\n3 所有的指向管道读端的文件描述符 都关闭了(管道读端的引用计数为0)，此时有进程向管道中写数据，那么该进程会收到一个信号SIGPIPE，通常这个信号会导致进程异常终止。\n4 有指向管道读端的文件描述符没有关闭(管道读端的引用计数大于0)并且没有进程从管道读端读数据，此时有进程向管道中写数据，在管道写满后，再次调用写write会导致写进程阻塞，直到管道中有空位write才不会阻塞并返回写入的字节数。\n//为了实验 还需要创建两个进程 我们通过两个.c文件来实现 //这个.c为写fifo进程 #include #include #include #include #include //acess #include //open #include //strlen int main() { //判断文件是否存在 int ret = access(\"f1\", F_OK); //判断叫这个名字的文件是否存在 if (ret == 0) //return 0 表示管道以存在 { ; } else { int ret = mkfifo(\"f1\", 0664); if (ret == -1) { perror(\"mkfifo:\"); return -1; } } //打开管道 // 这个进程只向管道里写数据 所以以只写的方式打开管道 int fd = open(\"f1\", O_WRONLY); //以只写的形式打开 若没有其他线程以包含读的方式打开文件 这个open会一直阻塞在这!!!! if (fd == -1) { perror(\"open:\"); return -1; } //写数据 for (int i = 0; i \u003c 100; i++) { char buf[1024]; sprintf(buf, \"hello %d\\n\", i); //向buf中写数据 printf(\"write data:%s\\n\", buf); //打印当前buf中的字符数据 write(fd, buf, stelen(buf)); //向管道中写数据 sleep(1); } //当所有读端都关闭 此时有写线程向管道中写数据会收到SIGPIPE信号导致进程直接异常退出 close(fd); //关闭管道 return 0; } //为了实验 还需要创建两个进程 我们通过两个.c文件来实现 //这个.c为读fifo进程 #include #include #include #include #include //acess #include //open int main() { //判断文件是否存在 int ret = access(\"f1\", F_OK); //判断叫这个名字的文件是否存在 if (ret == 0) //return 0 表示管道以存在 { ; } else { int ret = mkfifo(\"f1\", 0664); if (ret == -1) { perror(\"mkfifo:\"); return -1; } } //打开管道 // 这个进程只读管道里的数据 所以以只读的方式打开管道 int fd = open(\"f1\", O_RDONLY); //以只读的形式打开 若没有其他线程以包含写的方式打开文件 这个open会一直阻塞在这!!!! if (fd == -1) { perror(\"open:\"); return -1; } //读数据 while (1) { char buf[1024] = {0}; int len = read(fd, buf, sizeof(buf)); //当写端关闭 并且管道中无数据 返回len=0 if (len == 0) break; printf(\"recv buf %s\\n\", buf); memset(buf, 0, sizeof(buf)); } close(fd); //关闭管道 return 0; } 有名管道实现简单版聊天功能\nA进程先给B发，B收到后再给A发，A收到后。。。就这么交替地进行\n一个管道只能单向通信，要实现相互的收发需要用两个管道实现。\n进程A 1 以只写方式打开fifo1 以只读的方式打开fifo2 2循环读写数据\nwhile(1){ 获取键盘录入的数据不用scanf(遇到换行就结束)而使用fgets; 并将录入的数据写管道1; 读管道2;\n}\n进程B 1 以只读方式打开fifo1 以只写的方式打开fifo2 2循环读写数据\nwhile(1){ 读管道1;\n获取键盘录入的数据不用scanf(遇到换行就结束)而使用fgets; 并将录入的数据写管道2; }\n要实现有名管道的同时读写 需要fork出子进程 父进程open fifo1的读端 进行读\n子进程 open fifo2的写端 进行写\nA\n#include #include #include #include #include //acess #include //open #include //open int main() { //判断有名管道文件是否存在 //存在则不再创建 不存在则创建 int ret = access(\"fifo1\", F_OK); //判断叫这个名字的文件是否存在 if (ret == 0) //return 0 表示管道以存在 { ; } else //-1 { int ret = mkfifo(\"f1\", 0664); if (ret == -1) { perror(\"mkfifo:\"); return -1; } } int ret = access(\"fifo2\", F_OK); //判断叫这个名字的文件是否存在 if (ret == 0) //return 0 表示管道以存在 { ; } else //-1 { int ret = mkfifo(\"f1\", 0664); if (ret == -1) { perror(\"mkfifo:\"); return -1; } } // 以只写的方式打开管道fifo1 int fdw = open(\"fifo1\", O_WRONLY); if (fdw == -1) { perror(\"open FIFO1 WRITE:\"); return -1; } //以只读的方式打开管道fifo2 int fdr = open(\"fifo2\", O_RDONLY); if (fdr == -1) { perror(\"open FIFO2 READ:\"); return -1; } char buf[128]; //循环写读数据 while (1) { //写数据 写fifo1 memset(buf, 0, sizeof(buf)); fgets(buf, sizeof(buf), stdin); //从屏幕的stdin标准输入(标准输入也有缓冲区) 获取128个字节并装到buf里 //将从标准输入得到的数据写到fifo里 int ret = write(fdw, buf, strlen(buf)); if (ret == -1) { perror(\"write:\"); return -1; } //读数据 读fifo2 memset(buf, 0, sizeof(buf)); int len = read(fdr, buf, strlen(buf)); if (len \u003c= 0) { //读出错 -1 读到末尾(或fifo2的写端已经关闭了 并且管道内容被读完了)返回0 perror(\"read:\"); return -1; } printf(\"buf:%s\\n\", buf); } close(fdw); close(fdr); return 0; } B\n#include #include #include #include #include //acess #include //open #include //open int main() { //判断有名管道文件是否存在 //存在则不再创建 不存在则创建 int ret = access(\"fifo1\", F_OK); //判断叫这个名字的文件是否存在 if (ret == 0) //return 0 表示管道以存在 { ; } else //-1 { int ret = mkfifo(\"f1\", 0664); if (ret == -1) { perror(\"mkfifo:\"); return -1; } } int ret = access(\"fifo2\", F_OK); //判断叫这个名字的文件是否存在 if (ret == 0) //return 0 表示管道以存在 { ; } else //-1 { int ret = mkfifo(\"f1\", 0664); if (ret == -1) { perror(\"mkfifo:\"); return -1; } } // 以只读的方式打开管道fifo1 int fdr = open(\"fifo1\", O_RDONLY); if (fdr == -1) { perror(\"open FIFO1 READ:\"); return -1; } //以只写的方式打开管道fifo2 int fdw = open(\"fifo1\", O_WRONLY); if (fdw == -1) { perror(\"open FIFO2 WRITE:\"); return -1; } char buf[128]; //循环读写数据 while (1) { //读数据 读fifo1 memset(buf, 0, sizeof(buf)); int len = read(fdr, buf, strlen(buf)); if (len \u003c= 0) { //读出错 -1 读到末尾(或fifo2的写端已经关闭了 并且管道内容被读完了)返回0 perror(\"read:\"); return -1; } printf(\"buf:%s\\n\", buf); //写数据 写fifo2 memset(buf, 0, sizeof(buf)); fgets(buf, sizeof(buf), stdin); //从屏幕的stdin标准输入(标准输入也有缓冲区) 获取128个字节并装到buf里 //将从标准输入得到的数据写到fifo里 int ret = write(fdw, buf, strlen(buf)); if (ret == -1) { perror(\"write:\"); return -1; } } close(fdw); close(fdr); return 0; } ","wordCount":"683","inLanguage":"en","datePublished":"2022-03-15T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/rptyrs/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux多进程开发4 有名管道介绍及使用</h1><div class=post-meta><span title=2022-03-15T00:00:00+00:00>创建于 2022-03-15</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>有名管道介绍及使用</strong></p><p>匿名管道，由于没有名字，只能用于有亲缘关系的进程间通信(通过进程fork 拷贝内核区的文件描述符这个机制来实现)，为了克服这个缺点提出了有名管道(FIFO 先入先出)。</p><p><strong>有名管道(FIFO 也是由环形队列实现)不同于匿名管道之处在于它提供路径名与这个管道关联</strong>，<strong>以FIFO的文件形式存在于文件系统中，并且其打开方式与打开一个普通文件的方式是一样的</strong>，这样即使与FIFO的创建进程不存在亲缘关系的进程，只要可以访问该路径就可以彼此通过FIFO互相通信，因此通过FIFO不相关的进程也能交换数据。</p><p>一旦打开了FIFO，就能在它上面使用与操作匿名管道和其他文件的系统调用一样的I/O系统调用(如read、write、close)，与管道一样，FIFO也有一个写入端和读取端，并且从管道中读取数据的顺序与写入的顺序是一样的(先入先出)。</p><p>FIFO与pipe(匿名管道)的不同点：</p><p>1 FIFO在文件中作为一个特殊文件存在，但是<strong>FIFO中的内容却存放在内存中(内核中的一个缓存区中)</strong></p><p>2 当使用FIFO的进程退出后，FIFO文件将继续保存在文件系统中以便以后使用</p><p>3 FIFO有名字，不相关的进程可以通过打开有名管道进行通信</p><p>有名管道的使用</p><p>通过命令创建有名管道 mkfifo 管道名</p><p>通过函数创建有名管道</p><p>#include &lt;sys/types.h></p><p>#include &lt;sys/stat.h></p><p>int mkfifo(const char *pathname,mode_t mode);</p><p>一旦使用mkfifo创建了一个FIFO就可以用open，常见的文件IO操作含糊书(close read wirte unlink删除)都可以用于FIFO文件</p><p>FIFO严格遵顼先入先出，对管道及FIFO的读总是从开始处返回数据(单向队列队首数据)，对它们的写则把数据添加到末尾(向单向队列队尾添加数据)，FIFO文件不支持诸如lseek()等文件定位操作。</p><p>一个为只读(写)而打开(open)的管道的进程会阻塞(阻塞在open),直到另一个进程以包含写(读)的方式打开相同的管道，才不会继续阻塞而是继续向下运行。</p><p>1 当指向管道写端的fd都close了,此时有进程从管道读端读数据，若此时管道中有剩余数据则读取剩余数据，直到<strong>剩余数据被读完后，再次read返回0</strong>(读到文件末尾read是返回0的 读出现异常是返回-1的)。</p><p>2 有指向管道写端的文件描述符没有关闭(管道写端的引用计数大于0)并且没有进程向管道写端写数据，此时将<strong>管道内数据读空后再继续读是出现read阻塞</strong>，直到有进程写了一些数据，read读到返回读到的字节数。</p><p>3 所有的指向管道读端的文件描述符 都关闭了(管道读端的引用计数为0)，此时有进程向管道中写数据，那么该进程会收到一个信号SIGPIPE，通常这个信号会导致进程异常终止。</p><p>4 有指向管道读端的文件描述符没有关闭(管道读端的引用计数大于0)并且没有进程从管道读端读数据，此时<strong>有进程向管道中写数据</strong>，在管道写满后，再次调用写write会导致写进程阻塞，直到管道中有空位write才不会阻塞并返回写入的字节数。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>//为了实验 还需要创建两个进程 我们通过两个.c文件来实现
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//这个.c为写fifo进程
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//acess
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>  </span><span style=color:#75715e>//open
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//strlen
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//判断文件是否存在
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> access(<span style=color:#e6db74>&#34;f1&#34;</span>, F_OK); <span style=color:#75715e>//判断叫这个名字的文件是否存在
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)                 <span style=color:#75715e>//return 0 表示管道以存在
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        ;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> mkfifo(<span style=color:#e6db74>&#34;f1&#34;</span>, <span style=color:#ae81ff>0664</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;mkfifo:&#34;</span>);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//打开管道
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 这个进程只向管道里写数据 所以以只写的方式打开管道
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;f1&#34;</span>, O_WRONLY); <span style=color:#75715e>//以只写的形式打开 若没有其他线程以包含读的方式打开文件 这个open会一直阻塞在这!!!!
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (fd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;open:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//写数据
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>100</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>1024</span>];
+</span></span><span style=display:flex><span>        sprintf(buf, <span style=color:#e6db74>&#34;hello %d</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, i);  <span style=color:#75715e>//向buf中写数据
+</span></span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;write data:%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buf); <span style=color:#75715e>//打印当前buf中的字符数据
+</span></span></span><span style=display:flex><span>        write(fd, buf, stelen(buf));    <span style=color:#75715e>//向管道中写数据
+</span></span></span><span style=display:flex><span>        sleep(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//当所有读端都关闭 此时有写线程向管道中写数据会收到SIGPIPE信号导致进程直接异常退出
+</span></span></span><span style=display:flex><span>    close(fd); <span style=color:#75715e>//关闭管道
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>//为了实验 还需要创建两个进程 我们通过两个.c文件来实现
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//这个.c为读fifo进程
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//acess
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>  </span><span style=color:#75715e>//open
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//判断文件是否存在
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> access(<span style=color:#e6db74>&#34;f1&#34;</span>, F_OK); <span style=color:#75715e>//判断叫这个名字的文件是否存在
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)                 <span style=color:#75715e>//return 0 表示管道以存在
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        ;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> mkfifo(<span style=color:#e6db74>&#34;f1&#34;</span>, <span style=color:#ae81ff>0664</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;mkfifo:&#34;</span>);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//打开管道
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 这个进程只读管道里的数据 所以以只读的方式打开管道
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;f1&#34;</span>, O_RDONLY); <span style=color:#75715e>//以只读的形式打开 若没有其他线程以包含写的方式打开文件 这个open会一直阻塞在这!!!!
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (fd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;open:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//读数据
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>1024</span>] <span style=color:#f92672>=</span> {<span style=color:#ae81ff>0</span>};
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> read(fd, buf, <span style=color:#66d9ef>sizeof</span>(buf));
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//当写端关闭 并且管道中无数据 返回len=0
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;recv buf %s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buf);
+</span></span><span style=display:flex><span>        memset(buf, <span style=color:#ae81ff>0</span>, <span style=color:#66d9ef>sizeof</span>(buf));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    close(fd); <span style=color:#75715e>//关闭管道
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>有名管道实现简单版聊天功能</strong></p><p>A进程先给B发，B收到后再给A发，A收到后。。。就这么交替地进行</p><p>一个管道只能单向通信，要实现相互的收发需要用两个管道实现。</p><p><img alt=1647313222032-ed297c60-04d9-49c8-8283-596fee7578eb.png loading=lazy src=/images/Wiqt9TYyZMKN3gFF/1647313222032-ed297c60-04d9-49c8-8283-596fee7578eb-087240.png></p><p>进程A 1 以只写方式打开fifo1 以只读的方式打开fifo2 2循环读写数据</p><p>while(1){ 获取键盘录入的数据不用scanf(遇到换行就结束)而使用fgets; 并将录入的数据写管道1; 读管道2;</p><p>}</p><p>进程B 1 以只读方式打开fifo1 以只写的方式打开fifo2 2循环读写数据</p><p>while(1){ 读管道1;</p><p>获取键盘录入的数据不用scanf(遇到换行就结束)而使用fgets; 并将录入的数据写管道2; }</p><p><strong>要实现有名管道的同时读写 需要fork出子进程 父进程open fifo1的读端 进行读</strong></p><p><strong>子进程 open fifo2的写端 进行写</strong></p><p>A</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//acess
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>  </span><span style=color:#75715e>//open
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//open
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//判断有名管道文件是否存在
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//存在则不再创建 不存在则创建
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> access(<span style=color:#e6db74>&#34;fifo1&#34;</span>, F_OK); <span style=color:#75715e>//判断叫这个名字的文件是否存在
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)                    <span style=color:#75715e>//return 0 表示管道以存在
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        ;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#75715e>//-1
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> mkfifo(<span style=color:#e6db74>&#34;f1&#34;</span>, <span style=color:#ae81ff>0664</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;mkfifo:&#34;</span>);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> access(<span style=color:#e6db74>&#34;fifo2&#34;</span>, F_OK); <span style=color:#75715e>//判断叫这个名字的文件是否存在
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)                    <span style=color:#75715e>//return 0 表示管道以存在
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        ;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#75715e>//-1
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> mkfifo(<span style=color:#e6db74>&#34;f1&#34;</span>, <span style=color:#ae81ff>0664</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;mkfifo:&#34;</span>);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 以只写的方式打开管道fifo1
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fdw <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;fifo1&#34;</span>, O_WRONLY);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (fdw <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;open FIFO1 WRITE:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//以只读的方式打开管道fifo2
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fdr <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;fifo2&#34;</span>, O_RDONLY);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (fdr <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;open FIFO2 READ:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>128</span>];
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//循环写读数据
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//写数据 写fifo1
+</span></span></span><span style=display:flex><span>        memset(buf, <span style=color:#ae81ff>0</span>, <span style=color:#66d9ef>sizeof</span>(buf));
+</span></span><span style=display:flex><span>        fgets(buf, <span style=color:#66d9ef>sizeof</span>(buf), stdin); <span style=color:#75715e>//从屏幕的stdin标准输入(标准输入也有缓冲区) 获取128个字节并装到buf里
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//将从标准输入得到的数据写到fifo里
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> write(fdw, buf, strlen(buf));
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;write:&#34;</span>);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//读数据 读fifo2
+</span></span></span><span style=display:flex><span>        memset(buf, <span style=color:#ae81ff>0</span>, <span style=color:#66d9ef>sizeof</span>(buf));
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> read(fdr, buf, strlen(buf));
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>&lt;=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//读出错 -1 读到末尾(或fifo2的写端已经关闭了 并且管道内容被读完了)返回0
+</span></span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;read:&#34;</span>);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;buf:%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buf);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    close(fdw);
+</span></span><span style=display:flex><span>    close(fdr);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>B</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//acess
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>  </span><span style=color:#75715e>//open
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//open
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//判断有名管道文件是否存在
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//存在则不再创建 不存在则创建
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> access(<span style=color:#e6db74>&#34;fifo1&#34;</span>, F_OK); <span style=color:#75715e>//判断叫这个名字的文件是否存在
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)                    <span style=color:#75715e>//return 0 表示管道以存在
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        ;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#75715e>//-1
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> mkfifo(<span style=color:#e6db74>&#34;f1&#34;</span>, <span style=color:#ae81ff>0664</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;mkfifo:&#34;</span>);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> access(<span style=color:#e6db74>&#34;fifo2&#34;</span>, F_OK); <span style=color:#75715e>//判断叫这个名字的文件是否存在
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)                    <span style=color:#75715e>//return 0 表示管道以存在
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        ;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#75715e>//-1
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> mkfifo(<span style=color:#e6db74>&#34;f1&#34;</span>, <span style=color:#ae81ff>0664</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;mkfifo:&#34;</span>);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 以只读的方式打开管道fifo1
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fdr <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;fifo1&#34;</span>, O_RDONLY);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (fdr <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;open FIFO1 READ:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//以只写的方式打开管道fifo2
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fdw <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;fifo1&#34;</span>, O_WRONLY);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (fdw <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;open FIFO2 WRITE:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>128</span>];
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//循环读写数据
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//读数据 读fifo1
+</span></span></span><span style=display:flex><span>        memset(buf, <span style=color:#ae81ff>0</span>, <span style=color:#66d9ef>sizeof</span>(buf));
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> read(fdr, buf, strlen(buf));
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>&lt;=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//读出错 -1 读到末尾(或fifo2的写端已经关闭了 并且管道内容被读完了)返回0
+</span></span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;read:&#34;</span>);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;buf:%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buf);
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//写数据 写fifo2
+</span></span></span><span style=display:flex><span>        memset(buf, <span style=color:#ae81ff>0</span>, <span style=color:#66d9ef>sizeof</span>(buf));
+</span></span><span style=display:flex><span>        fgets(buf, <span style=color:#66d9ef>sizeof</span>(buf), stdin); <span style=color:#75715e>//从屏幕的stdin标准输入(标准输入也有缓冲区) 获取128个字节并装到buf里
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//将从标准输入得到的数据写到fifo里
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> write(fdw, buf, strlen(buf));
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;write:&#34;</span>);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    close(fdw);
+</span></span><span style=display:flex><span>    close(fdr);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

@@ -1,0 +1,195 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Planning | CantBlog</title><meta name=keywords content><meta name=description content="路径规划、轨迹优化与最优控制相关笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/planning/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/planning/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/planning/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/planning/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Planning"><meta property="og:description" content="路径规划、轨迹优化与最优控制相关笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="Planning"><meta name=twitter:description content="路径规划、轨迹优化与最优控制相关笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Planning","item":"https://jler666.github.io/planning/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>Planning</h1><div class=post-description>路径规划、轨迹优化与最优控制相关笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>HDBSCAN</h2></header><div class=entry-content><p>基于密度的去噪空间聚类 +层次聚类
+从最简单的kmeans(基于中心的聚类)开始，需要预先提供需要将期望的聚类数量k
+1 随机选择k个数据作为类簇中心–随机是个不好的策略，初始点和最终结果关系非常大，可用更好的策略如kmeans++
+2 计算剩余数据与这k个数据的距离(对称、凸)，分配到与其最近的类簇中
+3 更新k个簇的新中心，可以计算簇内数据的质心或者$ x_i $为新中心，要求中心到簇内其他数据的距离之和是簇内最小的(即簇内其他数据到others的总误差平方和SSE都大于此中心，在聚类中SSE也被叫做CSS cluster sum of squarez或者Inertia)，kmeans的本质是求解让整个数据集Inertia最小化的k个质心
+$ \begin{gathered} SSE_i=\sum_{\mu_j\in c_i}||d(x_i,\mu_j)||^2\\ \min_{x_i}SSE_i\\ SSE=\sum_{i=1}^kSSE_i \end{gathered} $
+4 计算新中心和原中心的eps，如果小于一值认为收敛。否则回到2
+期望SSE小，理论上k越小SSE越小当k==n(总数据量)，SSE=0但k==n没有聚类意义不是我们希望的。基于经验k_{max}&lt;=sqrt(n)，期望找到一k*当k大于此值时SSE的下降斜率明显变小(d2SSE/dk2==0 二阶导极值 拐点)
+不过遗憾的是，若SSE的下降是均匀的，传统的肘部图法也就失灵
+除了肘部图，常用的还有轮廓系数法(Silhouette coffient)，某个样本的轮廓系数计算方法如下
+$ S=\frac{b-a}{\max(a,b)},-1\leq S \leq 1 $
+a为此样本到同簇样本的平均距离(簇内相似度)，b为样本到 除所属簇外最近的簇中心 对应的 簇内所有样本的平均距离(簇间相似度)
+数据点与自己所属的簇内的其他数据点的距离很小，但是与其他簇中的数据点的距离很大(a小b大)，就表示这个数据点所在的簇内紧密度高，簇间分离度大,聚类效果好，那么该数据点的轮廓系数就会越大
+计算轮廓分数： 所有样本点的轮廓系数的平均值 silhouette_score(x, y_pred)
+计算所有样本点的轮廓系数 silhouette_samples(x, y_pred)
+簇结构非凸的情况，轮廓系数失真
+Calinski-Harabasz指数
+类似是簇间距离和簇内距离的比值又名方差比准则，计算所有簇的簇内距离和的均值，再计算总样本中心，各簇中心与样本中心的距离和作为簇间距离和
+def get_calinski_harabasz(X, labels): n_samples = X.shape[0] n_clusters = np.unique(labels).shape[0] betw_disp = 0. # 所有的簇间距离和 within_disp = 0. # 所有的簇内距离和 global_centroid = np.mean(X, axis=0) # 全局簇中心 for k in range(n_clusters): # 遍历每一个簇 x_in_cluster = X[labels == k] # 取当前簇中的所有样本 centroid = np.mean(x_in_cluster, axis=0) # 计算当前簇的簇中心 within_disp += np.sum((x_in_cluster - centroid) ** 2) betw_disp += len(x_in_cluster) * np.sum((centroid - global_centroid) ** 2) return (1. if within_disp == 0. else betw_disp * (n_samples - n_clusters) / (within_disp * (n_clusters - 1.))) CH越大代表着类自身越紧密，类与类之间越分散，即更优的聚类结果。类别内部数据的协方差越小越好，类别之间的协方差越大越好。当聚类数目k的值较大时，CH指数可能失去意义，因为此时类内距离可能变得很小，导致CH值偏大，凸簇的分数会更高，不太适合基于密度的聚类算法
+...</p></div><footer class=entry-footer><span title=2024-11-02T00:00:00+00:00>创建于 2024-11-02</span>&nbsp;·&nbsp;<span title=2025-03-18T00:00:00+00:00>最后修改于 2025-03-18</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to HDBSCAN" href=https://jler666.github.io/planning/ui92k1y773lbuaed/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Autonomous Vehicle Motion Planning via Recurrent Spline Optimization</h2></header><div class=entry-content><p>$ \begin{gathered} \dot{x}=v\cos\theta\\ \dot{y}=v\sin\theta\\ \dot{\theta}=v\tan\frac{\delta}{L}\\ \dot{\delta}=\omega \end{gathered} $
+自行车模型微分平坦到x,y及其对s的各阶导数
+$ \begin{gathered} v=\sqrt{\dot{x}^2+\dot{y}^2}\\ \theta=\arctan{\frac{\dot{y}}{\dot{x}}}\\ \delta=\arctan{\frac{(\ddot{y}\dot{x}-\ddot{x}\dot{y})L}{(\dot{x}^2+\dot{y}^2)^{3/2}}} \end{gathered} $
+用s三次样条表达x、y
+$ \begin{gathered} f_i(s)=a_{i0}+a_{i1}(s-s_i)+a_{i2}(s-s_i)^2+a_{i3}(s-s_i)^3\\ g_i(s)=b_{i0}+b_{i1}(s-s_i)+b_{i2}(s-s_i)^2+b_{i3}(s-s_i)^3 \end{gathered} $
+目标函数是最小化二阶和三阶导数
+$ \min_{a_{ij},b_{ij}}\sum_{i=0}^Nw_1(\ddot{f_i}(s_i)^2+\ddot{g_i}(s_i)^2)+w_2(\dddot{f_i}(s_i)^2+\dddot{g_i}(s_i)^2) $
+x，y关于弧长的导数的物理意义并非Minimum Energy，用微分平坦的话Minimum Energy应该是下x,y关于时间的导数才对。没有直接的物理意义，但是就等价的理解成关于时间的导数，然后这里差了一个速度v或者v^2吧，这表达和apollo轨迹规划的物理含义一样没有直接意义
+根据对$ \theta $的微分平坦可以写出对$ \theta $的硬约束
+$ \theta=\arctan(\frac{\dot{y}}{\dot{x}})\rightarrow $每段起始点的heading约束$ -\dot{f_i}(s_i)\sin(\theta_i)+\dot{g_i}(s_i)\cos(\theta_i)=0 $,$ \theta_i $为对应的heading硬约束
+曲率同理
+$ \kappa=-\frac{\dot{y}}{(\dot{x}^2+\dot{y}^2)^{3/2}}\ddot{x}+\frac{\dot{x}}{(\dot{x}^2+\dot{y}^2)^{3/2}}\ddot{y}=\lambda\ddot{x}+\mu \ddot{y} $
+此表达式为非线性需要在每个迭代点处将$ \lambda,\mu $近似计算出来
+$ d\sigma=\sqrt{dx^2+dy^2} $为优化后的弧微分
+$ \frac{d\sigma}{ds}=\sqrt{(\frac{dx}{ds})^2+(\frac{dy}{ds})^2}=\sqrt{\dot{x}^2+\dot{y}^2} $
+当优化前后的spline弧长近似不变时$ \frac{d\sigma}{ds}\approx 1 $则可将下式近似为
+$ \begin{gathered} \lambda=\frac{-1}{\dot{x}^2+\dot{y}^2}\frac{\dot{y}}{\sqrt{\dot{x}^2+\dot{y}^2}}\approx -sin(\theta_{ref})\\ \mu=\frac{-1}{\dot{x}^2+\dot{y}^2}\frac{\dot{x}}{\sqrt{\dot{x}^2+\dot{y}^2}}\approx cos(\theta_{ref})\\ \end{gathered} $
+在第一次进行优化化或初始点时使用$ \kappa_i\approx -\ddot{x}_isin(\theta_{ref_i})+\ddot{y}_icos(\theta_{ref_i}) $作为近似曲率约束进行优化
+在后续的迭代优化种将上次结果的$ \dot{x},\dot{y} $结果求出并带入$ \lambda,\mu $求解中(做了二次导小量假设)
+...</p></div><footer class=entry-footer><span title=2024-10-09T00:00:00+00:00>创建于 2024-10-09</span>&nbsp;·&nbsp;<span title=2025-03-15T00:00:00+00:00>最后修改于 2025-03-15</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Autonomous Vehicle Motion Planning via Recurrent Spline Optimization" href=https://jler666.github.io/planning/fiix48bw24ran5gp/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>Collision-Free Robot Navigation in Crowded Environments using Learning based Convex Model Predictive Control</h2></header><div class=entry-content><p>23 Navigation in Crowded Environments using Learning based Convex MPC_哔哩哔哩_bilibili</p></div><footer class=entry-footer><span title=2024-10-09T00:00:00+00:00>创建于 2024-10-09</span>&nbsp;·&nbsp;<span title=2025-09-20T00:00:00+00:00>最后修改于 2025-09-20</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to Collision-Free Robot Navigation in Crowded Environments using Learning based Convex Model Predictive Control" href=https://jler666.github.io/planning/iienqkvevf95nlyd/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>LC 规控2</h2></header><div class=entry-content><p>DP 贝尔曼最优原理，子问题最优解是问题最优解的一部分
+从终点回溯求解子问题最优解，appllo使用层级的图结构，非常简单就能推出下一级的子问题与上一级问题有重叠，存在子结构。
+状态空间下的搜索(最常见的确定state，用多项式连接)多项式连接不太可控因为没有加约束(本质是这个状态空间维度太低了)。动作空间下采样因为有模型保证，其可行性是有保障的，但是动作空间下的状态维度太高搜索太慢。
+A*的最优性保障除了 h &lt;= 实际 g cost to goal外还需要保证单调性
+I
+h(x) &lt;= edge(x,y)–状态转移g值 + h(y) &lt;->h满足单调性！，满足此条件泽A*保证访问修改每个结点一次就能得到最优解，否则就不能做visited要不停入堆、弹出直到堆为空才能保证结果最优
+比如下面这个很简单的例子不满足上面条件，导致最先得到的解非最优解
+A(g=0,h=8)->B(g=3,h=3)—|/
+** |->C(g=4,h=1)——->D **
+最先到D的是经过C的路线
+propagate阶段使用的h=0实际满足此条件，但无法只visit一次是因为lc nav cost的问题，lc nav cost是一个随着往后传播递减的过程，如果只使用距离nav lc 减去父节点长度 和 自身向后累加的长度 可能导致此步转移代价为负(边权为负) 此图其实不满足A*对图的要求，只要nav lc减小的 &lt;= 往后accum增加的就能保证转移边权>=0(非负)就能保证最优性
+当边代价一定>0，若有可行解，A*保证找到可行解后才会停止
+后轴自行车模型
+https://blog.csdn.net/zgpeace/article/details/121046049
+还有中心模型
+motion primitive(state lattice)
+5次多项式(sl st下采样的lattice方法)
+3阶螺旋线(kappa(s)是3次多项式) Waymo现在还在用
+ocp其实有点像螺旋线，状态量为x(s),y(s),theta(s),kappa(s)控制量为x’’’,y’''
+正余弦函数积分没有解析解但是有数值近似解
+使用辛普森法进行8阶近似得到近似数值表达
+state lattice是使用的三阶螺旋线作为表达形式。参考博客
+https://blog.csdn.net/BigDavid123/article/details/135236997
+连接两个(x,y,theta,kappa),求解a，b，c，d四个参数
+工程技巧：对原问题做参数映射 （1）p0和p3对应于给定的初始状态和结束状态，降低维度 （2）重映射公式 p0+p1s+p2s^2+p3s^3,需要确保pi大小接近，在优化中添加数值稳定性
+设在螺旋线的kappa(s)多项式上等s采样四个点p0-p3 (其值为等距采样得到的kappa值)，则可将曲线用参数p=[p0-p4,sf(曲线总长)]表达如下图
+...</p></div><footer class=entry-footer><span title=2024-09-10T00:00:00+00:00>创建于 2024-09-10</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to LC 规控2" href=https://jler666.github.io/planning/bbef0eaga1alm8a3/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>LC 规控1 介绍</h2></header><div class=entry-content><p>路径速度解耦代表框架 EM planner
+EM总体框架
+并行基于多条lane/refline (split)生成结果，再对多条traj进行决策
+EM迭代
+1障碍物SL投影 2 M个step的DP+QP生成路径 3 对路径做profile生成粗轨迹 4 障碍物ST投影 5 DP+QP生成s(t) 5二者结合形成轨迹
+路径DP decision是决策左绕 or 右绕 or 忽略(由纵向考虑) 开QP所用的凸空间
+路径优化可在frenet下or笛卡尔下
+ST投影
+ST DP决策 跟车、超车
+ST优化平滑
+如何进行时空联合改造(SLT投影)，如何在Path层面考虑动态障碍物，需要现有自车的速度曲线，只有先有这个才能根据动态障碍物的预测轨迹做SLT投影，但是速度规划在Path的下游。
+时空联合框架
+行为决策+时空联合规划
+path采样 + 权重可学习的cost评估，基于此cost进行轨迹优化。生成的最优轨迹与人类示教数据进行训练更新权重参数w.
+数据驱动 UniAD 端到端，感知信息的无损传递，子模块任务预学习+以planning为导向的统一学习更新
+数据驱动 结合learning based和heuristic based方法
+learning输出轨迹 基于专家示教数据训练网络，学习优化求解的部分超参数，作为优化器初值加速优化
+在不确定场景下进行规划
+对于他车多种意图下进行的规划，再根据意图概率加权后的轨迹有可能会与任一意图下面的他车发生高风险交互。contigency planning只在分叉点后针对各个意图进行规划，在分叉点前使用同一shared segment，即延迟决策在分叉点之前他车意图不明确无法做出大概率判断，因此保持shared segment(无论他车做出何种决策此段都是安全的)
+预测决策规划联合
+只规划自车，精准知道其他agent行为，就是一个MPC问题
+都规划，多智能体博弈</p></div><footer class=entry-footer><span title=2024-09-09T00:00:00+00:00>创建于 2024-09-09</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to LC 规控1 介绍" href=https://jler666.github.io/planning/dail9gornerfcqt2/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>voronoi diagram</h2></header><div class=entry-content><p>只讨论二维情况
+基点Site：具有一些几何意义的点(可能为区域的重心或其他)
+细胞Cell：Cell中任意点到其他基点的距离都一定大于其到Cell内部基点的距离
+对于只有两个基点的情况，两个基点对应的Cell就是半平面，分界线在两点连线的中垂线上
+Cell的划分：对于多个基点情况，某个基点的Cell就表达为其与其他基点连线的中垂线互相相交构成的多边形(多个半平面的交集，因此Cell一定是凸的)如下图
+由于基点所处区域为边界区域(比如路口和UNKNOW的交界)则交界处的边并非由求交得到，为交界的原始形状并不能保证凸如上图的黑色外包边。
+维诺图在存储时用线段、射线(在没有边界的空间中，外层site对应Cell的某些边为射线)，直线(两个site的特殊维诺图中间的交集线为直线无界)，这些线在维诺图中都是edge,edge间的交点就是顶点vertex.
+二维维诺图的性质
+1 非空性 每个site一定存在一个对应的非空cell
+2 空圆性
+Cell中任意点到其他基点的距离都一定大于其到Cell内部基点的距离–>
+以Cell中任意点为圆心，以&lt;=其到Cell对应基点的距离为半径，这个圆的内部一定不包含任何基点–>
+Cell的边界(由交集产生的边界非区域边界)上的任意点都在构成此边的两个Site的中垂线上，其到这个两个Site的距离一定相等–>
+以Cell的边界上的任意点为圆心，以&lt;=其到Cell对应Site的距离为半径，圆内部一定不存在Site–>
+Cell的顶点vertex由edge相交构成，以顶点为圆心，其到构成顶点edge对应的Cell的Site的距离都是相等的，以&lt;=此为半径,圆内部一定不存在Site
+共圆性(Concyclic) 顶点位置存在3个最近site,这些site一定共圆这个圆也叫最大空圆
+空间中任一点x
+x在cell内部(不在边上)，最近site唯一就是cell内的那个site
+x在两个cell的边界上，最近site有两个就是构成这条边的2个cell内的site
+x在cell的顶点上属于多个cell,最近site有至少3个(对图顶点来说其度至少为3)，以此点为顶点的cell内的site到此点距离相等共圆
+三个site点构成的三角形，voronoi edge为三角形各边的垂直平分线，edge交点为vertex也即三角形三边垂直平分线的交点也被称为三角形外心。 — 若所有顶点在general positions(非退化位置，退化位置即存在大余3个site共圆这种概率几乎为0)，每个vertex的度为3
+下面都已Vertex度一定为3的假设下进行
+Split:
+下图的红点为三个白色site构成的vertex(三个site构成三角形的外接圆圆心)
+假设有一点x(黑点)沿着1,2 site中垂线运动(入边)，其对应空圆紫色圆。随着x接近vertex在中垂线的任何位置上都会有这样一个空圆
+当x沿此方向抵达vertex其空圆为黄色圆三个site共圆(3个最近邻)
+到达Vertex后沿两出边split(vertex度为3,一入两出)运动得到2,3site空圆和1,3site空圆(绿色)
+总结这个split过程，沿着1,2 site中垂线运动最大空圆在到vertex后沿两中垂方向运动split为两个最大空圆
+Merge:
+将上图的蓝色箭头反向，可以将merge过程描述为2,3site空圆和1,3site空圆沿各自中垂线在vertex(入2出1)处合为一个空圆，并沿1,2中垂线继续运动保持一个空圆
+对上述voroni graph进行增广，对于edge是ray和line的情形，强行将ray和line的无限处端点绑定到一个无限节点处infinity vertex。n个site图的vertex数量为O(2n-4) edge数量为O(3n - 6),顶点和边数量与site成线性关系即用O(n)空间可存一张voronoi graph。
+欧拉公式 顶点 - 边 + 面 - 连通 = 1
+存储Subdivision(子区域抛分)，DCEL: twin edges每一条无向边拆为两条有向边(half edge)
+half edge数据结构：
+id
+twin 另一条half edge的引用
+ori from vertex的引用 注意其ori与twin ori没有必然关系
+...</p></div><footer class=entry-footer><span title=2024-08-17T00:00:00+00:00>创建于 2024-08-17</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to voronoi diagram" href=https://jler666.github.io/planning/wxwkzhv2p4ouof9a/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>从VAE到diffusion</h2></header><div class=entry-content><p>https://zhuanlan.zhihu.com/p/563543020
+https://zhuanlan.zhihu.com/p/721196823
+https://zhuanlan.zhihu.com/p/355019238
+Understanding Diffusion Models: A Unified Perspective
+https://arxiv.org/abs/2208.11970
+https://www.bilibili.com/video/BV1Ax4y1v7CY/?spm_id_from=333.1387.favlist.content.click&amp;vd_source=47006f1a4047c07dff5bdbf813a046e1
+diffusion
+https://zhuanlan.zhihu.com/p/1935115608074196190
+https://spaces.ac.cn/archives/9119
+传统的auto encoder(自动编码器)，由编码器(encoder)和解码器(decoder)两个网络组成，编码器负责提取数据的高维特征(数据压缩)，解码器负责将高维特征还原为原数据结构(解压缩，渲染)。
+比较简单直接的高维特征是一些人为定义的特征，比如输入图像提取人脸图像提取人脸头发、肤色、性别、情绪等等特征类似onehot，其值代表各个特征的程度。变分自编码器便是用“取值的概率分布”代替原先的单值来描述对特征的观察的模型，将编码器输出特征定义为各个特征的概率分布，在解码前在各个分布中进行随机采样作为特征向量输入编码器，得到各个特征类似的图像(风格迁移)。
+通过上述的编解码过程，我们实质上构建了连续，平滑的潜在空间(latent space)表示。希望对于潜在分布的所有采样，解码器模型都能够准确重构输入(这要求编码器对风格提取的正态分布都足够尖–方差小对图像特征的描述准确，解码器对大方差分布采样结果需要有一定的抗扰能力)。
+$ X\sim p(X)；P(X=a)=p(a) $数据X满足分布p，p(a)为数据a来自分布p的概率
+估计分布p的几种方法:
+1、极大似然估计(频率学派)
+有先验的情况下对p(X)分布进行假设建模，比如假设p是个高斯分布其参数为$ \theta=(\mu,\sigma^2) $，分布即可用参数来表达$ p_{\theta}(X) $。设样本$ T_X $数量为k，期望求参数$ \theta $使得这k个样本出现的概率总和极大,概率总和$ L_{\theta}(T_X)=\Pi_{i=1}^kp_{\theta}(X_i)(X_i\in T_X) $求解极大似然问题$ \hat{\theta}=\argmax_{\theta}L_\theta(T_x) $
+参数估计问题变为求解最优问题
+极大似然估计求解数据分布明显且数据维度小的问题，在绝大多数问题中我们很难根据先验对数据分布进行建模，且参数$ \theta $的维度极大无法直接求解
+2、隐变量估计(贝叶斯学派)
+关于为什么要引入隐变量，观测数据只是我们可以直接观测到的样本指标或特征，而在观测数据之下蕴含的还有一些我们不能直接观测到的、潜在的、未知的特征，这些特征可能对观测数据产生影响，我们称其为隐藏特征。
+观测特征所在的空间为观测空间，隐藏数据所在的空间为隐藏空间。举例说明，考虑一个电商平台的用户行为分析。观测空间是用户在平台上的实际行为数据，如购买记录、浏览历史、搜索关键词等。而隐藏空间可以是用户的潜在兴趣或偏好。例如，假设一个用户购买了几本关于健康和健身的书籍，但观测数据中并没有直接记录用户的兴趣。
+用户的兴趣偏好会在一定程度上影响其在平台上的行为活动，但不会直接记录在观测数据中。用户在平台上的行为数据在形式上往往是比较复杂的，难以直接找到其一般的规律，那我们可以人为地添加潜在的主题变量来表示“用户的兴趣”，然后想办法构建一个由“用户的兴趣”到“用户的行为数据”的映射，因为“用户的兴趣”这一隐藏特征在表示和含义上远比观测特征简洁直白，可以很方便地分析理解数据，提供更精确和深入的推断和预测。
+引入隐变量z后，记其服从分布s(z)，可根据 product rule间接地求出相对复杂的分布$ p(x)=\int p(x|z)s(z)dz=E_{z\sim s(z)}[p(x|z)] $
+s(z)分布的表达式形式一般比较简单，比如普通的多元高斯分布，并且往往是预先假设的一个没有未知量的确定分布(分布初始值)。（对的，一般我们引入的这个隐变量就是相对简单的，这是我们人为设计规定的，不然不如不引）
+z的维度较于$ \theta $和数据x都是低非常多的
+实践中将隐变量还原为随机变量x的变换是个确定变换，我们一般会用神经我拿过来实现$ x=f_{\theta}(z) $,在给定z下x的条件分布是个冲激函数
+$ p_\theta(x|z)= if\quad x\neq f_{\theta}(z)\quad 0 \quad else \quad \inf $
+...</p></div><footer class=entry-footer><span title=2024-08-15T00:00:00+00:00>创建于 2024-08-15</span>&nbsp;·&nbsp;<span title=2026-10-25T00:00:00+00:00>最后修改于 2026-10-25</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 从VAE到diffusion" href=https://jler666.github.io/planning/rr3go0zuvum92lrt/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>端到端综述</h2></header><div class=entry-content><p>预测+决策+规划一体，预测的同时考虑多agent博弈决策和plan.趋势倾向于同时训练(joint 全局最优而非局部最优)，但又是模块化可以可视化每个模块的结果
+没见过就乱输出(泛化能力不够) 对抗样本(为了解决某些问题新加入的数据导致其他行为的退化) 出现意外无法给出解释(黑盒，至少中间结果要可视化)
+https://zhuanlan.zhihu.com/p/692302970
+Naiyan Wang
+狭义端到端:传感器数据->控制信号
+UniAD:模块化端到端，引入中间任务监督模块模型性能，以planning为目标下游的监督信号能够直接传递给到上游，而不是每个模块只有自己自定的优化目标https://img.iduodou.com/images/docs/20240612/C0EC32EF-5BFA-4BA4-9DAA-8FDA4BF4BCA7.pdf为了进行每个模块的独立训练和验证，接口的设计需统一抽象为人类的理解形式，这种方案在带来训练方便及验证便利性的同时，会不可避免地以信息的损失为代价；另一方面，由于各模块之间无法进行全量有效的梯度传导。对每个模型的训练和优化更多地局限在模块内部，因而，在系统层面看，这更多是一种局部优化而非全局优化的方案。模块化端到端则通过避免对接口信号的过度抽象保证了信息的完整性，而跨模块的梯度传导也保证了对端到端模型的所有训练都有助于最终达到全局优化的效果。每个模块先单独训练，再将所有模块串起来，用planner的cost refine
+MODEL BASED RL
+端到端的本质是什么？端到端的本质应当是感知信息的无损传递，目前感知输出的这些信息，都是对复杂驾驶场景的一种抽象，而且是人工定义的显式抽象。然而，对于一些非常见场景中，现在的显式抽象难以充分表达场景中会影响驾驶行为的因素，亦或是我们需要定义的任务过多过琐碎，也难以枚举尽所有需要的任务。所以端到端系统，提供了一种（也许是隐式）全面表示，希望能够自动地无损地将这样的信息作用于PnC。
+感知任务传递给ppnc的时候信息经过高度压缩，bbox, point seq是很显然不够表征复杂现实世界._pnc通过行为对无损传递的感知信息的filter/attention/clea(反正怎么说的都有，核心是对感知任务和信息的选择，info selection)(rule based select不又回到之前的问题了，人为定义任何“硬”的东西感觉都偏离端到端的初衷)，_tesla shadow mode从一开始run的时候就是以行为作为value/cost fitler来设计的。
+目前所谓端到端模型在行车中使用的时候，在输出的轨迹之后都会去接一个基于传统方法兜底的方案，或者是这样的learning based planner和传统的轨迹规划算法会同时输出多条轨迹，再通过一个selector来选择一条执行(目前的learning based planner更多的是做evaluator对轨迹进行打分)。
+在过去10年中，感知系统至少吃到了100x的算力红利发展，但是我们的PnC模块呢？如果我们同样允许PnC模块使用大算力。(常规基于凸优化的planner没有用上大算力GPU，吃到算力的红利。图森在分线性优化上用上了GPU资源)
+https://zhuanlan.zhihu.com/p/684290204
+当谈论端到端自动驾驶的时候，我们到底在谈论些什么
+开环评测： 系统被置于一个不受外部反馈控制的环境中，系统的输入被改变以模拟不同的情况，但系统本身的输出不会影响评测环境。例如模型输出的 planning 指令做出了加减速动作，由于路测的感知视频是录制的，这个动作无法反映到图像上去，这导致开环评测只能在每一帧都会重置到数据集中录制那一刻的评测环境，并且是安全的轨迹，不存在误差累积。学术界最常见的就是在 nuscenes 数据集上进行开环评测。
+闭环评测：模型的输出会影响评测环境，同时评测环境的反馈会影响系统的输入，形成一个反馈循环。闭环评测模拟了真实世界中系统与环境的相互作用，例如自车发生变道行为，反应到图像上就是视角切换，前车切换等等，最常用的就是 Carla 模拟器。
+=====26.5.9=====
+之前对world model的定义有些混淆，world model要做的事是(s,a)->wm->s’，就是RL中的env但相比之前的env所承接的s更加复杂和真实。自动驾驶wm需要物体运动表征+物理直觉+多视角一致性+近乎真实的渲染，还有一段路要走。表征学的越好针对task的特殊设计越少，是基础。
+之前是将wm+rl agent混到一起作为wm概念，从理想的终局上看其实之前说的没错wm+rl/marl感觉自动驾驶这个问题几乎就解决了，有了wm后自动驾驶也可像LLM进行大规模的scale up(基于语言模型和人类司机数据模仿学习的pre train + 针对长尾场景和博弈能力的rl post train + wm大规模并行evaluation，类比于LLM目前自驾刚刚到了为post train搭infra的早期阶段)，到时候evaluate is all you need。这是一条我目前认为实现自驾最有可能的路，目前大家不约而同收敛到这条路，离真正的结局已经不远了。
+=====24年不知道什么时候写的
+没有world model很难做到高效闭环评测，但目前的视频生成模型(比如sora)无法保证物理真实(多视角图像渲染下，多视角及时序的一致性在复杂场景下难以保证),world model解决上述问题的难度不亚于解决自动驾驶本身，亦或者说不保证物理真实只是看起来像也够train了，但从第一性原理出发无法保证物理真实的world model价值有限。同时world model还涉及他车对自车的反应，如何构建合理的他车agent也是非常难的问题。– 综上感觉world model的实现要晚于自动驾驶。闭环评测还是需要真实地上车，从真实场景中获得数据和评测结果。
+只要对世界模型进行微小的调整或者增加一些输出链路及模块，就可 以实现 One Model 端到端自动驾驶
+...</p></div><footer class=entry-footer><span title=2024-07-24T00:00:00+00:00>创建于 2024-07-24</span>&nbsp;·&nbsp;<span title=2026-05-09T00:00:00+00:00>最后修改于 2026-05-09</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 端到端综述" href=https://jler666.github.io/planning/oz9g3ghk0yb55kmf/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>数值优化2</h2></header><div class=entry-content><p>目标函数高阶信息</p></div><footer class=entry-footer><span title=2023-12-28T00:00:00+00:00>创建于 2023-12-28</span>&nbsp;·&nbsp;<span title=2023-12-29T00:00:00+00:00>最后修改于 2023-12-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 数值优化2" href=https://jler666.github.io/planning/osmx6ycry80xqy5f/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>数值优化1</h2></header><div class=entry-content><p>深蓝学院 汪博 机器人中的数值优化
+如何保证问题优化过程中的数值稳定，给了很多理论算法到工程实际的例子
+一般的数值优化问题可以由上图描述
+对于长上面这样的待优化目标，由于在某个x处为无穷大无法被浮点数表示。此问题不在本课程的讨论范围内
+本课程要求 对任意x f(x) >= 某一数(无论正负) — f(x) has lower bound
+对于某优化目标，若其最优x在正无穷或负无穷处取到，则此最优x计算机无法用浮点数表达，无法求解。
+本课程要求 f(x) &lt;= 某一数的区间是有界的(区间任一边不能为正负无穷) — f(x) has bounded sub level set
+本课程只处理连续问题，f(x)、g(x)、h(x)均连续但可非光滑
+对于有约束优化问题，定义f delta (essential objective function)，当约束被满足时其值为f本身，约束不被满足时其值为无穷大。这个函数也要满足 has lower bound 和 has bounded sub level set 两个条件
+目前的凸函数在凸几何中的优化已经被研究的比较透彻，即便非凸的数值优化算法也需要一些凸的性质来分析问题
+某些非凸问题可以通过更换问题描述形式，或者一定的松弛来变为凸问题。
+很多非凸问题的最小值处是局部凸的！
+本课程只讨论确定性(De)的local minima问题。对于f有多个近似的local minima时不做决策和进一步判优。
+定义凸集合
+集合中的任意两点连线上的任意点都在集合内部，对于二维凸集合可表达如下,表示x1、x2线段上的每一点
+more general 的形式为 所有的凸组合(由两个即以上的x组成的线段或凸多边形内部)都在此集合内
+$ \begin{gathered} y = \sum \theta_i x_i \in set \\ \sum \theta_i = 1 ;\theta_i \geq 0 |\forall i \end{gathered} $
+...</p></div><footer class=entry-footer><span title=2023-11-26T00:00:00+00:00>创建于 2023-11-26</span>&nbsp;·&nbsp;<span title=2023-12-28T00:00:00+00:00>最后修改于 2023-12-28</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 数值优化1" href=https://jler666.github.io/planning/llcf7kpspce1g2al/></a></article><footer class=page-footer><nav class=pagination><a class=prev href=https://jler666.github.io/planning/>«&nbsp;Prev&nbsp;
+</a><a class=next href=https://jler666.github.io/planning/page/3/>Next&nbsp;&nbsp;»</a></nav></footer></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

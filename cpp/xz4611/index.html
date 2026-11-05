@@ -1,0 +1,522 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux网络编程7 poll,epoll | CantBlog</title><meta name=keywords content><meta name=description content='Poll API介绍
+先讲下select的缺点 1 每次调用select都需要把fd_set从用户态拷贝到内核态(这样内核才直到要监听哪些文件描述符) 返回传出时需要将fd_set从内核态拷贝到用户态 2 select在内核中需要遍历传进来的置1的fd 在fd_set中有较多置1的文件描述符时 开销会很大 O(n) 3 select能支持的最多的文件描述符数量为1024 太少了 4 fd_set既是传入也是传出参数 不能重用，每次都需要重置
+//poll就是对select的改进
+//poll 的fds可重复使用 且能支持的文件描述符数量无限制 但是缺点1,2还是存在的
+#include <poll.h>
+struct pollfd{
+int fd;//委托内核检测的文件描述符
+short events;//委托内核对fd的什么事件进行检测
+short revents;//文件描述符实际发生的事件 传出参数  return events
+};
+int poll(struct pollfd* fds,nfds_t nfds,int timeout);
+
+POLLIN 检测此fd读缓冲区是否有新的数据   同时检测POLLIN|POLLOUT
+fds为struct pollfd结构体类型数组的首地址，保存了要检测的文件描述符的信息
+nfds  fds数组的最后一个有效元素的下标+1
+timeout 阻塞时长 传入0表示不阻塞 -1表示永久阻塞直到检测到fds中的fd的一些状态发生改变才解除阻塞函数返回   >0为阻塞的时长单位为毫秒
+失败返回-1  n>0 检测到fds中有n个fd的状态发生变化
+poll代码举例
+//io多路复用之poll
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <string.h>
+#include <poll.h>
+
+int main()
+{
+    //创建监听socket
+    int lfd = socket(PF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in saddr;
+    saddr.sin_port = htons(9999);
+    saddr.sin_family = AF_INET;
+    saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip
+    //绑定
+    bind(lfd, (struct sockaddr *)&amp;saddr, sizeof(saddr));
+    //监听
+    listen(lfd, 8); //等待连接的最大队列长度为8
+    //原BIO accept 接收连接 + while死循环与客户端通信
+    //初始化检测的文件描述符属性数组
+    struct pollfd fds[1026];
+    for (int i = 0; i < 1026; i++)
+    {
+        fds[i].fd = -1;
+        fds[i].events = POLLIN; //只检测所有文件描述的读缓存区是否有新数据
+    }
+    fds[0].fd = lfd; //监听的文件描述符
+    int nfds = 0;
+    while (1)
+    {
+        //调用poll 让内核帮助监听文件描述符
+        int ret = poll(fds, nfds + 1, -1); //只辅助监听 不检测是否能写 不检测是否有一样 永久阻塞
+        if (ret == -1)
+        {
+            perror("poll:");
+            exit(-1);
+        }
+        else if (ret == 0) //超时时间到了 并且在这段时间内要检测的fd的状态没有改变(没有新的可读信息)
+        {
+            continue;
+        }
+        else if (ret > 0) //ret>0 ret中保存我们监听的fd中有几个的状态发生改变(有几个fd的读缓冲区数据发生变化--即有新的可读信息)
+        {
+            if (fds[0].revents & POLLIN) //因为revents的结果不一定只有POLLIN
+            //在同时检测读和写时revents结果可能是POLLIN|POLLOUT作为结果
+            //如果我们用fds[0].revents == POLLIN 来判断是否有新数据到来
+            //当同时 有新数据到来和写缓冲区有空间可写将会导致返回POLLIN|POLLOUT!=POLLIN
+            //这种情况下用& POLLIN就行可以单独检测我们像检测的状态是否发生变化
+            {
+                //判断服务器监听描述符的读缓冲区是否有新的数据
+                //表示有新的客户端连接进来了！！！！！！！
+                struct sockaddr_in client_addr;
+                int len = sizeof(client_addr);
+                int cfd = accept(lfd, (struct sockaddr *)&amp;client_addr, &amp;len); //接收这个新的连接  这里因为提前直到有新连接到来 调用accept不会阻塞 而是直接接收到那个连接请求
+                //将新的与客户端通信的fd 加入fd数组中 已完成poll对这个新通信连接的监听
+                for (int i = 1; i < 1026; i++)
+                //我们不能直接将数组下标为nfds+1的空间分给这个fd
+                //因为客户端断开是随机的 在nfds+1之前如果有数组空间空闲了 但我们跳过没用不就浪费了
+                //所以还是要从头检查数组是否还有空间没被占用(fd!=-1)
+                {
+                    if (fds[i].fd == -1)
+                    {
+                        fds[i].fd = cfd;
+                        fds[i].events = POLLIN;
+                        nfds = nfds > i ? nfds : i; //数组中的最大可用索引
+                        break;
+                    }
+                } //从头开始找
+            }
+            //遍历其他集合中的文件描述符
+            for (int i = 0 + 1; i <= nfds; i++)
+            {
+                if (fds[i].revents & POLLIN)
+                {
+                    //fd = i对应的连接的客户端发来了数据
+                    char buf[1024] = {};
+                    int len = read(fds[i].fd, buf, sizeof(buf)); //调用read 因为缓冲区有数据 所以不会阻塞可以直接读
+                    if (len == -1)
+                    {
+                        perror("read:");
+                        exit(-1);
+                    }
+                    else if (len == 0)
+                    {
+                        //对方断开连接
+                        printf("client closed\n");
+                        //将这个通信fd移除
+                        close(fds[i].fd);
+                        fds[i].fd = -1; //=-1表示检测数组中的这个位置空闲了
+                    }
+                    else if (len > 0) //读到了数据
+                    {
+                        //数据处理
+                        printf("from client: %s \n", buf);
+                        write(fds[i].fd, buf, strlen(buf) + 1); //回写
+                    }
+                }
+            }
+        }
+    }
+    close(lfd);
+    return 0;
+}
+epoll API介绍'><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/xz4611/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/xz4611/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/xz4611/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux网络编程7 poll,epoll"><meta property="og:description" content='Poll API介绍
+先讲下select的缺点 1 每次调用select都需要把fd_set从用户态拷贝到内核态(这样内核才直到要监听哪些文件描述符) 返回传出时需要将fd_set从内核态拷贝到用户态 2 select在内核中需要遍历传进来的置1的fd 在fd_set中有较多置1的文件描述符时 开销会很大 O(n) 3 select能支持的最多的文件描述符数量为1024 太少了 4 fd_set既是传入也是传出参数 不能重用，每次都需要重置
+//poll就是对select的改进
+//poll 的fds可重复使用 且能支持的文件描述符数量无限制 但是缺点1,2还是存在的
+#include <poll.h>
+struct pollfd{
+int fd;//委托内核检测的文件描述符
+short events;//委托内核对fd的什么事件进行检测
+short revents;//文件描述符实际发生的事件 传出参数 return events
+};
+int poll(struct pollfd* fds,nfds_t nfds,int timeout);
+POLLIN 检测此fd读缓冲区是否有新的数据 同时检测POLLIN|POLLOUT
+fds为struct pollfd结构体类型数组的首地址，保存了要检测的文件描述符的信息
+nfds fds数组的最后一个有效元素的下标+1
+timeout 阻塞时长 传入0表示不阻塞 -1表示永久阻塞直到检测到fds中的fd的一些状态发生改变才解除阻塞函数返回 >0为阻塞的时长单位为毫秒
+失败返回-1 n>0 检测到fds中有n个fd的状态发生变化
+poll代码举例
+//io多路复用之poll #include <sys/time.h> #include <sys/types.h> #include <unistd.h> #include <arpa/inet.h> #include <string.h> #include <poll.h> int main() { //创建监听socket int lfd = socket(PF_INET, SOCK_STREAM, 0); struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip //绑定 bind(lfd, (struct sockaddr *)&amp;saddr, sizeof(saddr)); //监听 listen(lfd, 8); //等待连接的最大队列长度为8 //原BIO accept 接收连接 + while死循环与客户端通信 //初始化检测的文件描述符属性数组 struct pollfd fds[1026]; for (int i = 0; i < 1026; i++) { fds[i].fd = -1; fds[i].events = POLLIN; //只检测所有文件描述的读缓存区是否有新数据 } fds[0].fd = lfd; //监听的文件描述符 int nfds = 0; while (1) { //调用poll 让内核帮助监听文件描述符 int ret = poll(fds, nfds + 1, -1); //只辅助监听 不检测是否能写 不检测是否有一样 永久阻塞 if (ret == -1) { perror("poll:"); exit(-1); } else if (ret == 0) //超时时间到了 并且在这段时间内要检测的fd的状态没有改变(没有新的可读信息) { continue; } else if (ret > 0) //ret>0 ret中保存我们监听的fd中有几个的状态发生改变(有几个fd的读缓冲区数据发生变化--即有新的可读信息) { if (fds[0].revents & POLLIN) //因为revents的结果不一定只有POLLIN //在同时检测读和写时revents结果可能是POLLIN|POLLOUT作为结果 //如果我们用fds[0].revents == POLLIN 来判断是否有新数据到来 //当同时 有新数据到来和写缓冲区有空间可写将会导致返回POLLIN|POLLOUT!=POLLIN //这种情况下用& POLLIN就行可以单独检测我们像检测的状态是否发生变化 { //判断服务器监听描述符的读缓冲区是否有新的数据 //表示有新的客户端连接进来了！！！！！！！ struct sockaddr_in client_addr; int len = sizeof(client_addr); int cfd = accept(lfd, (struct sockaddr *)&amp;client_addr, &amp;len); //接收这个新的连接 这里因为提前直到有新连接到来 调用accept不会阻塞 而是直接接收到那个连接请求 //将新的与客户端通信的fd 加入fd数组中 已完成poll对这个新通信连接的监听 for (int i = 1; i < 1026; i++) //我们不能直接将数组下标为nfds+1的空间分给这个fd //因为客户端断开是随机的 在nfds+1之前如果有数组空间空闲了 但我们跳过没用不就浪费了 //所以还是要从头检查数组是否还有空间没被占用(fd!=-1) { if (fds[i].fd == -1) { fds[i].fd = cfd; fds[i].events = POLLIN; nfds = nfds > i ? nfds : i; //数组中的最大可用索引 break; } } //从头开始找 } //遍历其他集合中的文件描述符 for (int i = 0 + 1; i <= nfds; i++) { if (fds[i].revents & POLLIN) { //fd = i对应的连接的客户端发来了数据 char buf[1024] = {}; int len = read(fds[i].fd, buf, sizeof(buf)); //调用read 因为缓冲区有数据 所以不会阻塞可以直接读 if (len == -1) { perror("read:"); exit(-1); } else if (len == 0) { //对方断开连接 printf("client closed\n"); //将这个通信fd移除 close(fds[i].fd); fds[i].fd = -1; //=-1表示检测数组中的这个位置空闲了 } else if (len > 0) //读到了数据 { //数据处理 printf("from client: %s \n", buf); write(fds[i].fd, buf, strlen(buf) + 1); //回写 } } } } } close(lfd); return 0; } epoll API介绍'><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-23T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux网络编程7 poll,epoll"><meta name=twitter:description content='Poll API介绍
+先讲下select的缺点 1 每次调用select都需要把fd_set从用户态拷贝到内核态(这样内核才直到要监听哪些文件描述符) 返回传出时需要将fd_set从内核态拷贝到用户态 2 select在内核中需要遍历传进来的置1的fd 在fd_set中有较多置1的文件描述符时 开销会很大 O(n) 3 select能支持的最多的文件描述符数量为1024 太少了 4 fd_set既是传入也是传出参数 不能重用，每次都需要重置
+//poll就是对select的改进
+//poll 的fds可重复使用 且能支持的文件描述符数量无限制 但是缺点1,2还是存在的
+#include <poll.h>
+struct pollfd{
+int fd;//委托内核检测的文件描述符
+short events;//委托内核对fd的什么事件进行检测
+short revents;//文件描述符实际发生的事件 传出参数 return events
+};
+int poll(struct pollfd* fds,nfds_t nfds,int timeout);
+POLLIN 检测此fd读缓冲区是否有新的数据 同时检测POLLIN|POLLOUT
+fds为struct pollfd结构体类型数组的首地址，保存了要检测的文件描述符的信息
+nfds fds数组的最后一个有效元素的下标+1
+timeout 阻塞时长 传入0表示不阻塞 -1表示永久阻塞直到检测到fds中的fd的一些状态发生改变才解除阻塞函数返回 >0为阻塞的时长单位为毫秒
+失败返回-1 n>0 检测到fds中有n个fd的状态发生变化
+poll代码举例
+//io多路复用之poll #include <sys/time.h> #include <sys/types.h> #include <unistd.h> #include <arpa/inet.h> #include <string.h> #include <poll.h> int main() { //创建监听socket int lfd = socket(PF_INET, SOCK_STREAM, 0); struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip //绑定 bind(lfd, (struct sockaddr *)&amp;saddr, sizeof(saddr)); //监听 listen(lfd, 8); //等待连接的最大队列长度为8 //原BIO accept 接收连接 + while死循环与客户端通信 //初始化检测的文件描述符属性数组 struct pollfd fds[1026]; for (int i = 0; i < 1026; i++) { fds[i].fd = -1; fds[i].events = POLLIN; //只检测所有文件描述的读缓存区是否有新数据 } fds[0].fd = lfd; //监听的文件描述符 int nfds = 0; while (1) { //调用poll 让内核帮助监听文件描述符 int ret = poll(fds, nfds + 1, -1); //只辅助监听 不检测是否能写 不检测是否有一样 永久阻塞 if (ret == -1) { perror("poll:"); exit(-1); } else if (ret == 0) //超时时间到了 并且在这段时间内要检测的fd的状态没有改变(没有新的可读信息) { continue; } else if (ret > 0) //ret>0 ret中保存我们监听的fd中有几个的状态发生改变(有几个fd的读缓冲区数据发生变化--即有新的可读信息) { if (fds[0].revents & POLLIN) //因为revents的结果不一定只有POLLIN //在同时检测读和写时revents结果可能是POLLIN|POLLOUT作为结果 //如果我们用fds[0].revents == POLLIN 来判断是否有新数据到来 //当同时 有新数据到来和写缓冲区有空间可写将会导致返回POLLIN|POLLOUT!=POLLIN //这种情况下用& POLLIN就行可以单独检测我们像检测的状态是否发生变化 { //判断服务器监听描述符的读缓冲区是否有新的数据 //表示有新的客户端连接进来了！！！！！！！ struct sockaddr_in client_addr; int len = sizeof(client_addr); int cfd = accept(lfd, (struct sockaddr *)&amp;client_addr, &amp;len); //接收这个新的连接 这里因为提前直到有新连接到来 调用accept不会阻塞 而是直接接收到那个连接请求 //将新的与客户端通信的fd 加入fd数组中 已完成poll对这个新通信连接的监听 for (int i = 1; i < 1026; i++) //我们不能直接将数组下标为nfds+1的空间分给这个fd //因为客户端断开是随机的 在nfds+1之前如果有数组空间空闲了 但我们跳过没用不就浪费了 //所以还是要从头检查数组是否还有空间没被占用(fd!=-1) { if (fds[i].fd == -1) { fds[i].fd = cfd; fds[i].events = POLLIN; nfds = nfds > i ? nfds : i; //数组中的最大可用索引 break; } } //从头开始找 } //遍历其他集合中的文件描述符 for (int i = 0 + 1; i <= nfds; i++) { if (fds[i].revents & POLLIN) { //fd = i对应的连接的客户端发来了数据 char buf[1024] = {}; int len = read(fds[i].fd, buf, sizeof(buf)); //调用read 因为缓冲区有数据 所以不会阻塞可以直接读 if (len == -1) { perror("read:"); exit(-1); } else if (len == 0) { //对方断开连接 printf("client closed\n"); //将这个通信fd移除 close(fds[i].fd); fds[i].fd = -1; //=-1表示检测数组中的这个位置空闲了 } else if (len > 0) //读到了数据 { //数据处理 printf("from client: %s \n", buf); write(fds[i].fd, buf, strlen(buf) + 1); //回写 } } } } } close(lfd); return 0; } epoll API介绍'><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux网络编程7 poll,epoll","item":"https://jler666.github.io/cpp/xz4611/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux网络编程7 poll,epoll","name":"Linux网络编程7 poll,epoll","description":"Poll API介绍\n先讲下select的缺点 1 每次调用select都需要把fd_set从用户态拷贝到内核态(这样内核才直到要监听哪些文件描述符) 返回传出时需要将fd_set从内核态拷贝到用户态 2 select在内核中需要遍历传进来的置1的fd 在fd_set中有较多置1的文件描述符时 开销会很大 O(n) 3 select能支持的最多的文件描述符数量为1024 太少了 4 fd_set既是传入也是传出参数 不能重用，每次都需要重置\n//poll就是对select的改进\n//poll 的fds可重复使用 且能支持的文件描述符数量无限制 但是缺点1,2还是存在的\n#include \u0026lt;poll.h\u0026gt;\nstruct pollfd{\nint fd;//委托内核检测的文件描述符\nshort events;//委托内核对fd的什么事件进行检测\nshort revents;//文件描述符实际发生的事件 传出参数 return events\n};\nint poll(struct pollfd* fds,nfds_t nfds,int timeout);\nPOLLIN 检测此fd读缓冲区是否有新的数据 同时检测POLLIN|POLLOUT\nfds为struct pollfd结构体类型数组的首地址，保存了要检测的文件描述符的信息\nnfds fds数组的最后一个有效元素的下标+1\ntimeout 阻塞时长 传入0表示不阻塞 -1表示永久阻塞直到检测到fds中的fd的一些状态发生改变才解除阻塞函数返回 \u0026gt;0为阻塞的时长单位为毫秒\n失败返回-1 n\u0026gt;0 检测到fds中有n个fd的状态发生变化\npoll代码举例\n//io多路复用之poll #include \u0026lt;sys/time.h\u0026gt; #include \u0026lt;sys/types.h\u0026gt; #include \u0026lt;unistd.h\u0026gt; #include \u0026lt;arpa/inet.h\u0026gt; #include \u0026lt;string.h\u0026gt; #include \u0026lt;poll.h\u0026gt; int main() { //创建监听socket int lfd = socket(PF_INET, SOCK_STREAM, 0); struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip //绑定 bind(lfd, (struct sockaddr *)\u0026amp;saddr, sizeof(saddr)); //监听 listen(lfd, 8); //等待连接的最大队列长度为8 //原BIO accept 接收连接 + while死循环与客户端通信 //初始化检测的文件描述符属性数组 struct pollfd fds[1026]; for (int i = 0; i \u0026lt; 1026; i++) { fds[i].fd = -1; fds[i].events = POLLIN; //只检测所有文件描述的读缓存区是否有新数据 } fds[0].fd = lfd; //监听的文件描述符 int nfds = 0; while (1) { //调用poll 让内核帮助监听文件描述符 int ret = poll(fds, nfds + 1, -1); //只辅助监听 不检测是否能写 不检测是否有一样 永久阻塞 if (ret == -1) { perror(\u0026#34;poll:\u0026#34;); exit(-1); } else if (ret == 0) //超时时间到了 并且在这段时间内要检测的fd的状态没有改变(没有新的可读信息) { continue; } else if (ret \u0026gt; 0) //ret\u0026gt;0 ret中保存我们监听的fd中有几个的状态发生改变(有几个fd的读缓冲区数据发生变化--即有新的可读信息) { if (fds[0].revents \u0026amp; POLLIN) //因为revents的结果不一定只有POLLIN //在同时检测读和写时revents结果可能是POLLIN|POLLOUT作为结果 //如果我们用fds[0].revents == POLLIN 来判断是否有新数据到来 //当同时 有新数据到来和写缓冲区有空间可写将会导致返回POLLIN|POLLOUT!=POLLIN //这种情况下用\u0026amp; POLLIN就行可以单独检测我们像检测的状态是否发生变化 { //判断服务器监听描述符的读缓冲区是否有新的数据 //表示有新的客户端连接进来了！！！！！！！ struct sockaddr_in client_addr; int len = sizeof(client_addr); int cfd = accept(lfd, (struct sockaddr *)\u0026amp;client_addr, \u0026amp;len); //接收这个新的连接 这里因为提前直到有新连接到来 调用accept不会阻塞 而是直接接收到那个连接请求 //将新的与客户端通信的fd 加入fd数组中 已完成poll对这个新通信连接的监听 for (int i = 1; i \u0026lt; 1026; i++) //我们不能直接将数组下标为nfds+1的空间分给这个fd //因为客户端断开是随机的 在nfds+1之前如果有数组空间空闲了 但我们跳过没用不就浪费了 //所以还是要从头检查数组是否还有空间没被占用(fd!=-1) { if (fds[i].fd == -1) { fds[i].fd = cfd; fds[i].events = POLLIN; nfds = nfds \u0026gt; i ? nfds : i; //数组中的最大可用索引 break; } } //从头开始找 } //遍历其他集合中的文件描述符 for (int i = 0 + 1; i \u0026lt;= nfds; i++) { if (fds[i].revents \u0026amp; POLLIN) { //fd = i对应的连接的客户端发来了数据 char buf[1024] = {}; int len = read(fds[i].fd, buf, sizeof(buf)); //调用read 因为缓冲区有数据 所以不会阻塞可以直接读 if (len == -1) { perror(\u0026#34;read:\u0026#34;); exit(-1); } else if (len == 0) { //对方断开连接 printf(\u0026#34;client closed\\n\u0026#34;); //将这个通信fd移除 close(fds[i].fd); fds[i].fd = -1; //=-1表示检测数组中的这个位置空闲了 } else if (len \u0026gt; 0) //读到了数据 { //数据处理 printf(\u0026#34;from client: %s \\n\u0026#34;, buf); write(fds[i].fd, buf, strlen(buf) + 1); //回写 } } } } } close(lfd); return 0; } epoll API介绍\n","keywords":[],"articleBody":"Poll API介绍\n先讲下select的缺点 1 每次调用select都需要把fd_set从用户态拷贝到内核态(这样内核才直到要监听哪些文件描述符) 返回传出时需要将fd_set从内核态拷贝到用户态 2 select在内核中需要遍历传进来的置1的fd 在fd_set中有较多置1的文件描述符时 开销会很大 O(n) 3 select能支持的最多的文件描述符数量为1024 太少了 4 fd_set既是传入也是传出参数 不能重用，每次都需要重置\n//poll就是对select的改进\n//poll 的fds可重复使用 且能支持的文件描述符数量无限制 但是缺点1,2还是存在的\n#include struct pollfd{\nint fd;//委托内核检测的文件描述符\nshort events;//委托内核对fd的什么事件进行检测\nshort revents;//文件描述符实际发生的事件 传出参数 return events\n};\nint poll(struct pollfd* fds,nfds_t nfds,int timeout);\nPOLLIN 检测此fd读缓冲区是否有新的数据 同时检测POLLIN|POLLOUT\nfds为struct pollfd结构体类型数组的首地址，保存了要检测的文件描述符的信息\nnfds fds数组的最后一个有效元素的下标+1\ntimeout 阻塞时长 传入0表示不阻塞 -1表示永久阻塞直到检测到fds中的fd的一些状态发生改变才解除阻塞函数返回 \u003e0为阻塞的时长单位为毫秒\n失败返回-1 n\u003e0 检测到fds中有n个fd的状态发生变化\npoll代码举例\n//io多路复用之poll #include #include #include #include #include #include int main() { //创建监听socket int lfd = socket(PF_INET, SOCK_STREAM, 0); struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip //绑定 bind(lfd, (struct sockaddr *)\u0026saddr, sizeof(saddr)); //监听 listen(lfd, 8); //等待连接的最大队列长度为8 //原BIO accept 接收连接 + while死循环与客户端通信 //初始化检测的文件描述符属性数组 struct pollfd fds[1026]; for (int i = 0; i \u003c 1026; i++) { fds[i].fd = -1; fds[i].events = POLLIN; //只检测所有文件描述的读缓存区是否有新数据 } fds[0].fd = lfd; //监听的文件描述符 int nfds = 0; while (1) { //调用poll 让内核帮助监听文件描述符 int ret = poll(fds, nfds + 1, -1); //只辅助监听 不检测是否能写 不检测是否有一样 永久阻塞 if (ret == -1) { perror(\"poll:\"); exit(-1); } else if (ret == 0) //超时时间到了 并且在这段时间内要检测的fd的状态没有改变(没有新的可读信息) { continue; } else if (ret \u003e 0) //ret\u003e0 ret中保存我们监听的fd中有几个的状态发生改变(有几个fd的读缓冲区数据发生变化--即有新的可读信息) { if (fds[0].revents \u0026 POLLIN) //因为revents的结果不一定只有POLLIN //在同时检测读和写时revents结果可能是POLLIN|POLLOUT作为结果 //如果我们用fds[0].revents == POLLIN 来判断是否有新数据到来 //当同时 有新数据到来和写缓冲区有空间可写将会导致返回POLLIN|POLLOUT!=POLLIN //这种情况下用\u0026 POLLIN就行可以单独检测我们像检测的状态是否发生变化 { //判断服务器监听描述符的读缓冲区是否有新的数据 //表示有新的客户端连接进来了！！！！！！！ struct sockaddr_in client_addr; int len = sizeof(client_addr); int cfd = accept(lfd, (struct sockaddr *)\u0026client_addr, \u0026len); //接收这个新的连接 这里因为提前直到有新连接到来 调用accept不会阻塞 而是直接接收到那个连接请求 //将新的与客户端通信的fd 加入fd数组中 已完成poll对这个新通信连接的监听 for (int i = 1; i \u003c 1026; i++) //我们不能直接将数组下标为nfds+1的空间分给这个fd //因为客户端断开是随机的 在nfds+1之前如果有数组空间空闲了 但我们跳过没用不就浪费了 //所以还是要从头检查数组是否还有空间没被占用(fd!=-1) { if (fds[i].fd == -1) { fds[i].fd = cfd; fds[i].events = POLLIN; nfds = nfds \u003e i ? nfds : i; //数组中的最大可用索引 break; } } //从头开始找 } //遍历其他集合中的文件描述符 for (int i = 0 + 1; i \u003c= nfds; i++) { if (fds[i].revents \u0026 POLLIN) { //fd = i对应的连接的客户端发来了数据 char buf[1024] = {}; int len = read(fds[i].fd, buf, sizeof(buf)); //调用read 因为缓冲区有数据 所以不会阻塞可以直接读 if (len == -1) { perror(\"read:\"); exit(-1); } else if (len == 0) { //对方断开连接 printf(\"client closed\\n\"); //将这个通信fd移除 close(fds[i].fd); fds[i].fd = -1; //=-1表示检测数组中的这个位置空闲了 } else if (len \u003e 0) //读到了数据 { //数据处理 printf(\"from client: %s \\n\", buf); write(fds[i].fd, buf, strlen(buf) + 1); //回写 } } } } } close(lfd); return 0; } epoll API介绍\nepoll_create在内核区实例化eventpoll(结构体) 返回epfd，在用户态对epfd操作就能影响内核区中的eventpoll，eventpoll结构体中有struct rb_root rbr 红黑树根节点(保存要检测的fd的信息) struct list_head rdlist 就绪链表头节点(epoll检测到fd的状态改变会将其信息放在这个链表中)。因为eventpoll就是在内核中的 我们不需要进行用户态和内核态之间的拷贝操作\nepoll_ctl函数能够完成对内核区eventpoll添加或删除要检测的fd(如果是添加还要传入指定 要检测fd什么信息 ev)\nepoll_wait 让内核去检测红黑树根fd节点是否有指定的事件发生，如果有则会将rdlist中的一些信息拷贝到用户区(只会返回发生指定事件的fd信息 不需要我们像poll和select一样自己去遍历检查)\n#include int epoll_create(int size); //在内核中创建一个eventpoll(结构体)实例(含 需要检测的fd信息的红黑树 和 双向就绪链表 保存检测到对应事件发生的fd的信息) //size 目前没有什么意义了但是要大于0(以前是用哈希实现的) //失败返回-1 大于0 为一个epfd文件描述符用于操作eventpoll实例 int epoll_ctl(int epfd,int op,int fd,struct epoll_event* event); //对epfd对应的eventpoll实例进行添加、删除fd或修改fd对应信息的操作 //epfd eventpoll实例对应的文件描述符 //op 要进行什么操作 删除EPOLL_CTL_DEL 添加EPOLL_CTL_ADD 修改EPOLL_CTL_MOD fd //修改红黑树节点信息 //fd 要检测的文件描述符 //event 具体要检测fd的什么信息 struct epoll_event { uint32_t events;//检测的事件 事件非常多 可以在 man epoll_ctl中看到 主要有EPOLLIN(与此fd关联的文件是否可读) EPOLLOUT(与此fd关联的文件是否可写) EPOLLERR epoll_data_t data;//用户数据信息 }; //epoll_data_t 是个联合体 typedef union epoll_data{ void* ptr; int fd; uint32_t u32; uint64_t u64; }epoll_data_t; int epoll_wait(int epfd,struct epoll_event* event,int maxevents,int timeout); //让内核去检测红黑树根fd节点是否有指定的事件发生，如果有则会将rdlist中的一些信息拷贝到用户区(只会返回发生指定事件的fd信息 不需要我们像poll和select一样自己去遍历检查) //epfd eventpoll实例对应的文件描述符 //event 作为传出参数 保存了发生了指定事件的文件描述符信息 是个数组 maxevents就是这个传出数组的大小 events不可以是空指针，内核只负责把数据复制到这个 events数组中，不会去帮助我们在用户态中分配内存。内核这种做法效率很高 //timeout 阻塞时长 传入0表示不阻塞 -1表示永久阻塞直到检测到红黑树中的fd的一些状态发生改变才解除阻塞函数返回 \u003e0为阻塞的时长单位为毫秒 //成功返回发生变化的文件描述符的个数 失败返回-1 epoll举例\n//io多路复用之epoll #include #include #include #include #include #include int main() { //创建监听socket int lfd = socket(PF_INET, SOCK_STREAM, 0); struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip //绑定 bind(lfd, (struct sockaddr *)\u0026saddr, sizeof(saddr)); //监听 listen(lfd, 8); //等待连接的最大队列长度为8 //原BIO accept 接收连接 + while死循环与客户端通信 //epoll_create在内核创建event_poll结构体实例 int epfd = epoll_create(1); //将监听文件描述符的相关信息加到event_poll结构体实例中的红黑树中 struct epoll_event epev; epev.events = EPOLLIN; //检测是否可读的事件 epev.data.fd = lfd; epoll_ctl(epfd, EPOLL_CTL_ADD, lfd, \u0026epev); struct epoll_event epevs[1026]; int maxevents = 1026; // event 作为传出参数 保存了发生了指定事件的文件描述符信息 是个数组 // maxevents就是这个传出数组的大小 events不可以是空指针，内核只负责把数据复制到这个 // events数组中，不会去帮助我们在用户态中分配内存。内核这种做法效率很高 while (1) { //epoll wait 去检测我们指定的fd是否发生了指定的事件 int ret = epoll_wait(epfd, epevs, maxevents, -1); //返回ret有几个fd发生了指定的事件 具体是哪几个保存在epevs的data.fd中 if (ret == -1) { perror(\"epoll_wait:\"); exit(-1); } else if (ret == 0) //超时时间到了 并且在这段时间内要检测的fd的状态没有改变(没有新的可读信息) { continue; } else if (ret \u003e 0) { //ret\u003e0 ret中保存我们监听的fd中有几个的状态发生改变(有几个fd的读缓冲区数据发生变化--即有新的可读信息) //具体哪几个保存在传出的结构体数组中 for (int i = 0; i \u003c ret; i++) { if (epevs[i].data.fd == lfd \u0026\u0026 (epevs[i].events \u0026 EPOLLIN)) { //监听描述符发生对于事件 并且这个事件是 读缓存区可读 //有新的客户端连入 accept创建通信fd 并将这个通信fd加入epoll实例的红黑树中 struct sockaddr_in client_addr; int len = sizeof(client_addr); int cfd = accept(lfd, (struct sockaddr *)\u0026client_addr, \u0026len); //接收这个新的连接 这里因为提前直到有新连接到来 调用accept不会阻塞 而是直接接收到那个连接请求 epev.events = EPOLLIN; //检测是否可读的事件 | EPOLLOUT epev.data.fd = cfd; epoll_ctl(epfd, EPOLL_CTL_ADD, cfd, \u0026epev); } else if (epevs[i].events \u0026 EPOLLIN) //只检测读事件 非0 { //用于通信fd 客户端有数据到达 char buf[1024] = {}; int len = read(epevs[i].data.fd, buf, sizeof(buf)); //调用read 因为缓冲区有数据 所以不会阻塞可以直接读 if (len == -1) { perror(\"read:\"); exit(-1); } else if (len == 0) { //对方断开连接 printf(\"client closed\\n\"); //将这个通信fd移除 epoll_ctl(epfd, EPOLL_CTL_DEL, epevs[i].data.fd, NULL); close(epevs[i].data.fd); //之前都是先关闭后移除 这里是先从红黑树中移除再关闭 } else if (len \u003e 0) //读到了数据 { //数据处理 printf(\"from client: %s \\n\", buf); write(epevs[i].data.fd, buf, strlen(buf) + 1); //回写 } } } } } close(lfd); close(epfd); return 0; } epoll的两种工作模式\nLT(level triggered)模式状态时同时支持阻塞和非阻塞socket。，主线程正在epoll_wait等待事件时，请求到了，epoll_wait返回后没有去处理请求(recv)，那么下次epoll_wait时此请求还是会返回（立刻返回了）；\nET(Edge Triggered)模式\n而ET模式状态下要求使用非阻塞socket，这次没处理，下次epoll_wait时将不返回（所以我们应该每次一定要处理），可见很大程度降低了epoll的触发次数（记住这句话先）。内核只会在fd从未就绪变为就绪通知一次(具体ET在什么情况下会触发在Edge Triggered (ET) 边沿触发有写)\n没有将读缓冲区数据读完，下次epoll ET不会提醒(LT会提醒)这个fd读缓冲区还有数据。所以当epoll触发后需要一次性将读缓冲区数据读完(循环读)，如果循环读读缓冲区的过程中发生阻塞将会影响对于其他fd检测。\nET模式减少了epoll事件被重复触发的次数，必须使用非阻塞socket,以避免一个对文件的阻塞读和阻塞写将处理多个fd的任务饿死(不去处理)。\nLevel Triggered (LT) 水平触发 socket接收缓冲区不为空 有数据可读 读事件一直触发 socket发送缓冲区不满 可以继续写入数据 写事件一直触发 符合思维习惯，epoll_wait返回的事件就是socket的状态\n在read 无法一次性读完读缓冲区，下次调用epoll wait依然会触发通知\nEdge Triggered (ET) 边沿触发 socket的接收缓冲区状态变化时触发读事件，即空的接收缓冲区刚接收到数据时触发读事件 socket的发送缓冲区状态变化时触发写事件，即满的缓冲区刚空出空间时触发读事件 仅在状态变化时触发事件\n设置边沿触发 epoll_event中的event设置为EPOLLIN | EPOLLET\n//io多路复用之epoll ET 边沿触发 //socket的接收缓冲区状态变化时触发读事件，即空的接收缓冲区刚接收到数据时触发读事件 #include #include #include #include #include #include #include //设置文件描述符非阻塞 #include int main() { //创建监听socket int lfd = socket(PF_INET, SOCK_STREAM, 0); struct sockaddr_in saddr; saddr.sin_port = htons(9999); saddr.sin_family = AF_INET; saddr.sin_addr.s_addr = INADDR_ANY; //服务器要绑定的地址 服务器任一网卡的ip //绑定 bind(lfd, (struct sockaddr *)\u0026saddr, sizeof(saddr)); //监听 listen(lfd, 8); //等待连接的最大队列长度为8 //原BIO accept 接收连接 + while死循环与客户端通信 //epoll_create在内核创建event_poll结构体实例 int epfd = epoll_create(1); //将监听文件描述符的相关信息加到event_poll结构体实例中的红黑树中 struct epoll_event epev; epev.events = EPOLLIN; //检测是否可读的事件 epev.data.fd = lfd; epoll_ctl(epfd, EPOLL_CTL_ADD, lfd, \u0026epev); struct epoll_event epevs[1026]; int maxevents = 1026; // event 作为传出参数 保存了发生了指定事件的文件描述符信息 是个数组 // maxevents就是这个传出数组的大小 events不可以是空指针，内核只负责把数据复制到这个 // events数组中，不会去帮助我们在用户态中分配内存。内核这种做法效率很高 while (1) { //epoll wait 去检测我们指定的fd是否发生了指定的事件 int ret = epoll_wait(epfd, epevs, maxevents, -1); //返回ret有几个fd发生了指定的事件 具体是哪几个保存在epevs的data.fd中 if (ret == -1) { perror(\"epoll_wait:\"); exit(-1); } else if (ret == 0) //超时时间到了 并且在这段时间内要检测的fd的状态没有改变(没有新的可读信息) { continue; } else if (ret \u003e 0) { //ret\u003e0 ret中保存我们监听的fd中有几个的状态发生改变(有几个fd的读缓冲区数据发生变化--即有新的可读信息) //具体哪几个保存在传出的结构体数组中 for (int i = 0; i \u003c ret; i++) { if (epevs[i].data.fd == lfd \u0026\u0026 (epevs[i].events \u0026 EPOLLIN)) { //监听描述符发生对于事件 并且这个事件是 读缓存区可读 //有新的客户端连入 accept创建通信fd 并将这个通信fd加入epoll实例的红黑树中 struct sockaddr_in client_addr; int len = sizeof(client_addr); int cfd = accept(lfd, (struct sockaddr *)\u0026client_addr, \u0026len); //接收这个新的连接 这里因为提前直到有新连接到来 调用accept不会阻塞 而是直接接收到那个连接请求 //通信的fd设置读非阻塞 int flag = fcntl(cfd, F_GETFL); //获取cfd属性 fcntl(cfd, F_SETFL, flag | O_NONBLOCK); //添加非阻塞属性 //用于和客户端通信的fd设置为边沿触发 epev.events = EPOLLIN | EPOLLET; //检测是否可读的事件 | EPOLLOUT epev.data.fd = cfd; //边沿触发只会提醒一次 即空的接收缓冲区刚接收到数据时触发读事件 //我们需要在触发后将读缓冲区内的数据全部读出来(因为不会二次提醒) epoll_ctl(epfd, EPOLL_CTL_ADD, cfd, \u0026epev); } else if (epevs[i].events \u0026 EPOLLIN) //只检测读事件 非0 { //用于通信fd 客户端有数据到达 //循环一次性读出读缓冲区的数据 char buf[5] = {}; int len = 0; //调用read 因为缓冲区有数据 所以不会阻塞可以直接读 //要求一次读 sizeof(buf)个字节 实际读了len个字节 while ((len = read(epevs[i].data.fd, buf, sizeof(buf))) \u003e 0) { //raed 返回值\u003e0 表示读缓冲区还有数据 则继续读 // printf(\"from client: %s \\n\", buf); write(STDOUT_FILENO, buf, len); //直接写再标准输出中(屏幕) write(epevs[i].data.fd, buf, len + 1); //回写 } if (len == -1) { //read 被信号中断 会触发 EINTR错误 此时不应该退出 而是继续读 //raed非阻塞读当读缓冲区读完了 再一次读将会触发EGAIN 此时不应该退出而是继续工作 if (errno == EAGAIN) printf(\"buff read finish\"); else { perror(\"read:\"); exit(-1); } } else if (len == 0) //read 返回值为0 表示客户端断开连接 { //对方断开连接 printf(\"client closed\\n\"); //将这个通信fd移除 epoll_ctl(epfd, EPOLL_CTL_DEL, epevs[i].data.fd, NULL); close(epevs[i].data.fd); //之前都是先关闭后移除 这里是先从红黑树中移除再关闭 } } } } } close(lfd); close(epfd); return 0; } ","wordCount":"1090","inLanguage":"en","datePublished":"2022-03-23T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/xz4611/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux网络编程7 poll,epoll</h1><div class=post-meta><span title=2022-03-23T00:00:00+00:00>创建于 2022-03-23</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>Poll API介绍</strong></p><p>先讲下select的缺点 1 每次调用select都需要把fd_set从用户态拷贝到内核态(这样内核才直到要监听哪些文件描述符) 返回传出时需要将fd_set从内核态拷贝到用户态 2 select在内核中需要遍历传进来的置1的fd 在fd_set中有较多置1的文件描述符时 开销会很大 O(n) 3 select能支持的最多的文件描述符数量为1024 太少了 4 fd_set既是传入也是传出参数 不能重用，每次都需要重置</p><p>//poll就是对select的改进</p><p>//poll 的fds可重复使用 且能支持的文件描述符数量无限制 但是缺点1,2还是存在的</p><p>#include &lt;poll.h></p><p>struct pollfd{</p><p>int fd;//委托内核检测的文件描述符</p><p>short events;//委托内核对fd的什么事件进行检测</p><p>short revents;//文件描述符实际发生的事件 <strong>传出参数 return events</strong></p><p>};</p><p>int poll(struct pollfd* fds,nfds_t nfds,int timeout);</p><p><img alt=1648004761936-7f0c5e94-94ff-4482-9e55-a876169fd77a.png loading=lazy src=/images/xNAx0qzKRSH80pKg/1648004761936-7f0c5e94-94ff-4482-9e55-a876169fd77a-599325.png></p><p>POLLIN 检测此fd读缓冲区是否有新的数据 同时检测POLLIN|POLLOUT</p><p>fds为struct pollfd结构体类型数组的首地址，保存了要检测的文件描述符的信息</p><p>nfds fds数组的最后一个有效元素的下标+1</p><p>timeout 阻塞时长 传入0表示不阻塞 -1表示永久阻塞直到检测到fds中的fd的一些状态发生改变才解除阻塞函数返回 >0为阻塞的时长单位为毫秒</p><p>失败返回-1 n>0 检测到fds中有n个fd的状态发生变化</p><p><strong>poll代码举例</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>//io多路复用之poll
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/time.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;arpa/inet.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;poll.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建监听socket
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> lfd <span style=color:#f92672>=</span> socket(PF_INET, SOCK_STREAM, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> saddr;
+</span></span><span style=display:flex><span>    saddr.sin_port <span style=color:#f92672>=</span> htons(<span style=color:#ae81ff>9999</span>);
+</span></span><span style=display:flex><span>    saddr.sin_family <span style=color:#f92672>=</span> AF_INET;
+</span></span><span style=display:flex><span>    saddr.sin_addr.s_addr <span style=color:#f92672>=</span> INADDR_ANY; <span style=color:#75715e>//服务器要绑定的地址 服务器任一网卡的ip
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//绑定
+</span></span></span><span style=display:flex><span>    bind(lfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>saddr, <span style=color:#66d9ef>sizeof</span>(saddr));
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//监听
+</span></span></span><span style=display:flex><span>    listen(lfd, <span style=color:#ae81ff>8</span>); <span style=color:#75715e>//等待连接的最大队列长度为8
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//原BIO accept 接收连接 + while死循环与客户端通信
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//初始化检测的文件描述符属性数组
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>pollfd</span> fds[<span style=color:#ae81ff>1026</span>];
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>1026</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        fds[i].fd <span style=color:#f92672>=</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>        fds[i].events <span style=color:#f92672>=</span> POLLIN; <span style=color:#75715e>//只检测所有文件描述的读缓存区是否有新数据
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    fds[<span style=color:#ae81ff>0</span>].fd <span style=color:#f92672>=</span> lfd; <span style=color:#75715e>//监听的文件描述符
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> nfds <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//调用poll 让内核帮助监听文件描述符
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> poll(fds, nfds <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>, <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>); <span style=color:#75715e>//只辅助监听 不检测是否能写 不检测是否有一样 永久阻塞
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;poll:&#34;</span>);
+</span></span><span style=display:flex><span>            exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//超时时间到了 并且在这段时间内要检测的fd的状态没有改变(没有新的可读信息)
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>continue</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//ret&gt;0 ret中保存我们监听的fd中有几个的状态发生改变(有几个fd的读缓冲区数据发生变化--即有新的可读信息)
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (fds[<span style=color:#ae81ff>0</span>].revents <span style=color:#f92672>&amp;</span> POLLIN) <span style=color:#75715e>//因为revents的结果不一定只有POLLIN
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//在同时检测读和写时revents结果可能是POLLIN|POLLOUT作为结果
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//如果我们用fds[0].revents == POLLIN 来判断是否有新数据到来
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//当同时 有新数据到来和写缓冲区有空间可写将会导致返回POLLIN|POLLOUT!=POLLIN
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//这种情况下用&amp; POLLIN就行可以单独检测我们像检测的状态是否发生变化
+</span></span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//判断服务器监听描述符的读缓冲区是否有新的数据
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//表示有新的客户端连接进来了！！！！！！！
+</span></span></span><span style=display:flex><span>                <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> client_addr;
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> <span style=color:#66d9ef>sizeof</span>(client_addr);
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>int</span> cfd <span style=color:#f92672>=</span> accept(lfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>client_addr, <span style=color:#f92672>&amp;</span>len); <span style=color:#75715e>//接收这个新的连接  这里因为提前直到有新连接到来 调用accept不会阻塞 而是直接接收到那个连接请求
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//将新的与客户端通信的fd 加入fd数组中 已完成poll对这个新通信连接的监听
+</span></span></span><span style=display:flex><span>                <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>1026</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//我们不能直接将数组下标为nfds+1的空间分给这个fd
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//因为客户端断开是随机的 在nfds+1之前如果有数组空间空闲了 但我们跳过没用不就浪费了
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//所以还是要从头检查数组是否还有空间没被占用(fd!=-1)
+</span></span></span><span style=display:flex><span>                {
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>if</span> (fds[i].fd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>                    {
+</span></span><span style=display:flex><span>                        fds[i].fd <span style=color:#f92672>=</span> cfd;
+</span></span><span style=display:flex><span>                        fds[i].events <span style=color:#f92672>=</span> POLLIN;
+</span></span><span style=display:flex><span>                        nfds <span style=color:#f92672>=</span> nfds <span style=color:#f92672>&gt;</span> i <span style=color:#f92672>?</span> nfds : i; <span style=color:#75715e>//数组中的最大可用索引
+</span></span></span><span style=display:flex><span>                        <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                } <span style=color:#75715e>//从头开始找
+</span></span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//遍历其他集合中的文件描述符
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span> <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>; i <span style=color:#f92672>&lt;=</span> nfds; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>if</span> (fds[i].revents <span style=color:#f92672>&amp;</span> POLLIN)
+</span></span><span style=display:flex><span>                {
+</span></span><span style=display:flex><span>                    <span style=color:#75715e>//fd = i对应的连接的客户端发来了数据
+</span></span></span><span style=display:flex><span>                    <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>1024</span>] <span style=color:#f92672>=</span> {};
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> read(fds[i].fd, buf, <span style=color:#66d9ef>sizeof</span>(buf)); <span style=color:#75715e>//调用read 因为缓冲区有数据 所以不会阻塞可以直接读
+</span></span></span><span style=display:flex><span>                    <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>                    {
+</span></span><span style=display:flex><span>                        perror(<span style=color:#e6db74>&#34;read:&#34;</span>);
+</span></span><span style=display:flex><span>                        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>                    {
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//对方断开连接
+</span></span></span><span style=display:flex><span>                        printf(<span style=color:#e6db74>&#34;client closed</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//将这个通信fd移除
+</span></span></span><span style=display:flex><span>                        close(fds[i].fd);
+</span></span><span style=display:flex><span>                        fds[i].fd <span style=color:#f92672>=</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>; <span style=color:#75715e>//=-1表示检测数组中的这个位置空闲了
+</span></span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//读到了数据
+</span></span></span><span style=display:flex><span>                    {
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//数据处理
+</span></span></span><span style=display:flex><span>                        printf(<span style=color:#e6db74>&#34;from client: %s </span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buf);
+</span></span><span style=display:flex><span>                        write(fds[i].fd, buf, strlen(buf) <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>); <span style=color:#75715e>//回写
+</span></span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    close(lfd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>epoll API介绍</strong></p><p>epoll_create在内核区实例化eventpoll(结构体) 返回epfd，在用户态对epfd操作就能影响内核区中的eventpoll，eventpoll结构体中有struct rb_root rbr 红黑树根节点(保存要检测的fd的信息) struct list_head rdlist 就绪链表头节点(epoll检测到fd的状态改变会将其信息放在这个链表中)。因为eventpoll就是在内核中的 我们不需要进行用户态和内核态之间的拷贝操作</p><p>epoll_ctl函数能够完成对内核区eventpoll添加或删除要检测的fd(如果是添加还要传入指定 要检测fd什么信息 ev)</p><p>epoll_wait 让内核去检测红黑树根fd节点是否有指定的事件发生，如果有则会将rdlist中的一些信息拷贝到用户区(只会返回发生指定事件的fd信息 不需要我们像poll和select一样自己去遍历检查)</p><p><img alt=1648004817490-9d92773d-d2f1-46c2-99ed-f2d4f3bdef69.png loading=lazy src=/images/xNAx0qzKRSH80pKg/1648004817490-9d92773d-d2f1-46c2-99ed-f2d4f3bdef69-244234.png></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/epoll.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>epoll_create</span>(<span style=color:#66d9ef>int</span> size);
+</span></span><span style=display:flex><span><span style=color:#75715e>//在内核中创建一个eventpoll(结构体)实例(含 需要检测的fd信息的红黑树 和 双向就绪链表 保存检测到对应事件发生的fd的信息)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//size 目前没有什么意义了但是要大于0(以前是用哈希实现的)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//失败返回-1  大于0 为一个epfd文件描述符用于操作eventpoll实例
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>epoll_ctl</span>(<span style=color:#66d9ef>int</span> epfd,<span style=color:#66d9ef>int</span> op,<span style=color:#66d9ef>int</span> fd,<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>epoll_event</span><span style=color:#f92672>*</span> event);
+</span></span><span style=display:flex><span><span style=color:#75715e>//对epfd对应的eventpoll实例进行添加、删除fd或修改fd对应信息的操作
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//epfd eventpoll实例对应的文件描述符
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//op 要进行什么操作 删除EPOLL_CTL_DEL 添加EPOLL_CTL_ADD 修改EPOLL_CTL_MOD  fd
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//修改红黑树节点信息
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//fd 要检测的文件描述符
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>//event  具体要检测fd的什么信息
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>epoll_event</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>uint32_t</span> events;<span style=color:#75715e>//检测的事件 事件非常多 可以在 man epoll_ctl中看到 主要有EPOLLIN(与此fd关联的文件是否可读) EPOLLOUT(与此fd关联的文件是否可写)  EPOLLERR
+</span></span></span><span style=display:flex><span>	epoll_data_t data;<span style=color:#75715e>//用户数据信息
+</span></span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span><span style=color:#75715e>//epoll_data_t 是个联合体
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>union</span> <span style=color:#a6e22e>epoll_data</span>{
+</span></span><span style=display:flex><span>      <span style=color:#66d9ef>void</span><span style=color:#f92672>*</span> ptr;
+</span></span><span style=display:flex><span>      <span style=color:#66d9ef>int</span> fd;
+</span></span><span style=display:flex><span>      <span style=color:#66d9ef>uint32_t</span> u32;
+</span></span><span style=display:flex><span>      <span style=color:#66d9ef>uint64_t</span> u64;
+</span></span><span style=display:flex><span>}epoll_data_t;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>epoll_wait</span>(<span style=color:#66d9ef>int</span> epfd,<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>epoll_event</span><span style=color:#f92672>*</span> event,<span style=color:#66d9ef>int</span> maxevents,<span style=color:#66d9ef>int</span> timeout);
+</span></span><span style=display:flex><span><span style=color:#75715e>//让内核去检测红黑树根fd节点是否有指定的事件发生，如果有则会将rdlist中的一些信息拷贝到用户区(只会返回发生指定事件的fd信息 不需要我们像poll和select一样自己去遍历检查)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//epfd eventpoll实例对应的文件描述符
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//event 作为传出参数 保存了发生了指定事件的文件描述符信息 是个数组 maxevents就是这个传出数组的大小 events不可以是空指针，内核只负责把数据复制到这个 events数组中，不会去帮助我们在用户态中分配内存。内核这种做法效率很高
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>//timeout 阻塞时长 传入0表示不阻塞 -1表示永久阻塞直到检测到红黑树中的fd的一些状态发生改变才解除阻塞函数返回   &gt;0为阻塞的时长单位为毫秒
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//成功返回发生变化的文件描述符的个数 失败返回-1
+</span></span></span></code></pre></div><p><strong>epoll举例</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>//io多路复用之epoll
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/time.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;arpa/inet.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/epoll.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建监听socket
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> lfd <span style=color:#f92672>=</span> socket(PF_INET, SOCK_STREAM, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> saddr;
+</span></span><span style=display:flex><span>    saddr.sin_port <span style=color:#f92672>=</span> htons(<span style=color:#ae81ff>9999</span>);
+</span></span><span style=display:flex><span>    saddr.sin_family <span style=color:#f92672>=</span> AF_INET;
+</span></span><span style=display:flex><span>    saddr.sin_addr.s_addr <span style=color:#f92672>=</span> INADDR_ANY; <span style=color:#75715e>//服务器要绑定的地址 服务器任一网卡的ip
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//绑定
+</span></span></span><span style=display:flex><span>    bind(lfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>saddr, <span style=color:#66d9ef>sizeof</span>(saddr));
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//监听
+</span></span></span><span style=display:flex><span>    listen(lfd, <span style=color:#ae81ff>8</span>); <span style=color:#75715e>//等待连接的最大队列长度为8
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//原BIO accept 接收连接 + while死循环与客户端通信
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//epoll_create在内核创建event_poll结构体实例
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> epfd <span style=color:#f92672>=</span> epoll_create(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//将监听文件描述符的相关信息加到event_poll结构体实例中的红黑树中
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>epoll_event</span> epev;
+</span></span><span style=display:flex><span>    epev.events <span style=color:#f92672>=</span> EPOLLIN; <span style=color:#75715e>//检测是否可读的事件
+</span></span></span><span style=display:flex><span>    epev.data.fd <span style=color:#f92672>=</span> lfd;
+</span></span><span style=display:flex><span>    epoll_ctl(epfd, EPOLL_CTL_ADD, lfd, <span style=color:#f92672>&amp;</span>epev);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>epoll_event</span> epevs[<span style=color:#ae81ff>1026</span>];
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> maxevents <span style=color:#f92672>=</span> <span style=color:#ae81ff>1026</span>;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// event 作为传出参数 保存了发生了指定事件的文件描述符信息 是个数组
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// maxevents就是这个传出数组的大小 events不可以是空指针，内核只负责把数据复制到这个
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// events数组中，不会去帮助我们在用户态中分配内存。内核这种做法效率很高
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//epoll wait 去检测我们指定的fd是否发生了指定的事件
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> epoll_wait(epfd, epevs, maxevents, <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//返回ret有几个fd发生了指定的事件  具体是哪几个保存在epevs的data.fd中
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;epoll_wait:&#34;</span>);
+</span></span><span style=display:flex><span>            exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//超时时间到了 并且在这段时间内要检测的fd的状态没有改变(没有新的可读信息)
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>continue</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//ret&gt;0 ret中保存我们监听的fd中有几个的状态发生改变(有几个fd的读缓冲区数据发生变化--即有新的可读信息)
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//具体哪几个保存在传出的结构体数组中
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> ret; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>if</span> (epevs[i].data.fd <span style=color:#f92672>==</span> lfd <span style=color:#f92672>&amp;&amp;</span> (epevs[i].events <span style=color:#f92672>&amp;</span> EPOLLIN))
+</span></span><span style=display:flex><span>                {
+</span></span><span style=display:flex><span>                    <span style=color:#75715e>//监听描述符发生对于事件 并且这个事件是 读缓存区可读
+</span></span></span><span style=display:flex><span>                    <span style=color:#75715e>//有新的客户端连入 accept创建通信fd  并将这个通信fd加入epoll实例的红黑树中
+</span></span></span><span style=display:flex><span>                    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> client_addr;
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> <span style=color:#66d9ef>sizeof</span>(client_addr);
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>int</span> cfd <span style=color:#f92672>=</span> accept(lfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>client_addr, <span style=color:#f92672>&amp;</span>len); <span style=color:#75715e>//接收这个新的连接  这里因为提前直到有新连接到来 调用accept不会阻塞 而是直接接收到那个连接请求
+</span></span></span><span style=display:flex><span>                    epev.events <span style=color:#f92672>=</span> EPOLLIN; <span style=color:#75715e>//检测是否可读的事件 | EPOLLOUT
+</span></span></span><span style=display:flex><span>                    epev.data.fd <span style=color:#f92672>=</span> cfd;
+</span></span><span style=display:flex><span>                    epoll_ctl(epfd, EPOLL_CTL_ADD, cfd, <span style=color:#f92672>&amp;</span>epev);
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (epevs[i].events <span style=color:#f92672>&amp;</span> EPOLLIN) <span style=color:#75715e>//只检测读事件 非0
+</span></span></span><span style=display:flex><span>                {
+</span></span><span style=display:flex><span>                    <span style=color:#75715e>//用于通信fd 客户端有数据到达
+</span></span></span><span style=display:flex><span>                    <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>1024</span>] <span style=color:#f92672>=</span> {};
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> read(epevs[i].data.fd, buf, <span style=color:#66d9ef>sizeof</span>(buf)); <span style=color:#75715e>//调用read 因为缓冲区有数据 所以不会阻塞可以直接读
+</span></span></span><span style=display:flex><span>                    <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>                    {
+</span></span><span style=display:flex><span>                        perror(<span style=color:#e6db74>&#34;read:&#34;</span>);
+</span></span><span style=display:flex><span>                        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>                    {
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//对方断开连接
+</span></span></span><span style=display:flex><span>                        printf(<span style=color:#e6db74>&#34;client closed</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//将这个通信fd移除
+</span></span></span><span style=display:flex><span>                        epoll_ctl(epfd, EPOLL_CTL_DEL, epevs[i].data.fd, NULL);
+</span></span><span style=display:flex><span>                        close(epevs[i].data.fd);
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//之前都是先关闭后移除 这里是先从红黑树中移除再关闭
+</span></span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//读到了数据
+</span></span></span><span style=display:flex><span>                    {
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//数据处理
+</span></span></span><span style=display:flex><span>                        printf(<span style=color:#e6db74>&#34;from client: %s </span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buf);
+</span></span><span style=display:flex><span>                        write(epevs[i].data.fd, buf, strlen(buf) <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>); <span style=color:#75715e>//回写
+</span></span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    close(lfd);
+</span></span><span style=display:flex><span>    close(epfd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>epoll的两种工作模式</strong></p><p>LT(level triggered)模式状态时同时支持阻塞和非阻塞socket。，主线程正在epoll_wait等待事件时，请求到了，epoll_wait返回后没有去处理请求(recv)，那么下次epoll_wait时此请求还是会返回（立刻返回了）；</p><p>ET(Edge Triggered)模式</p><p>而ET模式状态下要求使用非阻塞socket，这次没处理，下次epoll_wait时将不返回（所以我们应该每次一定要处理），可见很大程度降低了epoll的触发次数（记住这句话先）。内核只会在fd从未就绪变为就绪通知一次(具体ET在什么情况下会触发在Edge Triggered (ET) 边沿触发有写)</p><p>没有将读缓冲区数据读完，下次epoll ET不会提醒(LT会提醒)这个fd读缓冲区还有数据。所以当epoll触发后需要一次性将读缓冲区数据读完(循环读)，如果循环读读缓冲区的过程中发生阻塞将会影响对于其他fd检测。</p><p>ET模式减少了epoll事件被重复触发的次数，必须使用非阻塞socket,以避免一个对文件的阻塞读和阻塞写将处理多个fd的任务饿死(不去处理)。</p><p><strong>Level Triggered (LT) 水平触发
+socket接收缓冲区不为空 有数据可读 读事件一直触发
+socket发送缓冲区不满 可以继续写入数据 写事件一直触发
+符合思维习惯，epoll_wait返回的事件就是socket的状态</strong></p><p><strong>在read 无法一次性读完读缓冲区，下次调用epoll wait依然会触发通知</strong></p><p><strong>Edge Triggered (ET) 边沿触发
+socket的接收缓冲区状态变化时触发读事件，即空的接收缓冲区刚接收到数据时触发读事件
+socket的发送缓冲区状态变化时触发写事件，即满的缓冲区刚空出空间时触发读事件
+仅在状态变化时触发事件</strong></p><p>设置边沿触发 epoll_event中的event设置为EPOLLIN | EPOLLET</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>//io多路复用之epoll ET 边沿触发
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//socket的接收缓冲区状态变化时触发读事件，即空的接收缓冲区刚接收到数据时触发读事件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/time.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;arpa/inet.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/epoll.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//设置文件描述符非阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;errno.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建监听socket
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> lfd <span style=color:#f92672>=</span> socket(PF_INET, SOCK_STREAM, <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> saddr;
+</span></span><span style=display:flex><span>    saddr.sin_port <span style=color:#f92672>=</span> htons(<span style=color:#ae81ff>9999</span>);
+</span></span><span style=display:flex><span>    saddr.sin_family <span style=color:#f92672>=</span> AF_INET;
+</span></span><span style=display:flex><span>    saddr.sin_addr.s_addr <span style=color:#f92672>=</span> INADDR_ANY; <span style=color:#75715e>//服务器要绑定的地址 服务器任一网卡的ip
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//绑定
+</span></span></span><span style=display:flex><span>    bind(lfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>saddr, <span style=color:#66d9ef>sizeof</span>(saddr));
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//监听
+</span></span></span><span style=display:flex><span>    listen(lfd, <span style=color:#ae81ff>8</span>); <span style=color:#75715e>//等待连接的最大队列长度为8
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//原BIO accept 接收连接 + while死循环与客户端通信
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//epoll_create在内核创建event_poll结构体实例
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> epfd <span style=color:#f92672>=</span> epoll_create(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//将监听文件描述符的相关信息加到event_poll结构体实例中的红黑树中
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>epoll_event</span> epev;
+</span></span><span style=display:flex><span>    epev.events <span style=color:#f92672>=</span> EPOLLIN; <span style=color:#75715e>//检测是否可读的事件
+</span></span></span><span style=display:flex><span>    epev.data.fd <span style=color:#f92672>=</span> lfd;
+</span></span><span style=display:flex><span>    epoll_ctl(epfd, EPOLL_CTL_ADD, lfd, <span style=color:#f92672>&amp;</span>epev);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>epoll_event</span> epevs[<span style=color:#ae81ff>1026</span>];
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> maxevents <span style=color:#f92672>=</span> <span style=color:#ae81ff>1026</span>;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// event 作为传出参数 保存了发生了指定事件的文件描述符信息 是个数组
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// maxevents就是这个传出数组的大小 events不可以是空指针，内核只负责把数据复制到这个
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// events数组中，不会去帮助我们在用户态中分配内存。内核这种做法效率很高
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//epoll wait 去检测我们指定的fd是否发生了指定的事件
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> epoll_wait(epfd, epevs, maxevents, <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//返回ret有几个fd发生了指定的事件  具体是哪几个保存在epevs的data.fd中
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            perror(<span style=color:#e6db74>&#34;epoll_wait:&#34;</span>);
+</span></span><span style=display:flex><span>            exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//超时时间到了 并且在这段时间内要检测的fd的状态没有改变(没有新的可读信息)
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>continue</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//ret&gt;0 ret中保存我们监听的fd中有几个的状态发生改变(有几个fd的读缓冲区数据发生变化--即有新的可读信息)
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//具体哪几个保存在传出的结构体数组中
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> ret; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>if</span> (epevs[i].data.fd <span style=color:#f92672>==</span> lfd <span style=color:#f92672>&amp;&amp;</span> (epevs[i].events <span style=color:#f92672>&amp;</span> EPOLLIN))
+</span></span><span style=display:flex><span>                {
+</span></span><span style=display:flex><span>                    <span style=color:#75715e>//监听描述符发生对于事件 并且这个事件是 读缓存区可读
+</span></span></span><span style=display:flex><span>                    <span style=color:#75715e>//有新的客户端连入 accept创建通信fd  并将这个通信fd加入epoll实例的红黑树中
+</span></span></span><span style=display:flex><span>                    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr_in</span> client_addr;
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> <span style=color:#66d9ef>sizeof</span>(client_addr);
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>int</span> cfd <span style=color:#f92672>=</span> accept(lfd, (<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>sockaddr</span> <span style=color:#f92672>*</span>)<span style=color:#f92672>&amp;</span>client_addr, <span style=color:#f92672>&amp;</span>len); <span style=color:#75715e>//接收这个新的连接  这里因为提前直到有新连接到来 调用accept不会阻塞 而是直接接收到那个连接请求
+</span></span></span><span style=display:flex><span>                    <span style=color:#75715e>//通信的fd设置读非阻塞
+</span></span></span><span style=display:flex><span>                    <span style=color:#66d9ef>int</span> flag <span style=color:#f92672>=</span> fcntl(cfd, F_GETFL);         <span style=color:#75715e>//获取cfd属性
+</span></span></span><span style=display:flex><span>                    fcntl(cfd, F_SETFL, flag <span style=color:#f92672>|</span> O_NONBLOCK); <span style=color:#75715e>//添加非阻塞属性
+</span></span></span><span style=display:flex><span>                    <span style=color:#75715e>//用于和客户端通信的fd设置为边沿触发
+</span></span></span><span style=display:flex><span>                    epev.events <span style=color:#f92672>=</span> EPOLLIN <span style=color:#f92672>|</span> EPOLLET; <span style=color:#75715e>//检测是否可读的事件 | EPOLLOUT
+</span></span></span><span style=display:flex><span>                    epev.data.fd <span style=color:#f92672>=</span> cfd;
+</span></span><span style=display:flex><span>                    <span style=color:#75715e>//边沿触发只会提醒一次 即空的接收缓冲区刚接收到数据时触发读事件
+</span></span></span><span style=display:flex><span>                    <span style=color:#75715e>//我们需要在触发后将读缓冲区内的数据全部读出来(因为不会二次提醒)
+</span></span></span><span style=display:flex><span>                    epoll_ctl(epfd, EPOLL_CTL_ADD, cfd, <span style=color:#f92672>&amp;</span>epev);
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (epevs[i].events <span style=color:#f92672>&amp;</span> EPOLLIN) <span style=color:#75715e>//只检测读事件 非0
+</span></span></span><span style=display:flex><span>                {
+</span></span><span style=display:flex><span>                    <span style=color:#75715e>//用于通信fd 客户端有数据到达
+</span></span></span><span style=display:flex><span>                    <span style=color:#75715e>//循环一次性读出读缓冲区的数据
+</span></span></span><span style=display:flex><span>                    <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>5</span>] <span style=color:#f92672>=</span> {};
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//调用read 因为缓冲区有数据 所以不会阻塞可以直接读
+</span></span></span><span style=display:flex><span>                    <span style=color:#75715e>//要求一次读 sizeof(buf)个字节  实际读了len个字节
+</span></span></span><span style=display:flex><span>                    <span style=color:#66d9ef>while</span> ((len <span style=color:#f92672>=</span> read(epevs[i].data.fd, buf, <span style=color:#66d9ef>sizeof</span>(buf))) <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>                    {
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//raed 返回值&gt;0 表示读缓冲区还有数据 则继续读
+</span></span></span><span style=display:flex><span>                        <span style=color:#75715e>// printf(&#34;from client: %s \n&#34;, buf);
+</span></span></span><span style=display:flex><span>                        write(STDOUT_FILENO, buf, len);        <span style=color:#75715e>//直接写再标准输出中(屏幕)
+</span></span></span><span style=display:flex><span>                        write(epevs[i].data.fd, buf, len <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>); <span style=color:#75715e>//回写
+</span></span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>                    {
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//read 被信号中断 会触发 EINTR错误 此时不应该退出 而是继续读
+</span></span></span><span style=display:flex><span>                        <span style=color:#75715e>//raed非阻塞读当读缓冲区读完了 再一次读将会触发EGAIN 此时不应该退出而是继续工作
+</span></span></span><span style=display:flex><span>                        <span style=color:#66d9ef>if</span> (errno <span style=color:#f92672>==</span> EAGAIN)
+</span></span><span style=display:flex><span>                            printf(<span style=color:#e6db74>&#34;buff read finish&#34;</span>);
+</span></span><span style=display:flex><span>                        <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>                        {
+</span></span><span style=display:flex><span>                            perror(<span style=color:#e6db74>&#34;read:&#34;</span>);
+</span></span><span style=display:flex><span>                            exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>                        }
+</span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//read 返回值为0 表示客户端断开连接
+</span></span></span><span style=display:flex><span>                    {
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//对方断开连接
+</span></span></span><span style=display:flex><span>                        printf(<span style=color:#e6db74>&#34;client closed</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//将这个通信fd移除
+</span></span></span><span style=display:flex><span>                        epoll_ctl(epfd, EPOLL_CTL_DEL, epevs[i].data.fd, NULL);
+</span></span><span style=display:flex><span>                        close(epevs[i].data.fd);
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//之前都是先关闭后移除 这里是先从红黑树中移除再关闭
+</span></span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    close(lfd);
+</span></span><span style=display:flex><span>    close(epfd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

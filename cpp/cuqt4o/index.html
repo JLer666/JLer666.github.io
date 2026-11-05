@@ -1,0 +1,383 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>allocator3 c++mp 3 几种allocator的例子 | CantBlog</title><meta name=keywords content><meta name=description content="allocator 例子
+提前申请一大块内存(减少malloc的次数 加快程序运行)，使用者在new时再从这个大块内存中分配空间给对象，其实还有一个好处就是malloc分配内存会创建出多余的cookie(8个字节)，我们自己分配就可以不去创建cookie从而节省下一些空间。
+利用内存池的观念(即创建出一大段连续空间的内存，然后将其切割成一小段一小段)，将创建的元素对象放在内存池切分好的各分段小内存片中，这样避免了多次调用new而造成生成多个带有cookie的内存空间。可以生成一大段只带有两个头尾cookie的内存空间，而该一大段内存空间又被切分成每一小段的内存空间，且其中的每一小段内存空间片都可以共享这一整体的cookie信息。
+1per-class allocator (c++ primer p765)
+#include <cstddef>
+#include <iostream>
+using namespace std;
+//这种内存针对单一类的内存管理角坐 per-class allocator
+class Screen
+{
+public:
+    Screen(int x) : i(x){};
+    int get() { return i; }
+    static void *operator new(size_t);           //重载op new  // 其实这里最规范的写法应该添加static关键字！！
+    static void operator delete(void *, size_t); //重载op delete() // 虽然不添加系统也会默认将其看成 static函数去调用！！
+    //delete expression只调用一个版本,delete(void*).其它的版本只在出现异常时调用.
+    //为什么不定义operator delete(void *)?
+    static void operator delete(void *);
+    //我们并没有重载void *operator new(size_t); 对应的delete void operator delete(void *)
+    //...
+private:
+    Screen *next;             //这种设计会多耗一个next
+    static Screen *freeStore; // 静态变量必须类内声明，类外定义赋初值
+    static const int screenChunk;
+    int i;
+};
+Screen *Screen::freeStore = 0;      //余下未分配空间的首地址
+const int Screen::screenChunk = 24; //1块内存大24个sizeof(Screen)大
+void *Screen::operator new(size_t size)
+{
+    Screen *p;
+    if (!freeStore) //每当没有余下空间后 重新申请一块大内存
+    {
+        //linked list是空的直接申请一大块 一次申请24个size的空间
+        size_t chunk = screenChunk * size;
+        freeStore = p = reinterpret_cast<Screen *>(new char[chunk]);
+        //将这一大块内存 串起来变为linked list
+        //p初始指向分配空间的首地址空间共size个Screen大
+        //将每个Screen像链表一样连接起来
+        for (; p != &amp;freeStore[screenChunk - 1]; ++p)
+            p->next = p + 1;
+        p->next = 0; //链表尾指向0
+    }
+    p = freeStore;               //p重新指向未分配空间首地址
+    freeStore = freeStore->next; //freeStore指向链表头指向的下一个Screen对象
+    //p(链表头head)->head_next->....
+    //                / \
+    //                 |
+    //             freeStore
+    return p; //传回一块(链表头的那块) freeStore指向余下的空间(第一次23块)
+}
+//delete expression会先调用析构函数 再调用op delete回收空间
+//本质将传进来的 要被回收的p空间(一个Screen节点) 插到余下未分配链表！！！的头  这样就回收完成了 下次再new时就会优先分配这个空间
+void Screen::operator delete(void *p, size_t size)和
+void Screen::operator delete(void *p)
+在类中重写 只能选择其中一种 同时写这两个函数 编译器会报错 但是GNUC这两个函数的全局版本可以共存 但是还是建议只写一种
+void Screen::operator delete(void *p, size_t size)
+{
+    //将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的)
+    //将已经被删除的对象插回free list前端
+    (static_cast<Screen *>(p))->next = freeStore; //
+    freeStore = static_cast<Screen *>(p);         //余下可分配空间多出一个p界点
+}
+//delete expression只调用一个版本,delete(void*).其它的版本只在出现异常时调用.
+//为什么不定义operator delete(void *)?
+void Screen::operator delete(void *p)
+{
+    //将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的)
+    //将已经被删除的对象插回free list前端
+    (static_cast<Screen *>(p))->next = freeStore; //
+    freeStore = static_cast<Screen *>(p);         //余下可分配空间多出一个p界点
+}
+//注意freeStore是静态对象 只要有Screen对象delete就会将空间回收到freeStore
+//freeStore链表的大小会越来越大
+//链表的最终大小是总共申请过的Screen数量 + (小于 24 * sizeof(Screen) 的冗余大小)
+//注意这个op delete在没出错的情况下并没有free or op delete 将申请来的内存归还给OS
+2per-class allocator  union(effective C++ item10)"><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/cuqt4o/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/cuqt4o/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/cuqt4o/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="allocator3 c++mp 3 几种allocator的例子"><meta property="og:description" content="allocator 例子
+提前申请一大块内存(减少malloc的次数 加快程序运行)，使用者在new时再从这个大块内存中分配空间给对象，其实还有一个好处就是malloc分配内存会创建出多余的cookie(8个字节)，我们自己分配就可以不去创建cookie从而节省下一些空间。
+利用内存池的观念(即创建出一大段连续空间的内存，然后将其切割成一小段一小段)，将创建的元素对象放在内存池切分好的各分段小内存片中，这样避免了多次调用new而造成生成多个带有cookie的内存空间。可以生成一大段只带有两个头尾cookie的内存空间，而该一大段内存空间又被切分成每一小段的内存空间，且其中的每一小段内存空间片都可以共享这一整体的cookie信息。
+1per-class allocator (c++ primer p765)
+#include <cstddef> #include <iostream> using namespace std; //这种内存针对单一类的内存管理角坐 per-class allocator class Screen { public: Screen(int x) : i(x){}; int get() { return i; } static void *operator new(size_t); //重载op new // 其实这里最规范的写法应该添加static关键字！！ static void operator delete(void *, size_t); //重载op delete() // 虽然不添加系统也会默认将其看成 static函数去调用！！ //delete expression只调用一个版本,delete(void*).其它的版本只在出现异常时调用. //为什么不定义operator delete(void *)? static void operator delete(void *); //我们并没有重载void *operator new(size_t); 对应的delete void operator delete(void *) //... private: Screen *next; //这种设计会多耗一个next static Screen *freeStore; // 静态变量必须类内声明，类外定义赋初值 static const int screenChunk; int i; }; Screen *Screen::freeStore = 0; //余下未分配空间的首地址 const int Screen::screenChunk = 24; //1块内存大24个sizeof(Screen)大 void *Screen::operator new(size_t size) { Screen *p; if (!freeStore) //每当没有余下空间后 重新申请一块大内存 { //linked list是空的直接申请一大块 一次申请24个size的空间 size_t chunk = screenChunk * size; freeStore = p = reinterpret_cast<Screen *>(new char[chunk]); //将这一大块内存 串起来变为linked list //p初始指向分配空间的首地址空间共size个Screen大 //将每个Screen像链表一样连接起来 for (; p != &amp;freeStore[screenChunk - 1]; ++p) p->next = p + 1; p->next = 0; //链表尾指向0 } p = freeStore; //p重新指向未分配空间首地址 freeStore = freeStore->next; //freeStore指向链表头指向的下一个Screen对象 //p(链表头head)->head_next->.... // / \ // | // freeStore return p; //传回一块(链表头的那块) freeStore指向余下的空间(第一次23块) } //delete expression会先调用析构函数 再调用op delete回收空间 //本质将传进来的 要被回收的p空间(一个Screen节点) 插到余下未分配链表！！！的头 这样就回收完成了 下次再new时就会优先分配这个空间 void Screen::operator delete(void *p, size_t size)和 void Screen::operator delete(void *p) 在类中重写 只能选择其中一种 同时写这两个函数 编译器会报错 但是GNUC这两个函数的全局版本可以共存 但是还是建议只写一种 void Screen::operator delete(void *p, size_t size) { //将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的) //将已经被删除的对象插回free list前端 (static_cast<Screen *>(p))->next = freeStore; // freeStore = static_cast<Screen *>(p); //余下可分配空间多出一个p界点 } //delete expression只调用一个版本,delete(void*).其它的版本只在出现异常时调用. //为什么不定义operator delete(void *)? void Screen::operator delete(void *p) { //将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的) //将已经被删除的对象插回free list前端 (static_cast<Screen *>(p))->next = freeStore; // freeStore = static_cast<Screen *>(p); //余下可分配空间多出一个p界点 } //注意freeStore是静态对象 只要有Screen对象delete就会将空间回收到freeStore //freeStore链表的大小会越来越大 //链表的最终大小是总共申请过的Screen数量 + (小于 24 * sizeof(Screen) 的冗余大小) //注意这个op delete在没出错的情况下并没有free or op delete 将申请来的内存归还给OS 2per-class allocator union(effective C++ item10)"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-02-11T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="allocator3 c++mp 3 几种allocator的例子"><meta name=twitter:description content="allocator 例子
+提前申请一大块内存(减少malloc的次数 加快程序运行)，使用者在new时再从这个大块内存中分配空间给对象，其实还有一个好处就是malloc分配内存会创建出多余的cookie(8个字节)，我们自己分配就可以不去创建cookie从而节省下一些空间。
+利用内存池的观念(即创建出一大段连续空间的内存，然后将其切割成一小段一小段)，将创建的元素对象放在内存池切分好的各分段小内存片中，这样避免了多次调用new而造成生成多个带有cookie的内存空间。可以生成一大段只带有两个头尾cookie的内存空间，而该一大段内存空间又被切分成每一小段的内存空间，且其中的每一小段内存空间片都可以共享这一整体的cookie信息。
+1per-class allocator (c++ primer p765)
+#include <cstddef> #include <iostream> using namespace std; //这种内存针对单一类的内存管理角坐 per-class allocator class Screen { public: Screen(int x) : i(x){}; int get() { return i; } static void *operator new(size_t); //重载op new // 其实这里最规范的写法应该添加static关键字！！ static void operator delete(void *, size_t); //重载op delete() // 虽然不添加系统也会默认将其看成 static函数去调用！！ //delete expression只调用一个版本,delete(void*).其它的版本只在出现异常时调用. //为什么不定义operator delete(void *)? static void operator delete(void *); //我们并没有重载void *operator new(size_t); 对应的delete void operator delete(void *) //... private: Screen *next; //这种设计会多耗一个next static Screen *freeStore; // 静态变量必须类内声明，类外定义赋初值 static const int screenChunk; int i; }; Screen *Screen::freeStore = 0; //余下未分配空间的首地址 const int Screen::screenChunk = 24; //1块内存大24个sizeof(Screen)大 void *Screen::operator new(size_t size) { Screen *p; if (!freeStore) //每当没有余下空间后 重新申请一块大内存 { //linked list是空的直接申请一大块 一次申请24个size的空间 size_t chunk = screenChunk * size; freeStore = p = reinterpret_cast<Screen *>(new char[chunk]); //将这一大块内存 串起来变为linked list //p初始指向分配空间的首地址空间共size个Screen大 //将每个Screen像链表一样连接起来 for (; p != &amp;freeStore[screenChunk - 1]; ++p) p->next = p + 1; p->next = 0; //链表尾指向0 } p = freeStore; //p重新指向未分配空间首地址 freeStore = freeStore->next; //freeStore指向链表头指向的下一个Screen对象 //p(链表头head)->head_next->.... // / \ // | // freeStore return p; //传回一块(链表头的那块) freeStore指向余下的空间(第一次23块) } //delete expression会先调用析构函数 再调用op delete回收空间 //本质将传进来的 要被回收的p空间(一个Screen节点) 插到余下未分配链表！！！的头 这样就回收完成了 下次再new时就会优先分配这个空间 void Screen::operator delete(void *p, size_t size)和 void Screen::operator delete(void *p) 在类中重写 只能选择其中一种 同时写这两个函数 编译器会报错 但是GNUC这两个函数的全局版本可以共存 但是还是建议只写一种 void Screen::operator delete(void *p, size_t size) { //将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的) //将已经被删除的对象插回free list前端 (static_cast<Screen *>(p))->next = freeStore; // freeStore = static_cast<Screen *>(p); //余下可分配空间多出一个p界点 } //delete expression只调用一个版本,delete(void*).其它的版本只在出现异常时调用. //为什么不定义operator delete(void *)? void Screen::operator delete(void *p) { //将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的) //将已经被删除的对象插回free list前端 (static_cast<Screen *>(p))->next = freeStore; // freeStore = static_cast<Screen *>(p); //余下可分配空间多出一个p界点 } //注意freeStore是静态对象 只要有Screen对象delete就会将空间回收到freeStore //freeStore链表的大小会越来越大 //链表的最终大小是总共申请过的Screen数量 + (小于 24 * sizeof(Screen) 的冗余大小) //注意这个op delete在没出错的情况下并没有free or op delete 将申请来的内存归还给OS 2per-class allocator union(effective C++ item10)"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"allocator3 c++mp 3 几种allocator的例子","item":"https://jler666.github.io/cpp/cuqt4o/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"allocator3 c++mp 3 几种allocator的例子","name":"allocator3 c\u002b\u002bmp 3 几种allocator的例子","description":"allocator 例子\n提前申请一大块内存(减少malloc的次数 加快程序运行)，使用者在new时再从这个大块内存中分配空间给对象，其实还有一个好处就是malloc分配内存会创建出多余的cookie(8个字节)，我们自己分配就可以不去创建cookie从而节省下一些空间。\n利用内存池的观念(即创建出一大段连续空间的内存，然后将其切割成一小段一小段)，将创建的元素对象放在内存池切分好的各分段小内存片中，这样避免了多次调用new而造成生成多个带有cookie的内存空间。可以生成一大段只带有两个头尾cookie的内存空间，而该一大段内存空间又被切分成每一小段的内存空间，且其中的每一小段内存空间片都可以共享这一整体的cookie信息。\n1per-class allocator (c++ primer p765)\n#include \u0026lt;cstddef\u0026gt; #include \u0026lt;iostream\u0026gt; using namespace std; //这种内存针对单一类的内存管理角坐 per-class allocator class Screen { public: Screen(int x) : i(x){}; int get() { return i; } static void *operator new(size_t); //重载op new // 其实这里最规范的写法应该添加static关键字！！ static void operator delete(void *, size_t); //重载op delete() // 虽然不添加系统也会默认将其看成 static函数去调用！！ //delete expression只调用一个版本,delete(void*).其它的版本只在出现异常时调用. //为什么不定义operator delete(void *)? static void operator delete(void *); //我们并没有重载void *operator new(size_t); 对应的delete void operator delete(void *) //... private: Screen *next; //这种设计会多耗一个next static Screen *freeStore; // 静态变量必须类内声明，类外定义赋初值 static const int screenChunk; int i; }; Screen *Screen::freeStore = 0; //余下未分配空间的首地址 const int Screen::screenChunk = 24; //1块内存大24个sizeof(Screen)大 void *Screen::operator new(size_t size) { Screen *p; if (!freeStore) //每当没有余下空间后 重新申请一块大内存 { //linked list是空的直接申请一大块 一次申请24个size的空间 size_t chunk = screenChunk * size; freeStore = p = reinterpret_cast\u0026lt;Screen *\u0026gt;(new char[chunk]); //将这一大块内存 串起来变为linked list //p初始指向分配空间的首地址空间共size个Screen大 //将每个Screen像链表一样连接起来 for (; p != \u0026amp;freeStore[screenChunk - 1]; ++p) p-\u0026gt;next = p + 1; p-\u0026gt;next = 0; //链表尾指向0 } p = freeStore; //p重新指向未分配空间首地址 freeStore = freeStore-\u0026gt;next; //freeStore指向链表头指向的下一个Screen对象 //p(链表头head)-\u0026gt;head_next-\u0026gt;.... // / \\ // | // freeStore return p; //传回一块(链表头的那块) freeStore指向余下的空间(第一次23块) } //delete expression会先调用析构函数 再调用op delete回收空间 //本质将传进来的 要被回收的p空间(一个Screen节点) 插到余下未分配链表！！！的头 这样就回收完成了 下次再new时就会优先分配这个空间 void Screen::operator delete(void *p, size_t size)和 void Screen::operator delete(void *p) 在类中重写 只能选择其中一种 同时写这两个函数 编译器会报错 但是GNUC这两个函数的全局版本可以共存 但是还是建议只写一种 void Screen::operator delete(void *p, size_t size) { //将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的) //将已经被删除的对象插回free list前端 (static_cast\u0026lt;Screen *\u0026gt;(p))-\u0026gt;next = freeStore; // freeStore = static_cast\u0026lt;Screen *\u0026gt;(p); //余下可分配空间多出一个p界点 } //delete expression只调用一个版本,delete(void*).其它的版本只在出现异常时调用. //为什么不定义operator delete(void *)? void Screen::operator delete(void *p) { //将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的) //将已经被删除的对象插回free list前端 (static_cast\u0026lt;Screen *\u0026gt;(p))-\u0026gt;next = freeStore; // freeStore = static_cast\u0026lt;Screen *\u0026gt;(p); //余下可分配空间多出一个p界点 } //注意freeStore是静态对象 只要有Screen对象delete就会将空间回收到freeStore //freeStore链表的大小会越来越大 //链表的最终大小是总共申请过的Screen数量 + (小于 24 * sizeof(Screen) 的冗余大小) //注意这个op delete在没出错的情况下并没有free or op delete 将申请来的内存归还给OS 2per-class allocator union(effective C++ item10)\n","keywords":[],"articleBody":"allocator 例子\n提前申请一大块内存(减少malloc的次数 加快程序运行)，使用者在new时再从这个大块内存中分配空间给对象，其实还有一个好处就是malloc分配内存会创建出多余的cookie(8个字节)，我们自己分配就可以不去创建cookie从而节省下一些空间。\n利用内存池的观念(即创建出一大段连续空间的内存，然后将其切割成一小段一小段)，将创建的元素对象放在内存池切分好的各分段小内存片中，这样避免了多次调用new而造成生成多个带有cookie的内存空间。可以生成一大段只带有两个头尾cookie的内存空间，而该一大段内存空间又被切分成每一小段的内存空间，且其中的每一小段内存空间片都可以共享这一整体的cookie信息。\n1per-class allocator (c++ primer p765)\n#include #include using namespace std; //这种内存针对单一类的内存管理角坐 per-class allocator class Screen { public: Screen(int x) : i(x){}; int get() { return i; } static void *operator new(size_t); //重载op new // 其实这里最规范的写法应该添加static关键字！！ static void operator delete(void *, size_t); //重载op delete() // 虽然不添加系统也会默认将其看成 static函数去调用！！ //delete expression只调用一个版本,delete(void*).其它的版本只在出现异常时调用. //为什么不定义operator delete(void *)? static void operator delete(void *); //我们并没有重载void *operator new(size_t); 对应的delete void operator delete(void *) //... private: Screen *next; //这种设计会多耗一个next static Screen *freeStore; // 静态变量必须类内声明，类外定义赋初值 static const int screenChunk; int i; }; Screen *Screen::freeStore = 0; //余下未分配空间的首地址 const int Screen::screenChunk = 24; //1块内存大24个sizeof(Screen)大 void *Screen::operator new(size_t size) { Screen *p; if (!freeStore) //每当没有余下空间后 重新申请一块大内存 { //linked list是空的直接申请一大块 一次申请24个size的空间 size_t chunk = screenChunk * size; freeStore = p = reinterpret_cast\u003cScreen *\u003e(new char[chunk]); //将这一大块内存 串起来变为linked list //p初始指向分配空间的首地址空间共size个Screen大 //将每个Screen像链表一样连接起来 for (; p != \u0026freeStore[screenChunk - 1]; ++p) p-\u003enext = p + 1; p-\u003enext = 0; //链表尾指向0 } p = freeStore; //p重新指向未分配空间首地址 freeStore = freeStore-\u003enext; //freeStore指向链表头指向的下一个Screen对象 //p(链表头head)-\u003ehead_next-\u003e.... // / \\ // | // freeStore return p; //传回一块(链表头的那块) freeStore指向余下的空间(第一次23块) } //delete expression会先调用析构函数 再调用op delete回收空间 //本质将传进来的 要被回收的p空间(一个Screen节点) 插到余下未分配链表！！！的头 这样就回收完成了 下次再new时就会优先分配这个空间 void Screen::operator delete(void *p, size_t size)和 void Screen::operator delete(void *p) 在类中重写 只能选择其中一种 同时写这两个函数 编译器会报错 但是GNUC这两个函数的全局版本可以共存 但是还是建议只写一种 void Screen::operator delete(void *p, size_t size) { //将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的) //将已经被删除的对象插回free list前端 (static_cast\u003cScreen *\u003e(p))-\u003enext = freeStore; // freeStore = static_cast\u003cScreen *\u003e(p); //余下可分配空间多出一个p界点 } //delete expression只调用一个版本,delete(void*).其它的版本只在出现异常时调用. //为什么不定义operator delete(void *)? void Screen::operator delete(void *p) { //将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的) //将已经被删除的对象插回free list前端 (static_cast\u003cScreen *\u003e(p))-\u003enext = freeStore; // freeStore = static_cast\u003cScreen *\u003e(p); //余下可分配空间多出一个p界点 } //注意freeStore是静态对象 只要有Screen对象delete就会将空间回收到freeStore //freeStore链表的大小会越来越大 //链表的最终大小是总共申请过的Screen数量 + (小于 24 * sizeof(Screen) 的冗余大小) //注意这个op delete在没出错的情况下并没有free or op delete 将申请来的内存归还给OS 2per-class allocator union(effective C++ item10)\n//effective c++ item10 class Airplane { private: struct AirplaneRep //Airplane represent 表达内容 将Airplane对象的属性成员变量保存 规划到一起 { unsigned long miles; //4字节 char type; //1字节 }; //共5字节 但是编译器会做对齐 将会变为8字节 union //嵌入式指针 { AirplaneRep rep; //此rep针对使用中的对向 c++可以不用加struct这个声明符 Airplane *next; //此指针 针对 内存块list上的对象 }; //rep和next共用同一块空间 AirplaneRep 5字节 Airplane * 4字节 //union回取其中空间最大的即 5字节作为这个联合体的大小 //但是编译器会做对齐 将会变为8字节 //next 将联合体(8字节)的前4字节视为一个指针 //注意我们并没有对这个union命名，(命名了就可以将名称作为一种type代表这个联合体类型) //未加名称表示这是一个anonymous union匿名联合体 //其内部的变量可以直接视为是在类内定义的成员变量！！！但是这些成员变量共用一块空间！！！ //用union的话我们更改rep内容会不会影响next指针的指向? //不需要考虑这个问题 next只有在申请(申请一大块的时候)和回收内存时有用到 //，当我们申请到一个对象的内存 此时这个对象以经脱离链表了其next已经没有意义了 //我们只在管理内存的时候要用到next!!!!当我们在用对象属性做其他事的时候使用Rep 不用管next的死活 //所以next这部分空间我们可以随意修改 这么做省下next的四字节 public: unsigned long getMiles() { return rep.miles; } char getType() { return rep.type; } void set(unsigned long m, char t) { rep.miles = m; rep.type = t; } static void *operator new(size_t size); static void operator delete(void *, size_t size); private: static const int BLOCK_SIZE; static Airplane *head_of_FreeList; }; const int Airplane::BLOCK_SIZE = 512; Airplane *Airplane::head_of_FreeList = 0; void *Airplane::operator new(size_t size) { //如果传入的size大小有误 转交给全局版的op new处理 if (size != sizeof(Airplane)) //在继承发生的时候会出现这个现象 return ::operator new(size); Airplane *p = head_of_FreeList; if (p) head_of_FreeList = p-\u003enext; else { //p为null(0) 表示head_of_FreeList指向0 为链表尾 链表上已经没有空余内存节点分配 需要分配新的内存块 Airplane *newBlock = static_cast\u003cAirplane *\u003e(::operator new(BLOCK_SIZE * sizeof(Airplane))); //一次申请512个Airplane那么大 //上个版本是用expression new(先调用构造 再调用op new)分配空间 这里用op new来分配空间 //这512块只用了头尾两个cookie 8字节 //将每一块串成list //但是会跳过第0块 因为其会作为本次申请内存的结果 返回 for (int i = 1; i \u003c BLOCK_SIZE - 1; i++) newBlock[i].next = \u0026newBlock[i + 1]; //[i+1]已经被创造出来了 所以其地址存在 没问题 newBlock[BLOCK_SIZE - 1].next = 0; //最后链表尾指向0 p = newBlock; head_of_FreeList = \u0026newBlock[1]; //因为0(newBlock)是此次被分配的内存 所以freelist的头指向的是1 } return p; } //delete expression会先调用析构函数 再调用op delete回收空间 //本质将传进来的 要被回收的p空间(一个Screen节点) 插到余下未分配链表！！！的头 这样就回收完成了 下次再new时就会优先分配这个空间 void Airplane::operator delete(void *deadObj, size_t size) { if (deadObj == 0) return; if (size != sizeof(Airplane)) { ::operator delete(deadObj); return; } //将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的) //将已经被删除的对象插回free list前端 // (static_cast(deadObj))-\u003enext = head_of_FreeList; // // head_of_FreeList = static_cast(deadObj); //余下可分配空间多出一个p界点 //收回来的内存放在链表的头 Airplane *carcass = static_cast\u003cAirplane *\u003e(deadObj); carcass-\u003enext = head_of_FreeList; head_of_FreeList = carcass; } //注意head_of_FreeList是静态对象 只要有Airplane对象delete就会将空间回收到head_of_FreeList //head_of_FreeList链表的大小会越来越大 //链表的最终大小是总共申请过的Airplane数量 + (小于 512 * sizeof(Airplane) 的冗余大小) //注意这个op delete在没出错的情况下并没有free or op delete 将申请来的内存归还给OS //delete expression只调用一个版本,delete(void*).其它的版本只在出现异常时调用. //为什么不定义operator delete(void *)? 3static allocator\n#include #include using namespace std; //class allocator 很好 但是是在类内定义的只适用于 那个类 //对于不同类来说这样的allocator的op new和op delete做的动作都几乎相同 //所以做一个单独类专门做内存管理 //不同类可以在其内部定义一个allocator 专门用于那个类的内存管理 class allocator_ //叫allocator会与全局版的冲突 本质上就是在管理一个链表 { private: struct obj { obj *next; //嵌入式指针 }; public: void *allocate(size_t); void deallocate(void *, size_t); private: obj *freeStore = nullptr; //就是一个指针 4字节 用于存储我们真正要存的对象的地址 const int CHUNK = 5; }; // 这个allocator_有个局限 allocator_维护的一条链表每次扩充的空间都是固定只有CHUNK // 在std allocator中则有16条链表 用于应付不同的CHUNK！！！！ void allocator_::deallocate(void *p, size_t) { //将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的) //将已经被删除的对象插回free list前端 (static_cast\u003cobj *\u003e(p))-\u003enext = freeStore; // freeStore = static_cast\u003cobj *\u003e(p); //余下可分配空间多出一个p界点 } void *allocator_::allocate(size_t size) { obj *p; if (!freeStore) //当前链表已经没有新的空间了 则分配一大块空间并串起来 { //p为null(0) 表示head_of_FreeList指向0 为链表尾 链表上已经没有空余内存节点分配 需要分配新的内存块 size_t chunk = CHUNK * size; //一次分配5个要创建对象的大小 freeStore = p = (obj *)malloc(chunk); //注意 我们只知道 我们要分配的单个对象的大小 但是不知道我们要分配对象的类型 //所以这里malloc没办法强转为那个对象的类型 但是知道大小一样也可以将这一大块空间 //分割为多个 szieof(对象)的小块并用指针(上个小块的next指针)指向这小块的首地址 串成一个链表 // p指针是在不断移动的 不断地指向每一个size大小内存块的首地址 //(p其实指向的是size大小空间的前四个字节组成的obj的首地址) // |next指针 .... 这块有size大|...next指针 .... 这块有size大|....| // 每块空间首地址被强转为obj型 所以空间中的前4字节暂时被当作next指针 串联其他size大小的空间 // |-------------------------|(next指向下一块的首地址) // 只有在分配和回收的时候我们才需要这个next指针 // 在allocate return了这块空间的首地址后 内存块已经不在链表里了next指针没有意义了 // 这四个字节可以去存真正的对象大小 // 将每一块串成list for (int i = 0; i \u003c CHUNK - 1; i++) { p-\u003enext = (obj *)((char *)p + size); //将空间强转为obj型 //size为被管理类 的一个对象的大小！！！！ 单位字节 所以要将p转为char型 也变为以字节为单位 p = p-\u003enext; } p-\u003enext = nullptr; //last } p = freeStore; //将当前可用空间的头切出来返回 freeStore = freeStore-\u003enext; return p; } //其他使用这个allocator的类通过一个静态成员变量来使用这个分配器 class Foo { public: long L; string str; static allocator_ myAlloc; //静态的内存管理器 专门管理这个类的所有对象 public: Foo(long l) : L(l) {} static void *operator new(size_t size) { return myAlloc.allocate(size); } static void operator delete(void *pdead, size_t size) { return myAlloc.deallocate(pdead, size); } }; allocator_ Foo::myAlloc; //相比之前简洁非常多 关于内存管理的细节都交给allocator_去做了 //但是一样存在之前的缺点 //注意freeStore是静态对象 只要有 对象delete就会将空间回收到freeStore //freeStore链表的大小会越来越大 //链表的最终大小是总共申请过的Screen数量 + (小于 CHUNK * size 的冗余大小) //注意这个op delete在没出错的情况下并没有free or op delete 将申请来的内存归还给OS //macro(宏定义) static allocator // static allocator在任何类内定义的代码都是一致的都是 // 类内 // protected: // static allocator_ myAlloc; //静态的内存管理器 专门管理这个类的所有对象 // public: // void *operator new(size_t size) { return myAlloc.allocate(size); } // void operator delete(void *p) { myAlloc.deallocate(p, 0); } // 类外 // allocator_ 类型::myAlloc; //所以想将这个写为一个宏 直接将代码简化 namespace jj10 { using ::allocator_; //声明我们在全局命名空间 定义的分配器 这样我们在这个命名空间内才可以用 // DECLARE_POOL_ALLOC -- used in class definition #define DECLARE_POOL_ALLOC() \\ public: \\ void *operator new(size_t size) { return myAlloc.allocate(size); } \\ void operator delete(void *p) { myAlloc.deallocate(p, 0); } \\ \\ protected: \\ static allocator_ myAlloc; // DECLARE_POOL_ALLOC()这个宏代表了上面这么长的一串代码 \\是宏的换行符 // IMPLEMENT_POOL_ALLOC -- used in class implementation file // 这是个代参宏 将类名传入 然后这个宏直接可替换为 allocator 类名::myAlloc; 这句话 #define IMPLEMENT_POOL_ALLOC(class_name) \\ allocator_ class_name::myAlloc; // 使用了宏替换代码 类定义变的非常简洁了 // in class definition file class Foo { DECLARE_POOL_ALLOC() public: long L; string str; public: Foo(long l) : L(l) {} }; //in class implementation file IMPLEMENT_POOL_ALLOC(Foo) } //namespace ","wordCount":"958","inLanguage":"en","datePublished":"2022-02-11T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/cuqt4o/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">allocator3 c++mp 3 几种allocator的例子</h1><div class=post-meta><span title=2022-02-11T00:00:00+00:00>创建于 2022-02-11</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>allocator 例子</strong></p><p>提前申请一大块内存(减少malloc的次数 加快程序运行)，使用者在new时再从这个大块内存中分配空间给对象，其实还有一个好处就是malloc分配内存会创建出多余的cookie(8个字节)，我们自己分配就可以不去创建cookie从而节省下一些空间。</p><p>利用内存池的观念(即创建出一大段连续空间的内存，然后将其切割成一小段一小段)，将创建的元素对象放在内存池切分好的各分段小内存片中，这样避免了多次调用new而造成生成多个带有cookie的内存空间。可以生成一大段只带有两个头尾cookie的内存空间，而该一大段内存空间又被切分成每一小段的内存空间，且其中的每一小段内存空间片都可以共享这一整体的cookie信息。</p><p><strong>1per-class allocator (c++ primer p765)</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstddef&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;iostream&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>using</span> <span style=color:#66d9ef>namespace</span> std;
+</span></span><span style=display:flex><span><span style=color:#75715e>//这种内存针对单一类的内存管理角坐 per-class allocator
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Screen</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    Screen(<span style=color:#66d9ef>int</span> x) <span style=color:#f92672>:</span> i(x){};
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>get</span>() { <span style=color:#66d9ef>return</span> i; }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#66d9ef>operator</span> <span style=color:#a6e22e>new</span>(size_t);           <span style=color:#75715e>//重载op new  // 其实这里最规范的写法应该添加static关键字！！
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#66d9ef>operator</span> <span style=color:#a6e22e>delete</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>, size_t); <span style=color:#75715e>//重载op delete() // 虽然不添加系统也会默认将其看成 static函数去调用！！
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//delete expression只调用一个版本,delete(void*).其它的版本只在出现异常时调用.
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//为什么不定义operator delete(void *)?
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#66d9ef>operator</span> <span style=color:#a6e22e>delete</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//我们并没有重载void *operator new(size_t); 对应的delete void operator delete(void *)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//...
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    Screen <span style=color:#f92672>*</span>next;             <span style=color:#75715e>//这种设计会多耗一个next
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> Screen <span style=color:#f92672>*</span>freeStore; <span style=color:#75715e>// 静态变量必须类内声明，类外定义赋初值
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>int</span> screenChunk;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> i;
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>Screen <span style=color:#f92672>*</span>Screen<span style=color:#f92672>::</span>freeStore <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;      <span style=color:#75715e>//余下未分配空间的首地址
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>const</span> <span style=color:#66d9ef>int</span> Screen<span style=color:#f92672>::</span>screenChunk <span style=color:#f92672>=</span> <span style=color:#ae81ff>24</span>; <span style=color:#75715e>//1块内存大24个sizeof(Screen)大
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>Screen<span style=color:#f92672>::</span><span style=color:#66d9ef>operator</span> <span style=color:#66d9ef>new</span>(size_t size)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    Screen <span style=color:#f92672>*</span>p;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>freeStore) <span style=color:#75715e>//每当没有余下空间后 重新申请一块大内存
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//linked list是空的直接申请一大块 一次申请24个size的空间
+</span></span></span><span style=display:flex><span>        size_t chunk <span style=color:#f92672>=</span> screenChunk <span style=color:#f92672>*</span> size;
+</span></span><span style=display:flex><span>        freeStore <span style=color:#f92672>=</span> p <span style=color:#f92672>=</span> <span style=color:#66d9ef>reinterpret_cast</span><span style=color:#f92672>&lt;</span>Screen <span style=color:#f92672>*&gt;</span>(<span style=color:#66d9ef>new</span> <span style=color:#66d9ef>char</span>[chunk]);
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//将这一大块内存 串起来变为linked list
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//p初始指向分配空间的首地址空间共size个Screen大
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//将每个Screen像链表一样连接起来
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> (; p <span style=color:#f92672>!=</span> <span style=color:#f92672>&amp;</span>freeStore[screenChunk <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>]; <span style=color:#f92672>++</span>p)
+</span></span><span style=display:flex><span>            p<span style=color:#f92672>-&gt;</span>next <span style=color:#f92672>=</span> p <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>        p<span style=color:#f92672>-&gt;</span>next <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//链表尾指向0
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    p <span style=color:#f92672>=</span> freeStore;               <span style=color:#75715e>//p重新指向未分配空间首地址
+</span></span></span><span style=display:flex><span>    freeStore <span style=color:#f92672>=</span> freeStore<span style=color:#f92672>-&gt;</span>next; <span style=color:#75715e>//freeStore指向链表头指向的下一个Screen对象
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//p(链表头head)-&gt;head_next-&gt;....
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//                / \
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    //                 |
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//             freeStore
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> p; <span style=color:#75715e>//传回一块(链表头的那块) freeStore指向余下的空间(第一次23块)
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//delete expression会先调用析构函数 再调用op delete回收空间
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//本质将传进来的 要被回收的p空间(一个Screen节点) 插到余下未分配链表！！！的头  这样就回收完成了 下次再new时就会优先分配这个空间
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> Screen<span style=color:#f92672>::</span><span style=color:#66d9ef>operator</span> <span style=color:#66d9ef>delete</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>p, size_t size)<span style=color:#960050;background-color:#1e0010>和</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> Screen<span style=color:#f92672>::</span><span style=color:#66d9ef>operator</span> <span style=color:#66d9ef>delete</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>p)
+</span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010>在类中重写</span> <span style=color:#960050;background-color:#1e0010>只能选择其中一种</span> <span style=color:#960050;background-color:#1e0010>同时写这两个函数</span> <span style=color:#960050;background-color:#1e0010>编译器会报错</span> <span style=color:#960050;background-color:#1e0010>但是</span>GNUC这两个函数的全局版本可以共存 <span style=color:#960050;background-color:#1e0010>但是还是建议只写一种</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> Screen<span style=color:#f92672>::</span><span style=color:#66d9ef>operator</span> <span style=color:#66d9ef>delete</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>p, size_t size)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//将已经被删除的对象插回free list前端
+</span></span></span><span style=display:flex><span>    (<span style=color:#66d9ef>static_cast</span><span style=color:#f92672>&lt;</span>Screen <span style=color:#f92672>*&gt;</span>(p))<span style=color:#f92672>-&gt;</span>next <span style=color:#f92672>=</span> freeStore; <span style=color:#75715e>//
+</span></span></span><span style=display:flex><span>    freeStore <span style=color:#f92672>=</span> <span style=color:#66d9ef>static_cast</span><span style=color:#f92672>&lt;</span>Screen <span style=color:#f92672>*&gt;</span>(p);         <span style=color:#75715e>//余下可分配空间多出一个p界点
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//delete expression只调用一个版本,delete(void*).其它的版本只在出现异常时调用.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//为什么不定义operator delete(void *)?
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> Screen<span style=color:#f92672>::</span><span style=color:#66d9ef>operator</span> <span style=color:#66d9ef>delete</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>p)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//将已经被删除的对象插回free list前端
+</span></span></span><span style=display:flex><span>    (<span style=color:#66d9ef>static_cast</span><span style=color:#f92672>&lt;</span>Screen <span style=color:#f92672>*&gt;</span>(p))<span style=color:#f92672>-&gt;</span>next <span style=color:#f92672>=</span> freeStore; <span style=color:#75715e>//
+</span></span></span><span style=display:flex><span>    freeStore <span style=color:#f92672>=</span> <span style=color:#66d9ef>static_cast</span><span style=color:#f92672>&lt;</span>Screen <span style=color:#f92672>*&gt;</span>(p);         <span style=color:#75715e>//余下可分配空间多出一个p界点
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//注意freeStore是静态对象 只要有Screen对象delete就会将空间回收到freeStore
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//freeStore链表的大小会越来越大
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//链表的最终大小是总共申请过的Screen数量 + (小于 24 * sizeof(Screen) 的冗余大小)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//注意这个op delete在没出错的情况下并没有free or op delete 将申请来的内存归还给OS
+</span></span></span></code></pre></div><p><strong>2per-class allocator union(effective C++ item10)</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>//effective c++ item10
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Airplane</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>AirplaneRep</span> <span style=color:#75715e>//Airplane represent 表达内容 将Airplane对象的属性成员变量保存 规划到一起
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>long</span> miles; <span style=color:#75715e>//4字节
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> type;           <span style=color:#75715e>//1字节
+</span></span></span><span style=display:flex><span>    };                       <span style=color:#75715e>//共5字节 但是编译器会做对齐 将会变为8字节
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>union</span> <span style=color:#960050;background-color:#1e0010>//嵌入式指针</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        AirplaneRep rep; <span style=color:#75715e>//此rep针对使用中的对向  c++可以不用加struct这个声明符
+</span></span></span><span style=display:flex><span>        Airplane <span style=color:#f92672>*</span>next;  <span style=color:#75715e>//此指针 针对 内存块list上的对象
+</span></span></span><span style=display:flex><span>    };                   <span style=color:#75715e>//rep和next共用同一块空间 AirplaneRep 5字节 Airplane * 4字节
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//union回取其中空间最大的即 5字节作为这个联合体的大小
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//但是编译器会做对齐 将会变为8字节
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//next 将联合体(8字节)的前4字节视为一个指针
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//注意我们并没有对这个union命名，(命名了就可以将名称作为一种type代表这个联合体类型)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//未加名称表示这是一个anonymous union匿名联合体
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//其内部的变量可以直接视为是在类内定义的成员变量！！！但是这些成员变量共用一块空间！！！
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//用union的话我们更改rep内容会不会影响next指针的指向?
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//不需要考虑这个问题 next只有在申请(申请一大块的时候)和回收内存时有用到
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//，当我们申请到一个对象的内存 此时这个对象以经脱离链表了其next已经没有意义了
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//我们只在管理内存的时候要用到next!!!!当我们在用对象属性做其他事的时候使用Rep 不用管next的死活
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//所以next这部分空间我们可以随意修改  这么做省下next的四字节
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>long</span> getMiles() { <span style=color:#66d9ef>return</span> rep.miles; }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> <span style=color:#a6e22e>getType</span>() { <span style=color:#66d9ef>return</span> rep.type; }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>set</span>(<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>long</span> m, <span style=color:#66d9ef>char</span> t)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        rep.miles <span style=color:#f92672>=</span> m;
+</span></span><span style=display:flex><span>        rep.type <span style=color:#f92672>=</span> t;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#66d9ef>operator</span> <span style=color:#a6e22e>new</span>(size_t size);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#66d9ef>operator</span> <span style=color:#a6e22e>delete</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>, size_t size);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>int</span> BLOCK_SIZE;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> Airplane <span style=color:#f92672>*</span>head_of_FreeList;
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span><span style=color:#66d9ef>const</span> <span style=color:#66d9ef>int</span> Airplane<span style=color:#f92672>::</span>BLOCK_SIZE <span style=color:#f92672>=</span> <span style=color:#ae81ff>512</span>;
+</span></span><span style=display:flex><span>Airplane <span style=color:#f92672>*</span>Airplane<span style=color:#f92672>::</span>head_of_FreeList <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>Airplane<span style=color:#f92672>::</span><span style=color:#66d9ef>operator</span> <span style=color:#66d9ef>new</span>(size_t size)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//如果传入的size大小有误 转交给全局版的op new处理
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (size <span style=color:#f92672>!=</span> <span style=color:#66d9ef>sizeof</span>(Airplane)) <span style=color:#75715e>//在继承发生的时候会出现这个现象
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>::</span><span style=color:#66d9ef>operator</span> <span style=color:#66d9ef>new</span>(size);
+</span></span><span style=display:flex><span>    Airplane <span style=color:#f92672>*</span>p <span style=color:#f92672>=</span> head_of_FreeList;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (p)
+</span></span><span style=display:flex><span>        head_of_FreeList <span style=color:#f92672>=</span> p<span style=color:#f92672>-&gt;</span>next;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//p为null(0) 表示head_of_FreeList指向0 为链表尾 链表上已经没有空余内存节点分配 需要分配新的内存块
+</span></span></span><span style=display:flex><span>        Airplane <span style=color:#f92672>*</span>newBlock <span style=color:#f92672>=</span> <span style=color:#66d9ef>static_cast</span><span style=color:#f92672>&lt;</span>Airplane <span style=color:#f92672>*&gt;</span>(<span style=color:#f92672>::</span><span style=color:#66d9ef>operator</span> <span style=color:#66d9ef>new</span>(BLOCK_SIZE <span style=color:#f92672>*</span> <span style=color:#66d9ef>sizeof</span>(Airplane))); <span style=color:#75715e>//一次申请512个Airplane那么大
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//上个版本是用expression new(先调用构造 再调用op new)分配空间  这里用op new来分配空间
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//这512块只用了头尾两个cookie 8字节
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//将每一块串成list
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//但是会跳过第0块 因为其会作为本次申请内存的结果 返回
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>; i <span style=color:#f92672>&lt;</span> BLOCK_SIZE <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>            newBlock[i].next <span style=color:#f92672>=</span> <span style=color:#f92672>&amp;</span>newBlock[i <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>]; <span style=color:#75715e>//[i+1]已经被创造出来了 所以其地址存在 没问题
+</span></span></span><span style=display:flex><span>        newBlock[BLOCK_SIZE <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>].next <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;       <span style=color:#75715e>//最后链表尾指向0
+</span></span></span><span style=display:flex><span>        p <span style=color:#f92672>=</span> newBlock;
+</span></span><span style=display:flex><span>        head_of_FreeList <span style=color:#f92672>=</span> <span style=color:#f92672>&amp;</span>newBlock[<span style=color:#ae81ff>1</span>]; <span style=color:#75715e>//因为0(newBlock)是此次被分配的内存 所以freelist的头指向的是1
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> p;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//delete expression会先调用析构函数 再调用op delete回收空间
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//本质将传进来的 要被回收的p空间(一个Screen节点) 插到余下未分配链表！！！的头  这样就回收完成了 下次再new时就会优先分配这个空间
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> Airplane<span style=color:#f92672>::</span><span style=color:#66d9ef>operator</span> <span style=color:#66d9ef>delete</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>deadObj, size_t size)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (deadObj <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (size <span style=color:#f92672>!=</span> <span style=color:#66d9ef>sizeof</span>(Airplane))
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#f92672>::</span><span style=color:#66d9ef>operator</span> <span style=color:#66d9ef>delete</span>(deadObj);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//将已经被删除的对象插回free list前端
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// (static_cast&lt;Airplane *&gt;(deadObj))-&gt;next = head_of_FreeList; //
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// head_of_FreeList = static_cast&lt;Airplane *&gt;(deadObj);         //余下可分配空间多出一个p界点
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//收回来的内存放在链表的头
+</span></span></span><span style=display:flex><span>    Airplane <span style=color:#f92672>*</span>carcass <span style=color:#f92672>=</span> <span style=color:#66d9ef>static_cast</span><span style=color:#f92672>&lt;</span>Airplane <span style=color:#f92672>*&gt;</span>(deadObj);
+</span></span><span style=display:flex><span>    carcass<span style=color:#f92672>-&gt;</span>next <span style=color:#f92672>=</span> head_of_FreeList;
+</span></span><span style=display:flex><span>    head_of_FreeList <span style=color:#f92672>=</span> carcass;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//注意head_of_FreeList是静态对象 只要有Airplane对象delete就会将空间回收到head_of_FreeList
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//head_of_FreeList链表的大小会越来越大
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//链表的最终大小是总共申请过的Airplane数量 + (小于 512 * sizeof(Airplane) 的冗余大小)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//注意这个op delete在没出错的情况下并没有free or op delete 将申请来的内存归还给OS
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//delete expression只调用一个版本,delete(void*).其它的版本只在出现异常时调用.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//为什么不定义operator delete(void *)?
+</span></span></span></code></pre></div><p><strong>3static allocator</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstddef&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;iostream&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>using</span> <span style=color:#66d9ef>namespace</span> std;
+</span></span><span style=display:flex><span><span style=color:#75715e>//class allocator 很好 但是是在类内定义的只适用于 那个类
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//对于不同类来说这样的allocator的op new和op delete做的动作都几乎相同
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//所以做一个单独类专门做内存管理
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//不同类可以在其内部定义一个allocator 专门用于那个类的内存管理
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>allocator_</span> <span style=color:#75715e>//叫allocator会与全局版的冲突  本质上就是在管理一个链表
+</span></span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>obj</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        obj <span style=color:#f92672>*</span>next; <span style=color:#75715e>//嵌入式指针
+</span></span></span><span style=display:flex><span>    };
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>allocate(size_t);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>deallocate</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>, size_t);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    obj <span style=color:#f92672>*</span>freeStore <span style=color:#f92672>=</span> <span style=color:#66d9ef>nullptr</span>; <span style=color:#75715e>//就是一个指针 4字节 用于存储我们真正要存的对象的地址
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>int</span> CHUNK <span style=color:#f92672>=</span> <span style=color:#ae81ff>5</span>;
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span><span style=color:#75715e>// 这个allocator_有个局限 allocator_维护的一条链表每次扩充的空间都是固定只有CHUNK
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 在std allocator中则有16条链表 用于应付不同的CHUNK！！！！
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> allocator_<span style=color:#f92672>::</span>deallocate(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>p, size_t)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//将传入的回收空间p点 插到链表头(对于单向链表来说 插入操作 插到链表头是最快的)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//将已经被删除的对象插回free list前端
+</span></span></span><span style=display:flex><span>    (<span style=color:#66d9ef>static_cast</span><span style=color:#f92672>&lt;</span>obj <span style=color:#f92672>*&gt;</span>(p))<span style=color:#f92672>-&gt;</span>next <span style=color:#f92672>=</span> freeStore; <span style=color:#75715e>//
+</span></span></span><span style=display:flex><span>    freeStore <span style=color:#f92672>=</span> <span style=color:#66d9ef>static_cast</span><span style=color:#f92672>&lt;</span>obj <span style=color:#f92672>*&gt;</span>(p);         <span style=color:#75715e>//余下可分配空间多出一个p界点
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>allocator_<span style=color:#f92672>::</span>allocate(size_t size)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    obj <span style=color:#f92672>*</span>p;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>freeStore) <span style=color:#75715e>//当前链表已经没有新的空间了 则分配一大块空间并串起来
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//p为null(0) 表示head_of_FreeList指向0 为链表尾 链表上已经没有空余内存节点分配 需要分配新的内存块
+</span></span></span><span style=display:flex><span>        size_t chunk <span style=color:#f92672>=</span> CHUNK <span style=color:#f92672>*</span> size; <span style=color:#75715e>//一次分配5个要创建对象的大小
+</span></span></span><span style=display:flex><span>        freeStore <span style=color:#f92672>=</span> p <span style=color:#f92672>=</span> (obj <span style=color:#f92672>*</span>)malloc(chunk);
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//注意 我们只知道 我们要分配的单个对象的大小 但是不知道我们要分配对象的类型
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//所以这里malloc没办法强转为那个对象的类型  但是知道大小一样也可以将这一大块空间
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//分割为多个 szieof(对象)的小块并用指针(上个小块的next指针)指向这小块的首地址 串成一个链表
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// p指针是在不断移动的 不断地指向每一个size大小内存块的首地址
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//(p其实指向的是size大小空间的前四个字节组成的obj的首地址)
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// |next指针 .... 这块有size大|...next指针 .... 这块有size大|....|
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 每块空间首地址被强转为obj型 所以空间中的前4字节暂时被当作next指针 串联其他size大小的空间
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//      |-------------------------|(next指向下一块的首地址)
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 只有在分配和回收的时候我们才需要这个next指针
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 在allocate return了这块空间的首地址后 内存块已经不在链表里了next指针没有意义了
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 这四个字节可以去存真正的对象大小
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 将每一块串成list
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> CHUNK <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>; i<span style=color:#f92672>++</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            p<span style=color:#f92672>-&gt;</span>next <span style=color:#f92672>=</span> (obj <span style=color:#f92672>*</span>)((<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>)p <span style=color:#f92672>+</span> size); <span style=color:#75715e>//将空间强转为obj型
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//size为被管理类 的一个对象的大小！！！！ 单位字节 所以要将p转为char型 也变为以字节为单位
+</span></span></span><span style=display:flex><span>            p <span style=color:#f92672>=</span> p<span style=color:#f92672>-&gt;</span>next;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        p<span style=color:#f92672>-&gt;</span>next <span style=color:#f92672>=</span> <span style=color:#66d9ef>nullptr</span>; <span style=color:#75715e>//last
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    p <span style=color:#f92672>=</span> freeStore; <span style=color:#75715e>//将当前可用空间的头切出来返回
+</span></span></span><span style=display:flex><span>    freeStore <span style=color:#f92672>=</span> freeStore<span style=color:#f92672>-&gt;</span>next;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> p;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//其他使用这个allocator的类通过一个静态成员变量来使用这个分配器
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Foo</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>long</span> L;
+</span></span><span style=display:flex><span>    string str;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> allocator_ myAlloc; <span style=color:#75715e>//静态的内存管理器 专门管理这个类的所有对象
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    Foo(<span style=color:#66d9ef>long</span> l) <span style=color:#f92672>:</span> L(l) {}
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#66d9ef>operator</span> <span style=color:#a6e22e>new</span>(size_t size)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> myAlloc.allocate(size);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#66d9ef>operator</span> <span style=color:#a6e22e>delete</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>pdead, size_t size)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> myAlloc.deallocate(pdead, size);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>allocator_ Foo<span style=color:#f92672>::</span>myAlloc;
+</span></span><span style=display:flex><span><span style=color:#75715e>//相比之前简洁非常多 关于内存管理的细节都交给allocator_去做了
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//但是一样存在之前的缺点
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//注意freeStore是静态对象 只要有 对象delete就会将空间回收到freeStore
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//freeStore链表的大小会越来越大
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//链表的最终大小是总共申请过的Screen数量 + (小于 CHUNK * size 的冗余大小)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//注意这个op delete在没出错的情况下并没有free or op delete 将申请来的内存归还给OS
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//macro(宏定义) static allocator
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// static allocator在任何类内定义的代码都是一致的都是
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 类内
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// protected:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// static allocator_ myAlloc; //静态的内存管理器 专门管理这个类的所有对象
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// public:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// void *operator new(size_t size) { return myAlloc.allocate(size); }
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// void operator delete(void *p) { myAlloc.deallocate(p, 0); }
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 类外
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// allocator_ 类型::myAlloc;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//所以想将这个写为一个宏 直接将代码简化
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>namespace</span> jj10
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>using</span> <span style=color:#f92672>::</span>allocator_; <span style=color:#75715e>//声明我们在全局命名空间  定义的分配器 这样我们在这个命名空间内才可以用
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// DECLARE_POOL_ALLOC -- used in class definition
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#define DECLARE_POOL_ALLOC()                                           \
+</span></span></span><span style=display:flex><span><span style=color:#75715e>public:                                                                \
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    void *operator new(size_t size) { return myAlloc.allocate(size); } \
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    void operator delete(void *p) { myAlloc.deallocate(p, 0); }        \
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                                                                       \
+</span></span></span><span style=display:flex><span><span style=color:#75715e>protected:                                                             \
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    static allocator_ myAlloc;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// DECLARE_POOL_ALLOC()这个宏代表了上面这么长的一串代码  \是宏的换行符
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// IMPLEMENT_POOL_ALLOC -- used in class implementation file
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 这是个代参宏 将类名传入 然后这个宏直接可替换为 allocator 类名::myAlloc; 这句话
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#define IMPLEMENT_POOL_ALLOC(class_name) \
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    allocator_ class_name::myAlloc;
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 使用了宏替换代码 类定义变的非常简洁了
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// in class definition file
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Foo</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        DECLARE_POOL_ALLOC()
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>long</span> L;
+</span></span><span style=display:flex><span>        string str;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>        Foo(<span style=color:#66d9ef>long</span> l) <span style=color:#f92672>:</span> L(l) {}
+</span></span><span style=display:flex><span>    };
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//in class implementation file
+</span></span></span><span style=display:flex><span>    IMPLEMENT_POOL_ALLOC(Foo)
+</span></span><span style=display:flex><span>} <span style=color:#75715e>//namespace
+</span></span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

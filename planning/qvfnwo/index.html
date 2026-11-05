@@ -1,0 +1,343 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>frenet | CantBlog</title><meta name=keywords content><meta name=description content='感恩大佬
+https://windses.blog.csdn.net/article/details/108748016
+https://windses.blog.csdn.net/article/details/124871691
+https://windses.blog.csdn.net/article/details/124871737
+import numpy as np
+from math import *
+
+# https://windses.blog.csdn.net/article/details/124871691?spm=1001.2014.3001.5502
+
+# use
+
+# https://windses.blog.csdn.net/article/details/124871737?spm=1001.2014.3001.5502
+
+# [x,y]->s,d
+def cartesian_to_frenet1D(rs, rx, ry, rtheta, x, y):
+    s_condition = np.zeros(1)
+    d_condition = np.zeros(1)
+
+    dx = x - rx
+    dy = y - ry
+
+    cos_theta_r = cos(rtheta)
+    sin_theta_r = sin(rtheta)
+
+    cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx
+    d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd)
+
+    s_condition[0] = rs
+
+    return s_condition, d_condition
+
+# [s,d]->[x,y]
+def frenet_to_cartesian1D(rs, rx, ry, rtheta, s_condition, d_condition):
+    if fabs(rs - s_condition[0])>= 1.0e-6:
+        print("The reference point s and s_condition[0] don&#39;t match")
+
+    cos_theta_r = cos(rtheta)
+    sin_theta_r = sin(rtheta)
+
+    x = rx - sin_theta_r * d_condition[0]
+    y = ry + cos_theta_r * d_condition[0]
+
+    return x, y
+
+# [x,y,v,theta] -> [s,ds/dt,d,d d/ds]
+def cartesian_to_frenet2D(rs, rx, ry, rtheta, rkappa, x, y, v, theta):
+    s_condition = np.zeros(2)
+    d_condition = np.zeros(2)
+
+    dx = x - rx
+    dy = y - ry
+
+    cos_theta_r = cos(rtheta)
+    sin_theta_r = sin(rtheta)
+
+    cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx
+    d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd)
+
+    delta_theta = theta - rtheta
+    tan_delta_theta = tan(delta_theta)
+    cos_delta_theta = cos(delta_theta)
+
+    one_minus_kappa_r_d = 1 - rkappa * d_condition[0]
+    d_condition[1] = one_minus_kappa_r_d * tan_delta_theta
+
+    s_condition[0] = rs
+    s_condition[1] = v * cos_delta_theta / one_minus_kappa_r_d
+
+    return s_condition, d_condition
+
+# [s,ds/dt,d,d d/ds]->[x,y,v,theta]
+def frenet_to_cartesian2D(rs, rx, ry, rtheta, rkappa, s_condition, d_condition):
+    if fabs(rs - s_condition[0])>= 1.0e-6:
+        print("The reference point s and s_condition[0] don&#39;t match")
+
+    cos_theta_r = cos(rtheta)
+    sin_theta_r = sin(rtheta)
+
+    x = rx - sin_theta_r * d_condition[0]
+    y = ry + cos_theta_r * d_condition[0]
+
+    one_minus_kappa_r_d = 1 - rkappa * d_condition[0]
+    tan_delta_theta = d_condition[1] / one_minus_kappa_r_d
+    delta_theta = atan2(d_condition[1], one_minus_kappa_r_d)
+    cos_delta_theta = cos(delta_theta)
+
+    theta = NormalizeAngle(delta_theta + rtheta)
+
+    d_dot = d_condition[1] * s_condition[1]
+
+    v = sqrt(one_minus_kappa_r_d * one_minus_kappa_r_d * s_condition[1] * s_condition[1] + d_dot * d_dot)
+
+    return x, y, v, theta
+
+# [x,y,v,theta,kappa,a] -> [s,ds/dt,d2s/dt^2,d,d d/ds,d2d/ds^2]
+def cartesian_to_frenet3D(rs, rx, ry, rtheta, rkappa, rdkappa, x, y, v, a, theta, kappa):
+    s_condition = np.zeros(3)
+    d_condition = np.zeros(3)
+
+    dx = x - rx
+    dy = y - ry
+
+    cos_theta_r = cos(rtheta)
+    sin_theta_r = sin(rtheta)
+
+    cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx
+    d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd)
+
+    delta_theta = theta - rtheta
+    tan_delta_theta = tan(delta_theta)
+    cos_delta_theta = cos(delta_theta)
+
+    one_minus_kappa_r_d = 1 - rkappa * d_condition[0]
+    d_condition[1] = one_minus_kappa_r_d * tan_delta_theta
+
+    kappa_r_d_prime = rdkappa * d_condition[0] + rkappa * d_condition[1]
+
+    d_condition[2] = (-kappa_r_d_prime * tan_delta_theta +
+      one_minus_kappa_r_d / cos_delta_theta / cos_delta_theta *
+          (kappa * one_minus_kappa_r_d / cos_delta_theta - rkappa))
+
+    s_condition[0] = rs
+    s_condition[1] = v * cos_delta_theta / one_minus_kappa_r_d
+
+    delta_theta_prime = one_minus_kappa_r_d / cos_delta_theta * kappa - rkappa
+    s_condition[2] = ((a * cos_delta_theta -
+                       s_condition[1] * s_condition[1] *
+                       (d_condition[1] * delta_theta_prime - kappa_r_d_prime)) /
+                          one_minus_kappa_r_d)
+    return s_condition, d_condition
+
+# [s,ds/dt,d2s/dt^2,d,d d/ds,d2d/ds^2]->[x,y,v,theta,kappa,a]
+
+def frenet_to_cartesian3D(rs, rx, ry, rtheta, rkappa, rdkappa, s_condition, d_condition):
+    if fabs(rs - s_condition[0])>= 1.0e-6:
+        print("The reference point s and s_condition[0] don&#39;t match")
+
+    cos_theta_r = cos(rtheta)
+    sin_theta_r = sin(rtheta)
+
+    x = rx - sin_theta_r * d_condition[0]
+    y = ry + cos_theta_r * d_condition[0]
+
+    one_minus_kappa_r_d = 1 - rkappa * d_condition[0]
+    tan_delta_theta = d_condition[1] / one_minus_kappa_r_d
+    delta_theta = atan2(d_condition[1], one_minus_kappa_r_d)
+    cos_delta_theta = cos(delta_theta)
+
+    theta = NormalizeAngle(delta_theta + rtheta)
+    kappa_r_d_prime = rdkappa * d_condition[0] + rkappa * d_condition[1]
+
+    kappa = ((((d_condition[2] + kappa_r_d_prime * tan_delta_theta) *
+                 cos_delta_theta * cos_delta_theta) /
+                    (one_minus_kappa_r_d) +
+                rkappa) *
+               cos_delta_theta / (one_minus_kappa_r_d))
+
+    d_dot = d_condition[1] * s_condition[1]
+
+    v = sqrt(one_minus_kappa_r_d * one_minus_kappa_r_d * s_condition[1] * s_condition[1] + d_dot * d_dot)
+
+    delta_theta_prime = one_minus_kappa_r_d / cos_delta_theta * (kappa) - rkappa
+    a = (s_condition[2] * one_minus_kappa_r_d / cos_delta_theta +
+           s_condition[1] * s_condition[1] / cos_delta_theta *
+               (d_condition[1] * delta_theta_prime - kappa_r_d_prime))
+    return x, y, v, a, theta, kappa
+'><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/planning/qvfnwo/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/planning/qvfnwo/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/planning/qvfnwo/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="frenet"><meta property="og:description" content='感恩大佬
+https://windses.blog.csdn.net/article/details/108748016
+https://windses.blog.csdn.net/article/details/124871691
+https://windses.blog.csdn.net/article/details/124871737
+import numpy as np from math import * # https://windses.blog.csdn.net/article/details/124871691?spm=1001.2014.3001.5502 # use # https://windses.blog.csdn.net/article/details/124871737?spm=1001.2014.3001.5502 # [x,y]->s,d def cartesian_to_frenet1D(rs, rx, ry, rtheta, x, y): s_condition = np.zeros(1) d_condition = np.zeros(1) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) s_condition[0] = rs return s_condition, d_condition # [s,d]->[x,y] def frenet_to_cartesian1D(rs, rx, ry, rtheta, s_condition, d_condition): if fabs(rs - s_condition[0])>= 1.0e-6: print("The reference point s and s_condition[0] don&#39;t match") cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] return x, y # [x,y,v,theta] -> [s,ds/dt,d,d d/ds] def cartesian_to_frenet2D(rs, rx, ry, rtheta, rkappa, x, y, v, theta): s_condition = np.zeros(2) d_condition = np.zeros(2) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) delta_theta = theta - rtheta tan_delta_theta = tan(delta_theta) cos_delta_theta = cos(delta_theta) one_minus_kappa_r_d = 1 - rkappa * d_condition[0] d_condition[1] = one_minus_kappa_r_d * tan_delta_theta s_condition[0] = rs s_condition[1] = v * cos_delta_theta / one_minus_kappa_r_d return s_condition, d_condition # [s,ds/dt,d,d d/ds]->[x,y,v,theta] def frenet_to_cartesian2D(rs, rx, ry, rtheta, rkappa, s_condition, d_condition): if fabs(rs - s_condition[0])>= 1.0e-6: print("The reference point s and s_condition[0] don&#39;t match") cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] one_minus_kappa_r_d = 1 - rkappa * d_condition[0] tan_delta_theta = d_condition[1] / one_minus_kappa_r_d delta_theta = atan2(d_condition[1], one_minus_kappa_r_d) cos_delta_theta = cos(delta_theta) theta = NormalizeAngle(delta_theta + rtheta) d_dot = d_condition[1] * s_condition[1] v = sqrt(one_minus_kappa_r_d * one_minus_kappa_r_d * s_condition[1] * s_condition[1] + d_dot * d_dot) return x, y, v, theta # [x,y,v,theta,kappa,a] -> [s,ds/dt,d2s/dt^2,d,d d/ds,d2d/ds^2] def cartesian_to_frenet3D(rs, rx, ry, rtheta, rkappa, rdkappa, x, y, v, a, theta, kappa): s_condition = np.zeros(3) d_condition = np.zeros(3) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) delta_theta = theta - rtheta tan_delta_theta = tan(delta_theta) cos_delta_theta = cos(delta_theta) one_minus_kappa_r_d = 1 - rkappa * d_condition[0] d_condition[1] = one_minus_kappa_r_d * tan_delta_theta kappa_r_d_prime = rdkappa * d_condition[0] + rkappa * d_condition[1] d_condition[2] = (-kappa_r_d_prime * tan_delta_theta + one_minus_kappa_r_d / cos_delta_theta / cos_delta_theta * (kappa * one_minus_kappa_r_d / cos_delta_theta - rkappa)) s_condition[0] = rs s_condition[1] = v * cos_delta_theta / one_minus_kappa_r_d delta_theta_prime = one_minus_kappa_r_d / cos_delta_theta * kappa - rkappa s_condition[2] = ((a * cos_delta_theta - s_condition[1] * s_condition[1] * (d_condition[1] * delta_theta_prime - kappa_r_d_prime)) / one_minus_kappa_r_d) return s_condition, d_condition # [s,ds/dt,d2s/dt^2,d,d d/ds,d2d/ds^2]->[x,y,v,theta,kappa,a] def frenet_to_cartesian3D(rs, rx, ry, rtheta, rkappa, rdkappa, s_condition, d_condition): if fabs(rs - s_condition[0])>= 1.0e-6: print("The reference point s and s_condition[0] don&#39;t match") cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] one_minus_kappa_r_d = 1 - rkappa * d_condition[0] tan_delta_theta = d_condition[1] / one_minus_kappa_r_d delta_theta = atan2(d_condition[1], one_minus_kappa_r_d) cos_delta_theta = cos(delta_theta) theta = NormalizeAngle(delta_theta + rtheta) kappa_r_d_prime = rdkappa * d_condition[0] + rkappa * d_condition[1] kappa = ((((d_condition[2] + kappa_r_d_prime * tan_delta_theta) * cos_delta_theta * cos_delta_theta) / (one_minus_kappa_r_d) + rkappa) * cos_delta_theta / (one_minus_kappa_r_d)) d_dot = d_condition[1] * s_condition[1] v = sqrt(one_minus_kappa_r_d * one_minus_kappa_r_d * s_condition[1] * s_condition[1] + d_dot * d_dot) delta_theta_prime = one_minus_kappa_r_d / cos_delta_theta * (kappa) - rkappa a = (s_condition[2] * one_minus_kappa_r_d / cos_delta_theta + s_condition[1] * s_condition[1] / cos_delta_theta * (d_condition[1] * delta_theta_prime - kappa_r_d_prime)) return x, y, v, a, theta, kappa'><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="planning"><meta property="article:published_time" content="2022-06-26T00:00:00+00:00"><meta property="article:modified_time" content="2025-03-03T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="frenet"><meta name=twitter:description content='感恩大佬
+https://windses.blog.csdn.net/article/details/108748016
+https://windses.blog.csdn.net/article/details/124871691
+https://windses.blog.csdn.net/article/details/124871737
+import numpy as np from math import * # https://windses.blog.csdn.net/article/details/124871691?spm=1001.2014.3001.5502 # use # https://windses.blog.csdn.net/article/details/124871737?spm=1001.2014.3001.5502 # [x,y]->s,d def cartesian_to_frenet1D(rs, rx, ry, rtheta, x, y): s_condition = np.zeros(1) d_condition = np.zeros(1) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) s_condition[0] = rs return s_condition, d_condition # [s,d]->[x,y] def frenet_to_cartesian1D(rs, rx, ry, rtheta, s_condition, d_condition): if fabs(rs - s_condition[0])>= 1.0e-6: print("The reference point s and s_condition[0] don&#39;t match") cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] return x, y # [x,y,v,theta] -> [s,ds/dt,d,d d/ds] def cartesian_to_frenet2D(rs, rx, ry, rtheta, rkappa, x, y, v, theta): s_condition = np.zeros(2) d_condition = np.zeros(2) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) delta_theta = theta - rtheta tan_delta_theta = tan(delta_theta) cos_delta_theta = cos(delta_theta) one_minus_kappa_r_d = 1 - rkappa * d_condition[0] d_condition[1] = one_minus_kappa_r_d * tan_delta_theta s_condition[0] = rs s_condition[1] = v * cos_delta_theta / one_minus_kappa_r_d return s_condition, d_condition # [s,ds/dt,d,d d/ds]->[x,y,v,theta] def frenet_to_cartesian2D(rs, rx, ry, rtheta, rkappa, s_condition, d_condition): if fabs(rs - s_condition[0])>= 1.0e-6: print("The reference point s and s_condition[0] don&#39;t match") cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] one_minus_kappa_r_d = 1 - rkappa * d_condition[0] tan_delta_theta = d_condition[1] / one_minus_kappa_r_d delta_theta = atan2(d_condition[1], one_minus_kappa_r_d) cos_delta_theta = cos(delta_theta) theta = NormalizeAngle(delta_theta + rtheta) d_dot = d_condition[1] * s_condition[1] v = sqrt(one_minus_kappa_r_d * one_minus_kappa_r_d * s_condition[1] * s_condition[1] + d_dot * d_dot) return x, y, v, theta # [x,y,v,theta,kappa,a] -> [s,ds/dt,d2s/dt^2,d,d d/ds,d2d/ds^2] def cartesian_to_frenet3D(rs, rx, ry, rtheta, rkappa, rdkappa, x, y, v, a, theta, kappa): s_condition = np.zeros(3) d_condition = np.zeros(3) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) delta_theta = theta - rtheta tan_delta_theta = tan(delta_theta) cos_delta_theta = cos(delta_theta) one_minus_kappa_r_d = 1 - rkappa * d_condition[0] d_condition[1] = one_minus_kappa_r_d * tan_delta_theta kappa_r_d_prime = rdkappa * d_condition[0] + rkappa * d_condition[1] d_condition[2] = (-kappa_r_d_prime * tan_delta_theta + one_minus_kappa_r_d / cos_delta_theta / cos_delta_theta * (kappa * one_minus_kappa_r_d / cos_delta_theta - rkappa)) s_condition[0] = rs s_condition[1] = v * cos_delta_theta / one_minus_kappa_r_d delta_theta_prime = one_minus_kappa_r_d / cos_delta_theta * kappa - rkappa s_condition[2] = ((a * cos_delta_theta - s_condition[1] * s_condition[1] * (d_condition[1] * delta_theta_prime - kappa_r_d_prime)) / one_minus_kappa_r_d) return s_condition, d_condition # [s,ds/dt,d2s/dt^2,d,d d/ds,d2d/ds^2]->[x,y,v,theta,kappa,a] def frenet_to_cartesian3D(rs, rx, ry, rtheta, rkappa, rdkappa, s_condition, d_condition): if fabs(rs - s_condition[0])>= 1.0e-6: print("The reference point s and s_condition[0] don&#39;t match") cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] one_minus_kappa_r_d = 1 - rkappa * d_condition[0] tan_delta_theta = d_condition[1] / one_minus_kappa_r_d delta_theta = atan2(d_condition[1], one_minus_kappa_r_d) cos_delta_theta = cos(delta_theta) theta = NormalizeAngle(delta_theta + rtheta) kappa_r_d_prime = rdkappa * d_condition[0] + rkappa * d_condition[1] kappa = ((((d_condition[2] + kappa_r_d_prime * tan_delta_theta) * cos_delta_theta * cos_delta_theta) / (one_minus_kappa_r_d) + rkappa) * cos_delta_theta / (one_minus_kappa_r_d)) d_dot = d_condition[1] * s_condition[1] v = sqrt(one_minus_kappa_r_d * one_minus_kappa_r_d * s_condition[1] * s_condition[1] + d_dot * d_dot) delta_theta_prime = one_minus_kappa_r_d / cos_delta_theta * (kappa) - rkappa a = (s_condition[2] * one_minus_kappa_r_d / cos_delta_theta + s_condition[1] * s_condition[1] / cos_delta_theta * (d_condition[1] * delta_theta_prime - kappa_r_d_prime)) return x, y, v, a, theta, kappa'><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Planning","item":"https://jler666.github.io/planning/"},{"@type":"ListItem","position":2,"name":"frenet","item":"https://jler666.github.io/planning/qvfnwo/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"frenet","name":"frenet","description":"感恩大佬\nhttps://windses.blog.csdn.net/article/details/108748016\nhttps://windses.blog.csdn.net/article/details/124871691\nhttps://windses.blog.csdn.net/article/details/124871737\nimport numpy as np from math import * # https://windses.blog.csdn.net/article/details/124871691?spm=1001.2014.3001.5502 # use # https://windses.blog.csdn.net/article/details/124871737?spm=1001.2014.3001.5502 # [x,y]-\u0026gt;s,d def cartesian_to_frenet1D(rs, rx, ry, rtheta, x, y): s_condition = np.zeros(1) d_condition = np.zeros(1) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) s_condition[0] = rs return s_condition, d_condition # [s,d]-\u0026gt;[x,y] def frenet_to_cartesian1D(rs, rx, ry, rtheta, s_condition, d_condition): if fabs(rs - s_condition[0])\u0026gt;= 1.0e-6: print(\u0026#34;The reference point s and s_condition[0] don\u0026#39;t match\u0026#34;) cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] return x, y # [x,y,v,theta] -\u0026gt; [s,ds/dt,d,d d/ds] def cartesian_to_frenet2D(rs, rx, ry, rtheta, rkappa, x, y, v, theta): s_condition = np.zeros(2) d_condition = np.zeros(2) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) delta_theta = theta - rtheta tan_delta_theta = tan(delta_theta) cos_delta_theta = cos(delta_theta) one_minus_kappa_r_d = 1 - rkappa * d_condition[0] d_condition[1] = one_minus_kappa_r_d * tan_delta_theta s_condition[0] = rs s_condition[1] = v * cos_delta_theta / one_minus_kappa_r_d return s_condition, d_condition # [s,ds/dt,d,d d/ds]-\u0026gt;[x,y,v,theta] def frenet_to_cartesian2D(rs, rx, ry, rtheta, rkappa, s_condition, d_condition): if fabs(rs - s_condition[0])\u0026gt;= 1.0e-6: print(\u0026#34;The reference point s and s_condition[0] don\u0026#39;t match\u0026#34;) cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] one_minus_kappa_r_d = 1 - rkappa * d_condition[0] tan_delta_theta = d_condition[1] / one_minus_kappa_r_d delta_theta = atan2(d_condition[1], one_minus_kappa_r_d) cos_delta_theta = cos(delta_theta) theta = NormalizeAngle(delta_theta + rtheta) d_dot = d_condition[1] * s_condition[1] v = sqrt(one_minus_kappa_r_d * one_minus_kappa_r_d * s_condition[1] * s_condition[1] + d_dot * d_dot) return x, y, v, theta # [x,y,v,theta,kappa,a] -\u0026gt; [s,ds/dt,d2s/dt^2,d,d d/ds,d2d/ds^2] def cartesian_to_frenet3D(rs, rx, ry, rtheta, rkappa, rdkappa, x, y, v, a, theta, kappa): s_condition = np.zeros(3) d_condition = np.zeros(3) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) delta_theta = theta - rtheta tan_delta_theta = tan(delta_theta) cos_delta_theta = cos(delta_theta) one_minus_kappa_r_d = 1 - rkappa * d_condition[0] d_condition[1] = one_minus_kappa_r_d * tan_delta_theta kappa_r_d_prime = rdkappa * d_condition[0] + rkappa * d_condition[1] d_condition[2] = (-kappa_r_d_prime * tan_delta_theta + one_minus_kappa_r_d / cos_delta_theta / cos_delta_theta * (kappa * one_minus_kappa_r_d / cos_delta_theta - rkappa)) s_condition[0] = rs s_condition[1] = v * cos_delta_theta / one_minus_kappa_r_d delta_theta_prime = one_minus_kappa_r_d / cos_delta_theta * kappa - rkappa s_condition[2] = ((a * cos_delta_theta - s_condition[1] * s_condition[1] * (d_condition[1] * delta_theta_prime - kappa_r_d_prime)) / one_minus_kappa_r_d) return s_condition, d_condition # [s,ds/dt,d2s/dt^2,d,d d/ds,d2d/ds^2]-\u0026gt;[x,y,v,theta,kappa,a] def frenet_to_cartesian3D(rs, rx, ry, rtheta, rkappa, rdkappa, s_condition, d_condition): if fabs(rs - s_condition[0])\u0026gt;= 1.0e-6: print(\u0026#34;The reference point s and s_condition[0] don\u0026#39;t match\u0026#34;) cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] one_minus_kappa_r_d = 1 - rkappa * d_condition[0] tan_delta_theta = d_condition[1] / one_minus_kappa_r_d delta_theta = atan2(d_condition[1], one_minus_kappa_r_d) cos_delta_theta = cos(delta_theta) theta = NormalizeAngle(delta_theta + rtheta) kappa_r_d_prime = rdkappa * d_condition[0] + rkappa * d_condition[1] kappa = ((((d_condition[2] + kappa_r_d_prime * tan_delta_theta) * cos_delta_theta * cos_delta_theta) / (one_minus_kappa_r_d) + rkappa) * cos_delta_theta / (one_minus_kappa_r_d)) d_dot = d_condition[1] * s_condition[1] v = sqrt(one_minus_kappa_r_d * one_minus_kappa_r_d * s_condition[1] * s_condition[1] + d_dot * d_dot) delta_theta_prime = one_minus_kappa_r_d / cos_delta_theta * (kappa) - rkappa a = (s_condition[2] * one_minus_kappa_r_d / cos_delta_theta + s_condition[1] * s_condition[1] / cos_delta_theta * (d_condition[1] * delta_theta_prime - kappa_r_d_prime)) return x, y, v, a, theta, kappa ","keywords":[],"articleBody":"感恩大佬\nhttps://windses.blog.csdn.net/article/details/108748016\nhttps://windses.blog.csdn.net/article/details/124871691\nhttps://windses.blog.csdn.net/article/details/124871737\nimport numpy as np from math import * # https://windses.blog.csdn.net/article/details/124871691?spm=1001.2014.3001.5502 # use # https://windses.blog.csdn.net/article/details/124871737?spm=1001.2014.3001.5502 # [x,y]-\u003es,d def cartesian_to_frenet1D(rs, rx, ry, rtheta, x, y): s_condition = np.zeros(1) d_condition = np.zeros(1) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) s_condition[0] = rs return s_condition, d_condition # [s,d]-\u003e[x,y] def frenet_to_cartesian1D(rs, rx, ry, rtheta, s_condition, d_condition): if fabs(rs - s_condition[0])\u003e= 1.0e-6: print(\"The reference point s and s_condition[0] don't match\") cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] return x, y # [x,y,v,theta] -\u003e [s,ds/dt,d,d d/ds] def cartesian_to_frenet2D(rs, rx, ry, rtheta, rkappa, x, y, v, theta): s_condition = np.zeros(2) d_condition = np.zeros(2) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) delta_theta = theta - rtheta tan_delta_theta = tan(delta_theta) cos_delta_theta = cos(delta_theta) one_minus_kappa_r_d = 1 - rkappa * d_condition[0] d_condition[1] = one_minus_kappa_r_d * tan_delta_theta s_condition[0] = rs s_condition[1] = v * cos_delta_theta / one_minus_kappa_r_d return s_condition, d_condition # [s,ds/dt,d,d d/ds]-\u003e[x,y,v,theta] def frenet_to_cartesian2D(rs, rx, ry, rtheta, rkappa, s_condition, d_condition): if fabs(rs - s_condition[0])\u003e= 1.0e-6: print(\"The reference point s and s_condition[0] don't match\") cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] one_minus_kappa_r_d = 1 - rkappa * d_condition[0] tan_delta_theta = d_condition[1] / one_minus_kappa_r_d delta_theta = atan2(d_condition[1], one_minus_kappa_r_d) cos_delta_theta = cos(delta_theta) theta = NormalizeAngle(delta_theta + rtheta) d_dot = d_condition[1] * s_condition[1] v = sqrt(one_minus_kappa_r_d * one_minus_kappa_r_d * s_condition[1] * s_condition[1] + d_dot * d_dot) return x, y, v, theta # [x,y,v,theta,kappa,a] -\u003e [s,ds/dt,d2s/dt^2,d,d d/ds,d2d/ds^2] def cartesian_to_frenet3D(rs, rx, ry, rtheta, rkappa, rdkappa, x, y, v, a, theta, kappa): s_condition = np.zeros(3) d_condition = np.zeros(3) dx = x - rx dy = y - ry cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx d_condition[0] = copysign(sqrt(dx * dx + dy * dy), cross_rd_nd) delta_theta = theta - rtheta tan_delta_theta = tan(delta_theta) cos_delta_theta = cos(delta_theta) one_minus_kappa_r_d = 1 - rkappa * d_condition[0] d_condition[1] = one_minus_kappa_r_d * tan_delta_theta kappa_r_d_prime = rdkappa * d_condition[0] + rkappa * d_condition[1] d_condition[2] = (-kappa_r_d_prime * tan_delta_theta + one_minus_kappa_r_d / cos_delta_theta / cos_delta_theta * (kappa * one_minus_kappa_r_d / cos_delta_theta - rkappa)) s_condition[0] = rs s_condition[1] = v * cos_delta_theta / one_minus_kappa_r_d delta_theta_prime = one_minus_kappa_r_d / cos_delta_theta * kappa - rkappa s_condition[2] = ((a * cos_delta_theta - s_condition[1] * s_condition[1] * (d_condition[1] * delta_theta_prime - kappa_r_d_prime)) / one_minus_kappa_r_d) return s_condition, d_condition # [s,ds/dt,d2s/dt^2,d,d d/ds,d2d/ds^2]-\u003e[x,y,v,theta,kappa,a] def frenet_to_cartesian3D(rs, rx, ry, rtheta, rkappa, rdkappa, s_condition, d_condition): if fabs(rs - s_condition[0])\u003e= 1.0e-6: print(\"The reference point s and s_condition[0] don't match\") cos_theta_r = cos(rtheta) sin_theta_r = sin(rtheta) x = rx - sin_theta_r * d_condition[0] y = ry + cos_theta_r * d_condition[0] one_minus_kappa_r_d = 1 - rkappa * d_condition[0] tan_delta_theta = d_condition[1] / one_minus_kappa_r_d delta_theta = atan2(d_condition[1], one_minus_kappa_r_d) cos_delta_theta = cos(delta_theta) theta = NormalizeAngle(delta_theta + rtheta) kappa_r_d_prime = rdkappa * d_condition[0] + rkappa * d_condition[1] kappa = ((((d_condition[2] + kappa_r_d_prime * tan_delta_theta) * cos_delta_theta * cos_delta_theta) / (one_minus_kappa_r_d) + rkappa) * cos_delta_theta / (one_minus_kappa_r_d)) d_dot = d_condition[1] * s_condition[1] v = sqrt(one_minus_kappa_r_d * one_minus_kappa_r_d * s_condition[1] * s_condition[1] + d_dot * d_dot) delta_theta_prime = one_minus_kappa_r_d / cos_delta_theta * (kappa) - rkappa a = (s_condition[2] * one_minus_kappa_r_d / cos_delta_theta + s_condition[1] * s_condition[1] / cos_delta_theta * (d_condition[1] * delta_theta_prime - kappa_r_d_prime)) return x, y, v, a, theta, kappa 也对，此公式很实用，全部都是加法和幂运算，无三角函数就能实现世界坐标下曲率的计算。\n推导如下\nhttps://zhuanlan.zhihu.com/p/304474902\ncos(arctanx）=1/√(1+x^2)\nhttps://windses.blog.csdn.net/article/details/124871737\n","wordCount":"606","inLanguage":"en","datePublished":"2022-06-26T00:00:00Z","dateModified":"2025-03-03T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/planning/qvfnwo/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">frenet</h1><div class=post-meta><span title=2022-06-26T00:00:00+00:00>创建于 2022-06-26</span>&nbsp;·&nbsp;<span title=2025-03-03T00:00:00+00:00>最后修改于 2025-03-03</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p>感恩大佬</p><p><a href="https://windses.blog.csdn.net/article/details/108748016?spm=1001.2014.3001.5502">https://windses.blog.csdn.net/article/details/108748016</a></p><p><a href=https://windses.blog.csdn.net/article/details/124871691>https://windses.blog.csdn.net/article/details/124871691</a></p><p><a href="https://windses.blog.csdn.net/article/details/124871737?spm=1001.2014.3001.5502">https://windses.blog.csdn.net/article/details/124871737</a></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#f92672>import</span> numpy <span style=color:#66d9ef>as</span> np
+</span></span><span style=display:flex><span><span style=color:#f92672>from</span> math <span style=color:#f92672>import</span> <span style=color:#f92672>*</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># https://windses.blog.csdn.net/article/details/124871691?spm=1001.2014.3001.5502</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># use</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># https://windses.blog.csdn.net/article/details/124871737?spm=1001.2014.3001.5502</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># [x,y]-&gt;s,d</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>cartesian_to_frenet1D</span>(rs, rx, ry, rtheta, x, y):
+</span></span><span style=display:flex><span>    s_condition <span style=color:#f92672>=</span> np<span style=color:#f92672>.</span>zeros(<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    d_condition <span style=color:#f92672>=</span> np<span style=color:#f92672>.</span>zeros(<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    dx <span style=color:#f92672>=</span> x <span style=color:#f92672>-</span> rx
+</span></span><span style=display:flex><span>    dy <span style=color:#f92672>=</span> y <span style=color:#f92672>-</span> ry
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    cos_theta_r <span style=color:#f92672>=</span> cos(rtheta)
+</span></span><span style=display:flex><span>    sin_theta_r <span style=color:#f92672>=</span> sin(rtheta)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    cross_rd_nd <span style=color:#f92672>=</span> cos_theta_r <span style=color:#f92672>*</span> dy <span style=color:#f92672>-</span> sin_theta_r <span style=color:#f92672>*</span> dx
+</span></span><span style=display:flex><span>    d_condition[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> copysign(sqrt(dx <span style=color:#f92672>*</span> dx <span style=color:#f92672>+</span> dy <span style=color:#f92672>*</span> dy), cross_rd_nd)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    s_condition[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> rs
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> s_condition, d_condition
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># [s,d]-&gt;[x,y]</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>frenet_to_cartesian1D</span>(rs, rx, ry, rtheta, s_condition, d_condition):
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> fabs(rs <span style=color:#f92672>-</span> s_condition[<span style=color:#ae81ff>0</span>])<span style=color:#f92672>&gt;=</span> <span style=color:#ae81ff>1.0e-6</span>:
+</span></span><span style=display:flex><span>        print(<span style=color:#e6db74>&#34;The reference point s and s_condition[0] don&#39;t match&#34;</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    cos_theta_r <span style=color:#f92672>=</span> cos(rtheta)
+</span></span><span style=display:flex><span>    sin_theta_r <span style=color:#f92672>=</span> sin(rtheta)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    x <span style=color:#f92672>=</span> rx <span style=color:#f92672>-</span> sin_theta_r <span style=color:#f92672>*</span> d_condition[<span style=color:#ae81ff>0</span>]
+</span></span><span style=display:flex><span>    y <span style=color:#f92672>=</span> ry <span style=color:#f92672>+</span> cos_theta_r <span style=color:#f92672>*</span> d_condition[<span style=color:#ae81ff>0</span>]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> x, y
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># [x,y,v,theta] -&gt; [s,ds/dt,d,d d/ds]</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>cartesian_to_frenet2D</span>(rs, rx, ry, rtheta, rkappa, x, y, v, theta):
+</span></span><span style=display:flex><span>    s_condition <span style=color:#f92672>=</span> np<span style=color:#f92672>.</span>zeros(<span style=color:#ae81ff>2</span>)
+</span></span><span style=display:flex><span>    d_condition <span style=color:#f92672>=</span> np<span style=color:#f92672>.</span>zeros(<span style=color:#ae81ff>2</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    dx <span style=color:#f92672>=</span> x <span style=color:#f92672>-</span> rx
+</span></span><span style=display:flex><span>    dy <span style=color:#f92672>=</span> y <span style=color:#f92672>-</span> ry
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    cos_theta_r <span style=color:#f92672>=</span> cos(rtheta)
+</span></span><span style=display:flex><span>    sin_theta_r <span style=color:#f92672>=</span> sin(rtheta)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    cross_rd_nd <span style=color:#f92672>=</span> cos_theta_r <span style=color:#f92672>*</span> dy <span style=color:#f92672>-</span> sin_theta_r <span style=color:#f92672>*</span> dx
+</span></span><span style=display:flex><span>    d_condition[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> copysign(sqrt(dx <span style=color:#f92672>*</span> dx <span style=color:#f92672>+</span> dy <span style=color:#f92672>*</span> dy), cross_rd_nd)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    delta_theta <span style=color:#f92672>=</span> theta <span style=color:#f92672>-</span> rtheta
+</span></span><span style=display:flex><span>    tan_delta_theta <span style=color:#f92672>=</span> tan(delta_theta)
+</span></span><span style=display:flex><span>    cos_delta_theta <span style=color:#f92672>=</span> cos(delta_theta)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    one_minus_kappa_r_d <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>-</span> rkappa <span style=color:#f92672>*</span> d_condition[<span style=color:#ae81ff>0</span>]
+</span></span><span style=display:flex><span>    d_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>=</span> one_minus_kappa_r_d <span style=color:#f92672>*</span> tan_delta_theta
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    s_condition[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> rs
+</span></span><span style=display:flex><span>    s_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>=</span> v <span style=color:#f92672>*</span> cos_delta_theta <span style=color:#f92672>/</span> one_minus_kappa_r_d
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> s_condition, d_condition
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># [s,ds/dt,d,d d/ds]-&gt;[x,y,v,theta]</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>frenet_to_cartesian2D</span>(rs, rx, ry, rtheta, rkappa, s_condition, d_condition):
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> fabs(rs <span style=color:#f92672>-</span> s_condition[<span style=color:#ae81ff>0</span>])<span style=color:#f92672>&gt;=</span> <span style=color:#ae81ff>1.0e-6</span>:
+</span></span><span style=display:flex><span>        print(<span style=color:#e6db74>&#34;The reference point s and s_condition[0] don&#39;t match&#34;</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    cos_theta_r <span style=color:#f92672>=</span> cos(rtheta)
+</span></span><span style=display:flex><span>    sin_theta_r <span style=color:#f92672>=</span> sin(rtheta)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    x <span style=color:#f92672>=</span> rx <span style=color:#f92672>-</span> sin_theta_r <span style=color:#f92672>*</span> d_condition[<span style=color:#ae81ff>0</span>]
+</span></span><span style=display:flex><span>    y <span style=color:#f92672>=</span> ry <span style=color:#f92672>+</span> cos_theta_r <span style=color:#f92672>*</span> d_condition[<span style=color:#ae81ff>0</span>]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    one_minus_kappa_r_d <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>-</span> rkappa <span style=color:#f92672>*</span> d_condition[<span style=color:#ae81ff>0</span>]
+</span></span><span style=display:flex><span>    tan_delta_theta <span style=color:#f92672>=</span> d_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>/</span> one_minus_kappa_r_d
+</span></span><span style=display:flex><span>    delta_theta <span style=color:#f92672>=</span> atan2(d_condition[<span style=color:#ae81ff>1</span>], one_minus_kappa_r_d)
+</span></span><span style=display:flex><span>    cos_delta_theta <span style=color:#f92672>=</span> cos(delta_theta)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    theta <span style=color:#f92672>=</span> NormalizeAngle(delta_theta <span style=color:#f92672>+</span> rtheta)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    d_dot <span style=color:#f92672>=</span> d_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>*</span> s_condition[<span style=color:#ae81ff>1</span>]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    v <span style=color:#f92672>=</span> sqrt(one_minus_kappa_r_d <span style=color:#f92672>*</span> one_minus_kappa_r_d <span style=color:#f92672>*</span> s_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>*</span> s_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>+</span> d_dot <span style=color:#f92672>*</span> d_dot)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> x, y, v, theta
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># [x,y,v,theta,kappa,a] -&gt; [s,ds/dt,d2s/dt^2,d,d d/ds,d2d/ds^2]</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>cartesian_to_frenet3D</span>(rs, rx, ry, rtheta, rkappa, rdkappa, x, y, v, a, theta, kappa):
+</span></span><span style=display:flex><span>    s_condition <span style=color:#f92672>=</span> np<span style=color:#f92672>.</span>zeros(<span style=color:#ae81ff>3</span>)
+</span></span><span style=display:flex><span>    d_condition <span style=color:#f92672>=</span> np<span style=color:#f92672>.</span>zeros(<span style=color:#ae81ff>3</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    dx <span style=color:#f92672>=</span> x <span style=color:#f92672>-</span> rx
+</span></span><span style=display:flex><span>    dy <span style=color:#f92672>=</span> y <span style=color:#f92672>-</span> ry
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    cos_theta_r <span style=color:#f92672>=</span> cos(rtheta)
+</span></span><span style=display:flex><span>    sin_theta_r <span style=color:#f92672>=</span> sin(rtheta)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    cross_rd_nd <span style=color:#f92672>=</span> cos_theta_r <span style=color:#f92672>*</span> dy <span style=color:#f92672>-</span> sin_theta_r <span style=color:#f92672>*</span> dx
+</span></span><span style=display:flex><span>    d_condition[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> copysign(sqrt(dx <span style=color:#f92672>*</span> dx <span style=color:#f92672>+</span> dy <span style=color:#f92672>*</span> dy), cross_rd_nd)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    delta_theta <span style=color:#f92672>=</span> theta <span style=color:#f92672>-</span> rtheta
+</span></span><span style=display:flex><span>    tan_delta_theta <span style=color:#f92672>=</span> tan(delta_theta)
+</span></span><span style=display:flex><span>    cos_delta_theta <span style=color:#f92672>=</span> cos(delta_theta)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    one_minus_kappa_r_d <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>-</span> rkappa <span style=color:#f92672>*</span> d_condition[<span style=color:#ae81ff>0</span>]
+</span></span><span style=display:flex><span>    d_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>=</span> one_minus_kappa_r_d <span style=color:#f92672>*</span> tan_delta_theta
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    kappa_r_d_prime <span style=color:#f92672>=</span> rdkappa <span style=color:#f92672>*</span> d_condition[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>+</span> rkappa <span style=color:#f92672>*</span> d_condition[<span style=color:#ae81ff>1</span>]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    d_condition[<span style=color:#ae81ff>2</span>] <span style=color:#f92672>=</span> (<span style=color:#f92672>-</span>kappa_r_d_prime <span style=color:#f92672>*</span> tan_delta_theta <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span>      one_minus_kappa_r_d <span style=color:#f92672>/</span> cos_delta_theta <span style=color:#f92672>/</span> cos_delta_theta <span style=color:#f92672>*</span>
+</span></span><span style=display:flex><span>          (kappa <span style=color:#f92672>*</span> one_minus_kappa_r_d <span style=color:#f92672>/</span> cos_delta_theta <span style=color:#f92672>-</span> rkappa))
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    s_condition[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> rs
+</span></span><span style=display:flex><span>    s_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>=</span> v <span style=color:#f92672>*</span> cos_delta_theta <span style=color:#f92672>/</span> one_minus_kappa_r_d
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    delta_theta_prime <span style=color:#f92672>=</span> one_minus_kappa_r_d <span style=color:#f92672>/</span> cos_delta_theta <span style=color:#f92672>*</span> kappa <span style=color:#f92672>-</span> rkappa
+</span></span><span style=display:flex><span>    s_condition[<span style=color:#ae81ff>2</span>] <span style=color:#f92672>=</span> ((a <span style=color:#f92672>*</span> cos_delta_theta <span style=color:#f92672>-</span>
+</span></span><span style=display:flex><span>                       s_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>*</span> s_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>*</span>
+</span></span><span style=display:flex><span>                       (d_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>*</span> delta_theta_prime <span style=color:#f92672>-</span> kappa_r_d_prime)) <span style=color:#f92672>/</span>
+</span></span><span style=display:flex><span>                          one_minus_kappa_r_d)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> s_condition, d_condition
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># [s,ds/dt,d2s/dt^2,d,d d/ds,d2d/ds^2]-&gt;[x,y,v,theta,kappa,a]</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>frenet_to_cartesian3D</span>(rs, rx, ry, rtheta, rkappa, rdkappa, s_condition, d_condition):
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> fabs(rs <span style=color:#f92672>-</span> s_condition[<span style=color:#ae81ff>0</span>])<span style=color:#f92672>&gt;=</span> <span style=color:#ae81ff>1.0e-6</span>:
+</span></span><span style=display:flex><span>        print(<span style=color:#e6db74>&#34;The reference point s and s_condition[0] don&#39;t match&#34;</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    cos_theta_r <span style=color:#f92672>=</span> cos(rtheta)
+</span></span><span style=display:flex><span>    sin_theta_r <span style=color:#f92672>=</span> sin(rtheta)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    x <span style=color:#f92672>=</span> rx <span style=color:#f92672>-</span> sin_theta_r <span style=color:#f92672>*</span> d_condition[<span style=color:#ae81ff>0</span>]
+</span></span><span style=display:flex><span>    y <span style=color:#f92672>=</span> ry <span style=color:#f92672>+</span> cos_theta_r <span style=color:#f92672>*</span> d_condition[<span style=color:#ae81ff>0</span>]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    one_minus_kappa_r_d <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>-</span> rkappa <span style=color:#f92672>*</span> d_condition[<span style=color:#ae81ff>0</span>]
+</span></span><span style=display:flex><span>    tan_delta_theta <span style=color:#f92672>=</span> d_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>/</span> one_minus_kappa_r_d
+</span></span><span style=display:flex><span>    delta_theta <span style=color:#f92672>=</span> atan2(d_condition[<span style=color:#ae81ff>1</span>], one_minus_kappa_r_d)
+</span></span><span style=display:flex><span>    cos_delta_theta <span style=color:#f92672>=</span> cos(delta_theta)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    theta <span style=color:#f92672>=</span> NormalizeAngle(delta_theta <span style=color:#f92672>+</span> rtheta)
+</span></span><span style=display:flex><span>    kappa_r_d_prime <span style=color:#f92672>=</span> rdkappa <span style=color:#f92672>*</span> d_condition[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>+</span> rkappa <span style=color:#f92672>*</span> d_condition[<span style=color:#ae81ff>1</span>]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    kappa <span style=color:#f92672>=</span> ((((d_condition[<span style=color:#ae81ff>2</span>] <span style=color:#f92672>+</span> kappa_r_d_prime <span style=color:#f92672>*</span> tan_delta_theta) <span style=color:#f92672>*</span>
+</span></span><span style=display:flex><span>                 cos_delta_theta <span style=color:#f92672>*</span> cos_delta_theta) <span style=color:#f92672>/</span>
+</span></span><span style=display:flex><span>                    (one_minus_kappa_r_d) <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span>                rkappa) <span style=color:#f92672>*</span>
+</span></span><span style=display:flex><span>               cos_delta_theta <span style=color:#f92672>/</span> (one_minus_kappa_r_d))
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    d_dot <span style=color:#f92672>=</span> d_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>*</span> s_condition[<span style=color:#ae81ff>1</span>]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    v <span style=color:#f92672>=</span> sqrt(one_minus_kappa_r_d <span style=color:#f92672>*</span> one_minus_kappa_r_d <span style=color:#f92672>*</span> s_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>*</span> s_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>+</span> d_dot <span style=color:#f92672>*</span> d_dot)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    delta_theta_prime <span style=color:#f92672>=</span> one_minus_kappa_r_d <span style=color:#f92672>/</span> cos_delta_theta <span style=color:#f92672>*</span> (kappa) <span style=color:#f92672>-</span> rkappa
+</span></span><span style=display:flex><span>    a <span style=color:#f92672>=</span> (s_condition[<span style=color:#ae81ff>2</span>] <span style=color:#f92672>*</span> one_minus_kappa_r_d <span style=color:#f92672>/</span> cos_delta_theta <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span>           s_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>*</span> s_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>/</span> cos_delta_theta <span style=color:#f92672>*</span>
+</span></span><span style=display:flex><span>               (d_condition[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>*</span> delta_theta_prime <span style=color:#f92672>-</span> kappa_r_d_prime))
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> x, y, v, a, theta, kappa
+</span></span></code></pre></div><p><img alt=1656232345823-edf2c7b7-39b4-4c64-a5f0-1e6336f0d341.png loading=lazy src=/images/mByqGaYL3Epb-S79/1656232345823-edf2c7b7-39b4-4c64-a5f0-1e6336f0d341-487133.png></p><p><img alt=1656232367706-ca131757-3a6c-43ec-9a7e-9e49a81e6f00.png loading=lazy src=/images/mByqGaYL3Epb-S79/1656232367706-ca131757-3a6c-43ec-9a7e-9e49a81e6f00-527547.png></p><p><img alt=1656232722483-3bdd83e1-6326-4118-9866-7ed6a03734e0.png loading=lazy src=/images/mByqGaYL3Epb-S79/1656232722483-3bdd83e1-6326-4118-9866-7ed6a03734e0-163078.png>也对，此公式很实用，全部都是加法和幂运算，无三角函数就能实现世界坐标下曲率的计算。</p><p>推导如下</p><p><a href=https://zhuanlan.zhihu.com/p/304474902>https://zhuanlan.zhihu.com/p/304474902</a></p><p>cos(arctanx）=1/√(1+x^2)</p><p><a href=https://windses.blog.csdn.net/article/details/124871737>https://windses.blog.csdn.net/article/details/124871737</a></p><p><img alt=1656335411515-626a02ac-650e-4549-9f3f-96343c906be4.png loading=lazy src=/images/mByqGaYL3Epb-S79/1656335411515-626a02ac-650e-4549-9f3f-96343c906be4-902084.png></p><p><img alt=1656232382350-63d6558f-5364-4d81-85b5-2242f2c33432.png loading=lazy src=/images/mByqGaYL3Epb-S79/1656232382350-63d6558f-5364-4d81-85b5-2242f2c33432-462544.png></p></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

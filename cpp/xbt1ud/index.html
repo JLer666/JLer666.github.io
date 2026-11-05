@@ -1,0 +1,491 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux系统编程入门2 IO,虚拟地址空间,文件描述符,IO函数 | CantBlog</title><meta name=keywords content><meta name=description content="Linux 文件IO
+1标准C库IO库和LINUX/ IO函数的对比
+站在内存的角度考虑IO 文件输入:读取文件到内存中 文件输出:将内存中数据写到文件中
+标准C IO函数是跨平台的(qt也是跨平台的) 跨平台的方式
+1类似JAVA虚拟机 程序都是跑在虚拟机中，VM自动调用对应OS的系统调用
+2 标准C调用了不同平台的系统API 标准C在封装时就考虑了不同平台
+标准C调用了LINUX/ IO的API
+man 3 fopen可以在linux中查看标准C库的函数 比如这条命令就直接找到fopen函数的声明位置
+C库 fopen打开txt 返回FILE* fp文件指针 FILE是个结构体其中有3个部分比较重要
+1文件描述符(文件句柄)(整形值):指向当前打开的文件
+2文件读写指针:维护两个指针 读指针和写指针
+3 IO缓存区(所有标准C IO都是带缓冲区的) 写是写入缓冲区中,当缓冲区慢调用一次Linux IO函数(系统调用函数)将数据写入磁盘  缓冲区就是为了提高程序的执行效率(写入磁盘是对硬件操作很慢，将缓冲区内的数据一次性写入降低了写磁盘的频率 效率更高)
+将缓冲区数据(内存)写入磁盘的3种情况 1手动调用fflush 强制将缓冲区数据写入磁盘2缓冲区满了3正常关闭文件(a fclose b return(main) c exit(main) 这3种情况算正常关闭)
+缓冲区默认(8192字节 约为8k 可以调整大小 但不建议调整)
+| 1CIO库 |
+| &mdash; |
+在网络通信是因为时效性，我们希望写入就马上发出不要有缓冲，所以在网络通信时我们采用Linux IO来实现发送
+CIO与LinuxIO的关系
+CIO调用系统调用(Linux IO)  CIO先将缓冲区写满(或手动flush) 再调用一次LinuxIO(内核)write写磁盘
+CIO调用一次LinuxIO read先将缓冲区读满(一次读1k)  供用户多次读取(用户一次读1个字节)  buf1 和buf2是用户缓冲区和C标准库的I/O缓冲区不同  读写缓冲区是同一块(libio.h)
+| 2CIO与系统调用 |"><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/xbt1ud/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/xbt1ud/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/xbt1ud/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux系统编程入门2 IO,虚拟地址空间,文件描述符,IO函数"><meta property="og:description" content="Linux 文件IO
+1标准C库IO库和LINUX/ IO函数的对比
+站在内存的角度考虑IO 文件输入:读取文件到内存中 文件输出:将内存中数据写到文件中
+标准C IO函数是跨平台的(qt也是跨平台的) 跨平台的方式
+1类似JAVA虚拟机 程序都是跑在虚拟机中，VM自动调用对应OS的系统调用
+2 标准C调用了不同平台的系统API 标准C在封装时就考虑了不同平台
+标准C调用了LINUX/ IO的API
+man 3 fopen可以在linux中查看标准C库的函数 比如这条命令就直接找到fopen函数的声明位置
+C库 fopen打开txt 返回FILE* fp文件指针 FILE是个结构体其中有3个部分比较重要
+1文件描述符(文件句柄)(整形值):指向当前打开的文件
+2文件读写指针:维护两个指针 读指针和写指针
+3 IO缓存区(所有标准C IO都是带缓冲区的) 写是写入缓冲区中,当缓冲区慢调用一次Linux IO函数(系统调用函数)将数据写入磁盘 缓冲区就是为了提高程序的执行效率(写入磁盘是对硬件操作很慢，将缓冲区内的数据一次性写入降低了写磁盘的频率 效率更高)
+将缓冲区数据(内存)写入磁盘的3种情况 1手动调用fflush 强制将缓冲区数据写入磁盘2缓冲区满了3正常关闭文件(a fclose b return(main) c exit(main) 这3种情况算正常关闭)
+缓冲区默认(8192字节 约为8k 可以调整大小 但不建议调整)
+| 1CIO库 |
+| — |
+在网络通信是因为时效性，我们希望写入就马上发出不要有缓冲，所以在网络通信时我们采用Linux IO来实现发送
+CIO与LinuxIO的关系
+CIO调用系统调用(Linux IO) CIO先将缓冲区写满(或手动flush) 再调用一次LinuxIO(内核)write写磁盘
+CIO调用一次LinuxIO read先将缓冲区读满(一次读1k) 供用户多次读取(用户一次读1个字节) buf1 和buf2是用户缓冲区和C标准库的I/O缓冲区不同 读写缓冲区是同一块(libio.h)
+| 2CIO与系统调用 |"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-12T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux系统编程入门2 IO,虚拟地址空间,文件描述符,IO函数"><meta name=twitter:description content="Linux 文件IO
+1标准C库IO库和LINUX/ IO函数的对比
+站在内存的角度考虑IO 文件输入:读取文件到内存中 文件输出:将内存中数据写到文件中
+标准C IO函数是跨平台的(qt也是跨平台的) 跨平台的方式
+1类似JAVA虚拟机 程序都是跑在虚拟机中，VM自动调用对应OS的系统调用
+2 标准C调用了不同平台的系统API 标准C在封装时就考虑了不同平台
+标准C调用了LINUX/ IO的API
+man 3 fopen可以在linux中查看标准C库的函数 比如这条命令就直接找到fopen函数的声明位置
+C库 fopen打开txt 返回FILE* fp文件指针 FILE是个结构体其中有3个部分比较重要
+1文件描述符(文件句柄)(整形值):指向当前打开的文件
+2文件读写指针:维护两个指针 读指针和写指针
+3 IO缓存区(所有标准C IO都是带缓冲区的) 写是写入缓冲区中,当缓冲区慢调用一次Linux IO函数(系统调用函数)将数据写入磁盘 缓冲区就是为了提高程序的执行效率(写入磁盘是对硬件操作很慢，将缓冲区内的数据一次性写入降低了写磁盘的频率 效率更高)
+将缓冲区数据(内存)写入磁盘的3种情况 1手动调用fflush 强制将缓冲区数据写入磁盘2缓冲区满了3正常关闭文件(a fclose b return(main) c exit(main) 这3种情况算正常关闭)
+缓冲区默认(8192字节 约为8k 可以调整大小 但不建议调整)
+| 1CIO库 |
+| — |
+在网络通信是因为时效性，我们希望写入就马上发出不要有缓冲，所以在网络通信时我们采用Linux IO来实现发送
+CIO与LinuxIO的关系
+CIO调用系统调用(Linux IO) CIO先将缓冲区写满(或手动flush) 再调用一次LinuxIO(内核)write写磁盘
+CIO调用一次LinuxIO read先将缓冲区读满(一次读1k) 供用户多次读取(用户一次读1个字节) buf1 和buf2是用户缓冲区和C标准库的I/O缓冲区不同 读写缓冲区是同一块(libio.h)
+| 2CIO与系统调用 |"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux系统编程入门2 IO,虚拟地址空间,文件描述符,IO函数","item":"https://jler666.github.io/cpp/xbt1ud/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux系统编程入门2 IO,虚拟地址空间,文件描述符,IO函数","name":"Linux系统编程入门2 IO,虚拟地址空间,文件描述符,IO函数","description":"Linux 文件IO\n1标准C库IO库和LINUX/ IO函数的对比\n站在内存的角度考虑IO 文件输入:读取文件到内存中 文件输出:将内存中数据写到文件中\n标准C IO函数是跨平台的(qt也是跨平台的) 跨平台的方式\n1类似JAVA虚拟机 程序都是跑在虚拟机中，VM自动调用对应OS的系统调用\n2 标准C调用了不同平台的系统API 标准C在封装时就考虑了不同平台\n标准C调用了LINUX/ IO的API\nman 3 fopen可以在linux中查看标准C库的函数 比如这条命令就直接找到fopen函数的声明位置\nC库 fopen打开txt 返回FILE* fp文件指针 FILE是个结构体其中有3个部分比较重要\n1文件描述符(文件句柄)(整形值):指向当前打开的文件\n2文件读写指针:维护两个指针 读指针和写指针\n3 IO缓存区(所有标准C IO都是带缓冲区的) 写是写入缓冲区中,当缓冲区慢调用一次Linux IO函数(系统调用函数)将数据写入磁盘 缓冲区就是为了提高程序的执行效率(写入磁盘是对硬件操作很慢，将缓冲区内的数据一次性写入降低了写磁盘的频率 效率更高)\n将缓冲区数据(内存)写入磁盘的3种情况 1手动调用fflush 强制将缓冲区数据写入磁盘2缓冲区满了3正常关闭文件(a fclose b return(main) c exit(main) 这3种情况算正常关闭)\n缓冲区默认(8192字节 约为8k 可以调整大小 但不建议调整)\n| 1CIO库 |\n| \u0026mdash; |\n在网络通信是因为时效性，我们希望写入就马上发出不要有缓冲，所以在网络通信时我们采用Linux IO来实现发送\nCIO与LinuxIO的关系\nCIO调用系统调用(Linux IO) CIO先将缓冲区写满(或手动flush) 再调用一次LinuxIO(内核)write写磁盘\nCIO调用一次LinuxIO read先将缓冲区读满(一次读1k) 供用户多次读取(用户一次读1个字节) buf1 和buf2是用户缓冲区和C标准库的I/O缓冲区不同 读写缓冲区是同一块(libio.h)\n| 2CIO与系统调用 |\n","keywords":[],"articleBody":"Linux 文件IO\n1标准C库IO库和LINUX/ IO函数的对比\n站在内存的角度考虑IO 文件输入:读取文件到内存中 文件输出:将内存中数据写到文件中\n标准C IO函数是跨平台的(qt也是跨平台的) 跨平台的方式\n1类似JAVA虚拟机 程序都是跑在虚拟机中，VM自动调用对应OS的系统调用\n2 标准C调用了不同平台的系统API 标准C在封装时就考虑了不同平台\n标准C调用了LINUX/ IO的API\nman 3 fopen可以在linux中查看标准C库的函数 比如这条命令就直接找到fopen函数的声明位置\nC库 fopen打开txt 返回FILE* fp文件指针 FILE是个结构体其中有3个部分比较重要\n1文件描述符(文件句柄)(整形值):指向当前打开的文件\n2文件读写指针:维护两个指针 读指针和写指针\n3 IO缓存区(所有标准C IO都是带缓冲区的) 写是写入缓冲区中,当缓冲区慢调用一次Linux IO函数(系统调用函数)将数据写入磁盘 缓冲区就是为了提高程序的执行效率(写入磁盘是对硬件操作很慢，将缓冲区内的数据一次性写入降低了写磁盘的频率 效率更高)\n将缓冲区数据(内存)写入磁盘的3种情况 1手动调用fflush 强制将缓冲区数据写入磁盘2缓冲区满了3正常关闭文件(a fclose b return(main) c exit(main) 这3种情况算正常关闭)\n缓冲区默认(8192字节 约为8k 可以调整大小 但不建议调整)\n| 1CIO库 |\n| — |\n在网络通信是因为时效性，我们希望写入就马上发出不要有缓冲，所以在网络通信时我们采用Linux IO来实现发送\nCIO与LinuxIO的关系\nCIO调用系统调用(Linux IO) CIO先将缓冲区写满(或手动flush) 再调用一次LinuxIO(内核)write写磁盘\nCIO调用一次LinuxIO read先将缓冲区读满(一次读1k) 供用户多次读取(用户一次读1个字节) buf1 和buf2是用户缓冲区和C标准库的I/O缓冲区不同 读写缓冲区是同一块(libio.h)\n| 2CIO与系统调用 |\n| — |\nFILE*文件指针的定义在c库的–\u003eFILE.h(usr/include/x86_64-linux-gnu/bits/types)\n–\u003elibio.h _IO_FILE结构体\n1文件描述符(文件句柄)(整形值):指向当前打开的文件\nint _fileno; 由linux系统调用返回 通过这个值来定位具体是哪个文件\n2文件读写指针:维护两个指针 读指针和写指针\n_IO_write_base(写空间的开始位置) _IO_write_ptr(当前写指针的位置)\n_IO_write_end(写空间的结束位置) _IO_read_base(读空间的开始位置)\n_IO_read_ptr(当前读指针的位置) _IO_read_end(读空间的结束位置)\n3 IO缓存区(所有标准C IO都是带缓冲区的)\n_IO_buf_base(缓冲区的开始位置) _IO_buf_end(缓冲区的结束位置)\n2虚拟地址空间\n| 3虚拟地址空间 |\n| — |\n虚拟地址空间实际不存在,是为了让地址不连续的空间能被利用起来。每个可执行程序被运行后(进程！！！为分配资源的最小单位)都对应一个虚拟内存空间，就是上面这幅图。空间大小由OS位数决定32位机大小为2^32 约为4G,64位机的大小为2^48。以32机为例，0-3G为用户空间，3G-4G(高地址)为内核空间。**每个虚拟地址空间的数据地址都会被CPU的MMU(内存管理单元)映射到真实的物理内存地址。**最多4G实际不会占用4G。NULL与nullptr的地址都在受保护地址。命令行参数为argc,argv,环境变量在linux中输入env就可看到所有环境变量。\n普通用户对内核的读写权限都没有。\n4文件描述符\n| 4文件描述符 |\n| — |\n虚拟地址空间中的内核空间中，由这个进程(跑起来的程序)的信息PCB。PCB中有一个数组称为**文件描述符表(默认长1024)，**每个文件描述符都能定位1个文件，前三个符被默认占用标准输入输出错误默认状态为打开，这三个默认描述符对应三个文件，Linux中所有的东西都为文件，磁盘是文件，屏幕是文件，键盘是文件，显卡是文件，**所有的硬件设备最终都会被虚拟为一个文件(设备文件)，OS通过这个文件对硬件进行管理，用户可通过文件对程序进行管理。**这三个默认描述符对应的是当前终端/dev/tty设备文件。**同一个文件可被多次打开，多次打开后返回的FILE中的文件描述符的值是不一样的。**当使用fclose(c)或close(系统调用)时会将这个文件描述符释放等待下个文件打开再使用。文件描述符的分配规则是在表中找一个没被占用的最小值文件描述符给当前打开的文件。\n5 LINUX系统IO函数(系统调用)\n一、**open ** (c fopen调用这个open)\nint open(const char pathname,int flags)*\nint open(const char pathname,int flags,mode_t mode)*\nLINUX系统IO: man 2 函数名 C IO:man 3 函数名\n/* man 2 open #include //flags宏在这个头文件 #include //flags宏在这个头文件里也有 #include //函数声明在这个头文件中 //C语言中没有函数重载 通过可变参数实现了这种效果 int open(const char *pathname, int flags);//打开一个已经存在的文件 参数: -pathname:要打开的文件路径 -flags:对文件的操作权限设置 以及其他的一些设置 O_RDONLY,O_WRONLY,O_RDWR 三个宏分别对应只读,只写,读写。 这三个设置是互斥的，1次open只能选1个且必须选1个。 返回值: 在man 2中输入 /return value 定位到返回值解释 返回新的文件描述符fd(整型用于定位),如果发生错误返回-1并且errno将被设置为1个合适的值 errno:属于LINUX系统函数库的一个全局变量，记录的是最近一次的错误号 perror(标准C):打印errno对应的错误描述 #include void perror(const char *s); -s:用户描述，比如hello，最终输出的内容是 hello:xxxxx(具体的错误描述) int open(const char *pathname, int flags, mode_t mode);//创建一个新的文件 \\*/ #include //flags宏在这个头文件 #include //flags宏在这个头文件里也有 #include //函数声明在这个头文件中 #include //perror #include //close int main() { //第一种用法打开已经存在的文件 int fd = open(\"a.txt\", O_RDONLY); //在当前路径下打开以存在的a.txt if (fd == -1) perror(\"open:\"); //读写操作 待写 close(fd); //关闭一个文件描述符 并使这个文件描述符不再指向文件 等待被再启用 return 0; } //gcc open.c -o open //./open //open: No Such Directory /* man 2 open int open(const char *pathname, int flags, mode_t mode);//创建一个新的文件 参数: -pathname:要创建的文件路径(名称) -flags:对文件的操作权限设置 以及其他的一些设置 O_RDONLY,O_WRONLY,O_RDWR 三个宏分别对应只读,只写,读写。 这三个设置是互斥的，1次open只能选1个必选项。 O_APPEND 不覆盖在尾部继续追加 O_CREAT 如果文件不存在则创建新文件 等的可选项 在有多个选项时通过|按位或连接如O_RDWR | O_CREAT flags是int型占4个字节 为32位其中每一位就是一个标志位每一位代表一种情况(1种标记 可读 可写 可读写 创建新文件) -mode: 8进制数，表示用户\\组对创建出的新文件的操作权限 在路径下ll后可看到 drwxrwxr-x 第一个字符表示文件的类型 后续字符每3个一组表示权限 r表示可读 w表示可写 x表示可执行 文件的类型-当前用户对本文件权限-当前用户组对本文件权限-其他组对本文件的权限 0777(0开头为8进制) 真正被创建的文件权限为 mode\u0026~umask (~取反) 0777 第一个7为当前用户对本文件权限: r=1(可读) w=1(可写) x=1(可执行) rwx=111 二进制转为8进制为7 余下的两个7同理 在终端直接输入umask，可以看到umask值为0002(也是8进制) 普通用户0002 root用户0022 ~0002=0775 0777\u00260775-\u003e111111111\u0026111111101-\u003e111111101(0775) 普通用户的其他组不可以写本文件 0022则 当前组将没有写本文件的权限 其他组也不可以写本文件 umask的设置 直接终端 umask 0011就可修改umask为后续的数字 只在当前终端有效 #include #include mode_t umask(mode_t mask);//程序里也可以手动设置 S_IRWXU 00700 user (file owner) has read, write, and execute permission S_IRUSR 00400 user has read permission S_IWUSR 00200 user has write permission S_IXUSR 00100 user has execute permission S_IRWXG 00070 group has read, write, and execute permission S_IRGRP 00040 group has read permission S_IWGRP 00020 group has write permission S_IXGRP 00010 group has execute permission S_IRWXO 00007 others have read, write, and execute permission S_IROTH 00004 others have read permission S_IWOTH 00002 others have write permission S_IXOTH 00001 others have execute permission 也可以通过按位或|将mode的权限给表达出来 mode为文件本身的权限在创建时给定，flags为程序本次打开对文件的操作， 如果mode设为不可写，则本次打开就算falgs设为写操作 也不能写 \\*/ //gcc create.c -o create //./create //在当前目录下生成create.txt 权限为-rwxrwxr-x 为0775 其他组不可写 //create: No Such Directory #include //flags宏在这个头文件 #include //flags宏在这个头文件里也有 #include //函数声明在这个头文件中 #include //perror #include //close int main() { //创建一个新的文件 int fd = open(\"create.txt\", O_RDWR | O_CREAT, 0777); //O_RDWR 0777 umask值为0002 最终权限为0775 if (fd == -1) perror(\"create:\"); //读写操作 待写 close(fd); //关闭一个文件描述符 并使这个文件描述符不再指向文件 等待被再启用 return 0; } 二、read write\n实现一个拷贝txt文件的程序\n/* man 2 read #include //在这个头文件里 unix_stander ssize_t read(int fd, void *buf, size_t count); 参数: -fd:文件描述符 open的返回值 可通过文件描述符操作具体的一个函数（从命令行中读可设置为0） -buf:读到数据具体存放的地方(指定存在内存中这个地方) 给个数组首地址 数组具体多大自己给但小于要读的字节数会返回0 -count:读取的字节数（是请求读取的字节数，读上来的数据保 存在buf中，同时文件的当前读写位置向后移） 返回值: 读成功会返回读到的数据的字节数，如果在调read之前已到达文件末尾，则这次read返回0,出现错误返回-1并设置errorno buf是个传出参数。指定读count个字节的数据，这个conut个字节的数据会被保存在buf中我们read后可再继续操作读出来的数据 我们可以指定一个较小的buf(不需要buf必须等于或大于被读文件的大小)，指定读取sizeof(buf)个字节每次将buf给读满,然后我们将读到的数据拿去处理,处理完后再继续读，直到将文件读完 如果sizeof(buf) 读常规文件是不会阻塞的，不管读多少字节，read一定会在有限的时间内返回。 从终端设备或网络读则不一定，如果从终端输入的数据没有换行符，调用read读终端设备就会阻塞，如果网络上没有接收到数据包，调用read从网络读就会阻塞，至于会阻塞多长时间也是不确定的， 如果一直没有数据到达就一直阻塞在那里。同样，写常规文件是不会阻塞的，而向终端设备或网络写则不一定。 线程变为阻塞态 man 2 write #include ssize_t write(int fd, const void *buf, size_t count); 参数: -fd:文件描述符 open的返回值 可通过文件描述符操作具体的一个函数（输出(写)到命令行中可设置为1） -buf:常量指针 buf指向的数据不能修改(其实也符合write的逻辑 buf是要写入文件的内容 相当于范本 范本怎么能改呢) 范本数据(往文件中具体要写的数据) -count:要写多少个字节的数据 从buf中取多少个字节数据向fd文件中写 返回值: 成功返回buf中被写入fd文件的字节数，返回0表示没有数据被写入fd文件中,出现错误返回-1并设置errorno 如果count大于sizeof(buf)，那么会把缓冲区后面的内存中的数据写进去，只不过这些数据我们是不确定的，是野内存， 操作野内存有可能会产生问题，所以一般不会这么去做。缓冲区中有多少数据，我们就写多少数据即可。 \\*/ #include //read write #include #include //open flags宏在这个头文件 #include //open flags宏在这个头文件里也有 #include //open close函数声明在这个头文件中 //通过ll查看english.txt文件的大小为54个字节 int main() { //通过open打开english.txt int srcfd = open(\"./english.txt\", O_RDONLY); //打开源文件 只给读的权限 if (srcfd == -1) { perror(\"open_fail:\"); return -1; } //创建一个新的文件 int dstfd = open(\"./dst.txt\", O_WRONLY | O_CREAT, 0664); //只写和创造 if (dstfd == -1) { perror(\"open_fail:\"); return -1; } //读写 char buf[2] = {0}; //故意给个很小的buf 指定一个较小的buf(不需要buf必须等于或大于被读文件的大小) int read_how_many_bits = 0; while ((read_how_many_bits = read(srcfd, buf, sizeof(buf))) \u003e 0) //read返回-1表示错误 返回0表示读完 { //大于0则表示文件还没读完 write(dstfd, buf, read_how_many_bits); //将读来的buf中的数据写入新的文件 //read_how_many_bits就是实际读到多少字节 读到多少就写多少 } //关闭文件 close(dstfd); close(srcfd); //gcc txt_copy.c -o copy return 0; } 三、lseek\n对应标准c –seek\n/* 标准c fseek #include int fseek(FILE *stream, long offset, int whence); linux系统调用 #include //宏 #include //unix标准中声明 off_t lseek(int fd, off_t offset, int whence); 通过lseek对文件中的文件读写指针进行移动 参数 -fd open得到的文件描述符 -offset 偏移量 -whence 指定的标记 (和标准C中指定值是一样的) SEEK_SET 参数offset 即为新的读写位置. The file offset is set to offset bytes. SEEK_CUR 以目前的读写位置往后增加offset 个位移量. The file offset is set to its current location plus offset bytes. SEEK_END 将读写位置指向文件尾后再增加offset 个位移量 The file offset is set to the size of the file plus offset bytes. 当whence 值为SEEK_CUR 或SEEK_END 时, 参数offet 允许负值的出现. 返回值 返回偏移后的文件指针位置 欲将读写位置移到文件开头时:lseek( fd, 0, SEEK_SET); 欲将读写位置移到文件尾时:lseek( fd, 0, SEEK_END);//可以直接获得这个文件的大小 想要取得目前文件位置时:lseek( fd, 0, SEEK_CUR); 拓展文件的大小 lseek( fd, 100, SEEK_END);//为文件增加100字节的大小 比如在下载时提前占用要下载文件大小的空间以免被其他进程占用，之后再慢慢往文件中写数据 \\*/ //通过ll查看english.txt文件的大小为54个字节 #include //open flags宏在这个头文件 lseek宏在这个头文件 #include //open flags宏在这个头文件里也有 #include //open close函数声明在这个头文件中 #include //unix标准中声明 #include //gcc lseek.c -o lseek int main() { int fd = open(\"english.txt\", O_RDWR); if (fd == -1) { perror(\"open:\"); return -1; } //拓展文件的大小 int ret = lseek(fd, 100, SEEK_END); if (ret == -1) { perror(\"lseek:\"); return -1; } //写入空数据 需要写入一次数据 拓展的大小才会生效要不然还是原来那么大 write(fd, \"\", 1); //155 = 54 + 100 +写入的空(1) close(fd); return 0; } 四、stat,lstat\n| |\n| — |\n0-11位为1表示有这个权限，为9表示没有权限。每个段下有其对应的宏值，比图S_IRUSR\n00400(8进制)-\u003e100(user read为1) 000(group) 000(other)。特殊权限位 setGID设置组id….。文件类型120000(8进制)-\u003e1010 000 000 000 000(二进制)表示前4位为1010则为符号链接\n1010(文件类型) 000(特殊权限位) 000(user) 000(group) 000(others)\n当我们获取到了文件的mode参数想要判断这个文件是否有相应的权限 需要将得到的mode与想判断权限的宏按位与来判断，只要结果不为0 则有这个权限。\n判断类型就不是用按位与了，因为文件类型符占四位二进制，\n(st_mode\u0026S_IFMT)==要判断的文件类型宏 S_IFMT = 0170000(8进制)–\u003e1111 000 000 000 000\n只筛选出前四位来判断。\n/* man 2 stat #include #include #include int stat(const char *pathname, struct stat *statbuf); int lstat(const char *pathname, struct stat *statbuf); ln -s a.txt b.txt 将b.txt软连接到a.txt上 b.txt-\u003ea.txt 之后再打开b.txt实际上是打开a.txt 用stat(b.txt)实际上获取到的是链接到的a.txt文件的信息而非b.txt信息(软连接指向的文件的信息) 通过lstat(b.txt)获取到是b.txt信息(软连接文件的信息) 参数: -pathname 文件路径 -statbuf 结构体指针 为传出参数(保存着获取到的信息) 返回值: 成功返回0 失败返回-1并设置errno struct stat { dev_t st_dev;//文件的设备编号 ino_t st_ino;//节点 Inode mode_t st_mode;//文件的类型和存取权限 //st_mode为16位整数 具体看图 nlink_t st_nlink;//连接到该文件的硬连接数 uid_t st_uid;//用户ID gid_t st_gid;//组ID dev_t st_rdev;//设备文件的设备编号 off_t st_size;//文件大小 字节数 blksize_t st_blksize;//块大小 每块512字节 blkcnt_t st_blocks; //块数 struct timespec st_atim;//最后一次访问时间 struct timespec st_mtim;//最后一次修改时间 struct timespec st_ctim;//最后一次改变时间 指属性 #define st_atime st_atim.tv_sec #define st_mtime st_mtim.tv_sec #define st_ctime st_ctim.tv_sec }; 返回文件信息在statbuf中给开发者 linux中有stat命令 stat english.txt 文件：english.txt 大小：155 块：8 IO 块：4096 普通文件 一个块为4096字节一共占用了8块 设备：801h/2049d Inode：1084266(linux中用于标识文件) 硬链接：1 权限：(0664/-rw-rw-r--) Uid(用户id)：( 1000/ wen) Gid(组id)：( 1000/ wen) 最近访问：2021-03-31 21:45:17.481908115 +0800 最近更改：2021-03-31 21:45:17.421908568 +0800 最近改动：2021-03-31 21:45:17.421908568 +0800 创建时间：- \\*/ #include #include #include #include int main() { struct stat statbuf; int ret = stat(\"english.txt\", \u0026statbuf); if (ret == -1) { perror(\"stat:\"); return -1; } print(\"size:%ld\\n\", statbuf.st_size); //打印大小 return 0; } 五、模拟实现ls -l命令\n/*模拟实现ls-l指令 ./app english.txt -rw-rw-r-- 1 wen wen 155 4月 6 21:35 english.txt struct stat { dev_t st_dev;//文件的设备编号 ino_t st_ino;//节点 Inode mode_t st_mode;//文件的类型和存取权限 //st_mode为16位整数 具体看图 nlink_t st_nlink;//连接到该文件的硬连接数 uid_t st_uid;//用户ID gid_t st_gid;//组ID dev_t st_rdev;//设备文件的设备编号 off_t st_size;//文件大小 字节数 blksize_t st_blksize;//块大小 每块512字节 blkcnt_t st_blocks; //块数 struct timespec st_atim;//最后一次访问时间 struct timespec st_mtim;//最后一次修改时间 struct timespec st_ctim;//最后一次改变时间 指属性 #define st_atime st_atim.tv_sec #define st_mtime st_mtim.tv_sec #define st_ctime st_ctim.tv_sec }; \\*/ #include #include #include #include #include //getpwuid #include //getgrgid #include //ctime #include //strncpy strlen int main(int argc, char *argv[]) { if (argc \u003c 2) { //一般一定会有一个参数 是可执行文件的路径 //再加上跟上的文件名 一共至少为两个参数 模拟才会生效 //所以这里判断一下参数个数小于2个就return printf(\"%s filename\\n\", argv[0]); //argv[0]为执行文件的路径 return -1; } struct stat statbuf; //通过stat获得文件的参数 int ret = stat(argv[1], \u0026statbuf); //argv[1]为传入的文件路径 if (ret == -1) { perror(\"stat:\"); return -1; } //获取文件类型和文件权限 char perms[11] = {0}; //1位文件类型+9位文件权限+一位/0 //具体文件类型和权限在st_mode中可以具体看word 22页的图 // (st_mode \u0026 S_IFMT) == 要判断的文件类型宏 // S_IFMT = 0170000(8进制)-- \u003e 1111 000 000 000 000 只筛选出前四位来判断(前四位就指定了文件类型) // switch (statbuf.st_mode \u0026 S_IFMT) // { case S_IFLNK: //链接文件 perms[0] = 'l'; break; case S_IFDIR: //目录 perms[0] = 'd'; break; case S_IFREG: //普通文件 perms[0] = '-'; break; case S_IFBLK: //块文件 perms[0] = 'b'; break; case S_IFCHR: //字符设备 perms[0] = 'c'; break; case S_IFSOCK: //套接字文件 perms[0] = 's'; break; case S_IFIFO: //管道文件 perms[0] = 'p'; break; default: perms[0] = '?'; //未知文件 break; } //获取文件的访问权限分为3组 //文件所有者 perms[1] = statbuf.st_mode \u0026 S_IRUSR ? 'r' : '-'; //用户读权限 有这个权限的话按位与表达式不为0 perms[2] = statbuf.st_mode \u0026 S_IWUSR ? 'w' : '-'; //用户写权限 有这个权限的话按位与表达式不为0 perms[3] = statbuf.st_mode \u0026 S_IXUSR ? 'x' : '-'; //用户执行权限 有这个权限的话按位与表达式不为0 //文件所在组权限 perms[4] = statbuf.st_mode \u0026 S_IRGRP ? 'r' : '-'; //所在组读权限 有这个权限的话按位与表达式不为0 perms[5] = statbuf.st_mode \u0026 S_IWGRP ? 'w' : '-'; //所在组写权限 有这个权限的话按位与表达式不为0 perms[6] = statbuf.st_mode \u0026 S_IXGRP ? 'x' : '-'; //所在组执行权限 有这个权限的话按位与表达式不为0 //其他人 perms[7] = statbuf.st_mode \u0026 S_IROTH ? 'r' : '-'; //其他人读权限 有这个权限的话按位与表达式不为0 perms[8] = statbuf.st_mode \u0026 S_IWOTH ? 'w' : '-'; //其他人写权限 有这个权限的话按位与表达式不为0 perms[9] = statbuf.st_mode \u0026 S_IXOTH ? 'x' : '-'; //其他人执行权限 有这个权限的话按位与表达式不为0 //硬连接数 int linknum = statbuf.st_nlink; //文件所有者 // extern struct passwd *getpwuid(__uid_t __uid); // struct passwd // { // char *pw_name; /* Username. 我们需要的用户名称 */ // char *pw_passwd; /* Password. */ // __uid_t pw_uid; /* User ID. */ // __gid_t pw_gid; /* Group ID. */ // char *pw_gecos; /* Real name. */ // char *pw_dir; /* Home directory. */ // char *pw_shell; /* Shell program. */ // }; char *fileUser = getpwuid(statbuf.st_uid)-\u003epw_name; //只能得到uid而非用户名称 需要通过getpwuid得到 //文件所在组 同理 char *fileGrp = getgrgid(statbuf.st_gid)-\u003egr_name; //文件大小 long int fileSize = statbuf.st_size; //获取修改时间 char *time = ctime(\u0026statbuf.st_mtime); //从1970 1.1 0:0到当前的秒数 通过ctime变为当前时间 //时间自带换行 要将这个换行去掉 char mtime[512] = {0}; strncpy(mtime, time, strlen(time) - 1); //-1就是去掉最后的这个换行符 char buf[1024]; sprintf(buf, \"%s %d %s %s %ld %s %s\", perms, linknum, fileUser, fileGrp, fileSize, mtime, argv[1]); printf(\"%s\\n\", buf); //向buf中添加内容 %s文件类型和文件权限 %d连接数 %s所有者 %s所在组 %d文件大小 %s修改时间 %s文件名 return 0; } //gcc ls-l.c -o ls 生成可执行文件ls ","wordCount":"1451","inLanguage":"en","datePublished":"2022-03-12T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/xbt1ud/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux系统编程入门2 IO,虚拟地址空间,文件描述符,IO函数</h1><div class=post-meta><span title=2022-03-12T00:00:00+00:00>创建于 2022-03-12</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p>Linux 文件IO</p><p><strong>1标准C库IO库和LINUX/ IO函数的对比</strong></p><p>站在内存的角度考虑IO 文件输入:读取文件到内存中 文件输出:将内存中数据写到文件中</p><p>标准C IO函数是跨平台的(qt也是跨平台的) 跨平台的方式</p><p>1类似JAVA虚拟机 程序都是跑在虚拟机中，VM自动调用对应OS的系统调用</p><p>2 标准C调用了不同平台的系统API 标准C在封装时就考虑了不同平台</p><p>标准C调用了LINUX/ IO的API</p><p>man 3 fopen可以在linux中查看标准C库的函数 比如这条命令就直接找到fopen函数的声明位置</p><p>C库 fopen打开txt 返回FILE* fp文件指针 FILE是个结构体其中有3个部分比较重要</p><p>1文件描述符(文件句柄)(整形值):指向当前打开的文件</p><p>2文件读写指针:维护两个指针 读指针和写指针</p><p>3 IO缓存区(所有标准C IO都是带缓冲区的) 写是写入缓冲区中,当缓冲区慢调用一次Linux IO函数(<strong>系统调用函数</strong>)将数据写入磁盘 缓冲区就是为了提高程序的执行效率(写入磁盘是对硬件操作很慢，将缓冲区内的数据一次性写入降低了写磁盘的频率 效率更高)</p><p><strong>将缓冲区数据(内存)写入磁盘的3种情况 1手动调用fflush 强制将缓冲区数据写入磁盘2缓冲区满了3正常关闭文件(a fclose b return(main) c exit(main) 这3种情况算正常关闭)</strong></p><p><strong>缓冲区默认(8192字节 约为8k 可以调整大小 但不建议调整)</strong></p><p>| <img alt=1647068350752-17807e07-d4cf-47ad-b259-07afa9c9cfdb.png loading=lazy src=/images/PGzlHECTWfUIWZJU/1647068350752-17807e07-d4cf-47ad-b259-07afa9c9cfdb-402412.png>1CIO库 |</p><p>| &mdash; |</p><p>在网络通信是因为时效性，我们希望写入就马上发出不要有缓冲，所以在网络通信时我们采用Linux IO来实现发送</p><p>CIO与LinuxIO的关系</p><p>CIO调用系统调用(Linux IO) CIO先将缓冲区写满(或手动flush) 再调用一次LinuxIO(内核)write写磁盘</p><p>CIO调用一次LinuxIO read先将缓冲区读满(一次读1k) 供用户多次读取(用户一次读1个字节) <strong>buf1 和buf2是用户缓冲区和C标准库的I/O缓冲区不同</strong> 读写缓冲区是同一块(libio.h)</p><p>| <img alt=1647068351122-8f69037a-ed71-486d-a683-50ac9aaf2a81.png loading=lazy src=/images/PGzlHECTWfUIWZJU/1647068351122-8f69037a-ed71-486d-a683-50ac9aaf2a81-011817.png>2CIO与系统调用 |</p><p>| &mdash; |</p><p>FILE*文件指针的定义在c库的&lt;stdio.h>&ndash;>FILE.h(usr/include/x86_64-linux-gnu/bits/types)</p><p>&ndash;>libio.h _IO_FILE结构体</p><p>1文件描述符(文件句柄)(整形值):指向当前打开的文件</p><p>int _fileno; 由linux系统调用返回 通过这个值来定位具体是哪个文件</p><p>2文件读写指针:维护两个指针 读指针和写指针</p><p>_IO_write_base(写空间的开始位置) _IO_write_ptr(当前写指针的位置)</p><p>_IO_write_end(写空间的结束位置) _IO_read_base(读空间的开始位置)</p><p>_IO_read_ptr(当前读指针的位置) _IO_read_end(读空间的结束位置)</p><p>3 IO缓存区(所有标准C IO都是带缓冲区的)</p><p>_IO_buf_base(缓冲区的开始位置) _IO_buf_end(缓冲区的结束位置)</p><p><strong>2虚拟地址空间</strong></p><p>| <img alt=1647068351642-43e11d45-1603-413f-b364-aa566e6f64c9.png loading=lazy src=/images/PGzlHECTWfUIWZJU/1647068351642-43e11d45-1603-413f-b364-aa566e6f64c9-979119.png> 3虚拟地址空间 |</p><p>| &mdash; |</p><p>虚拟地址空间实际不存在,是为了让地址不连续的空间能被利用起来。<strong>每个可执行程序被运行后(进程！！！为分配资源的最小单位)都对应一个虚拟内存空间</strong>，就是上面这幅图。空间大小由OS位数决定32位机大小为2^32 约为4G,64位机的大小为2^48。以32机为例，0-3G为用户空间，3G-4G(高地址)为内核空间。**每个虚拟地址空间的数据地址都会被CPU的MMU(内存管理单元)映射到真实的物理内存地址。**最多4G实际不会占用4G。NULL与nullptr的地址都在受保护地址。命令行参数为argc,argv,环境变量在linux中输入env就可看到所有环境变量。</p><p>普通用户对内核的读写权限都没有。</p><p><strong>4文件描述符</strong></p><p>| <img alt=1647068352027-b6776315-6a7b-4f54-9047-3c9ee9781770.png loading=lazy src=/images/PGzlHECTWfUIWZJU/1647068352027-b6776315-6a7b-4f54-9047-3c9ee9781770-385637.png>4文件描述符 |</p><p>| &mdash; |</p><p>虚拟地址空间中的内核空间中，由这个进程(跑起来的程序)的信息PCB。PCB中有一个数组称为**文件描述符表(默认长1024)，**每个文件描述符都能定位1个文件，前三个符被默认占用标准输入输出错误默认状态为打开，这三个默认描述符对应三个文件，Linux中所有的东西都为文件，磁盘是文件，屏幕是文件，键盘是文件，显卡是文件，**所有的硬件设备最终都会被虚拟为一个文件(设备文件)，OS通过这个文件对硬件进行管理，用户可通过文件对程序进行管理。**这三个默认描述符对应的是当前终端/dev/tty设备文件。**同一个文件可被多次打开，多次打开后返回的FILE中的文件描述符的值是不一样的。**当使用fclose(c)或close(系统调用)时会将这个文件描述符释放等待下个文件打开再使用。文件描述符的分配规则是在表中找一个没被占用的最小值文件描述符给当前打开的文件。</p><p><strong>5 LINUX系统IO函数(系统调用)</strong></p><p>一、**open ** (c fopen调用这个open)</p><p><em><em>int open(const char</em> pathname,int flags)</em>*</p><p><em><em>int open(const char</em> pathname,int flags,mode_t mode)</em>*</p><p><strong>LINUX系统IO: man 2 函数名 C IO:man 3 函数名</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>man 2 open
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/types.h&gt;//flags宏在这个头文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/stat.h&gt;//flags宏在这个头文件里也有
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;fcntl.h&gt;//函数声明在这个头文件中
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       //C语言中没有函数重载 通过可变参数实现了这种效果
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int open(const char *pathname, int flags);//打开一个已经存在的文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       参数:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        -pathname:要打开的文件路径
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        -flags:对文件的操作权限设置 以及其他的一些设置
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         O_RDONLY,O_WRONLY,O_RDWR  三个宏分别对应只读,只写,读写。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         这三个设置是互斥的，1次open只能选1个且必须选1个。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回值: 在man 2中输入 /return value  定位到返回值解释
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        返回新的文件描述符fd(整型用于定位),如果发生错误返回-1并且errno将被设置为1个合适的值
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        errno:属于LINUX系统函数库的一个全局变量，记录的是最近一次的错误号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        perror(标准C):打印errno对应的错误描述
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         #include &lt;stdio.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         void perror(const char *s);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            -s:用户描述，比如hello，最终输出的内容是 hello:xxxxx(具体的错误描述)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int open(const char *pathname, int flags, mode_t mode);//创建一个新的文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//flags宏在这个头文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>  </span><span style=color:#75715e>//flags宏在这个头文件里也有
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>     </span><span style=color:#75715e>//函数声明在这个头文件中
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>     </span><span style=color:#75715e>//perror
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>    </span><span style=color:#75715e>//close
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  <span style=color:#75715e>//第一种用法打开已经存在的文件
+</span></span></span><span style=display:flex><span>  <span style=color:#66d9ef>int</span> fd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;a.txt&#34;</span>, O_RDONLY); <span style=color:#75715e>//在当前路径下打开以存在的a.txt
+</span></span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (fd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    perror(<span style=color:#e6db74>&#34;open:&#34;</span>);
+</span></span><span style=display:flex><span>  <span style=color:#75715e>//读写操作 待写
+</span></span></span><span style=display:flex><span>  close(fd); <span style=color:#75715e>//关闭一个文件描述符 并使这个文件描述符不再指向文件 等待被再启用
+</span></span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//gcc open.c -o open
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//./open
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//open: No Such Directory
+</span></span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>man 2 open
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int open(const char *pathname, int flags, mode_t mode);//创建一个新的文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       参数:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        -pathname:要创建的文件路径(名称)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        -flags:对文件的操作权限设置 以及其他的一些设置
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         O_RDONLY,O_WRONLY,O_RDWR  三个宏分别对应只读,只写,读写。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         这三个设置是互斥的，1次open只能选1个必选项。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         O_APPEND 不覆盖在尾部继续追加
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         O_CREAT 如果文件不存在则创建新文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         等的可选项
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         在有多个选项时通过|按位或连接如O_RDWR | O_CREAT
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         flags是int型占4个字节 为32位其中每一位就是一个标志位每一位代表一种情况(1种标记 可读 可写 可读写 创建新文件)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        -mode:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         8进制数，表示用户\组对创建出的新文件的操作权限
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         在路径下ll后可看到
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         drwxrwxr-x  第一个字符表示文件的类型 后续字符每3个一组表示权限
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         r表示可读 w表示可写 x表示可执行
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         文件的类型-当前用户对本文件权限-当前用户组对本文件权限-其他组对本文件的权限
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         0777(0开头为8进制) 真正被创建的文件权限为 mode&amp;~umask (~取反)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         0777 第一个7为当前用户对本文件权限: r=1(可读) w=1(可写) x=1(可执行) rwx=111 二进制转为8进制为7 余下的两个7同理
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         在终端直接输入umask，可以看到umask值为0002(也是8进制) 普通用户0002 root用户0022
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         ~0002=0775   0777&amp;0775-&gt;111111111&amp;111111101-&gt;111111101(0775) 普通用户的其他组不可以写本文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         0022则 当前组将没有写本文件的权限 其他组也不可以写本文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         umask的设置 直接终端 umask 0011就可修改umask为后续的数字 只在当前终端有效
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         #include &lt;sys/types.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         #include &lt;sys/stat.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         mode_t umask(mode_t mask);//程序里也可以手动设置
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              S_IRWXU  00700 user (file owner) has read, write, and execute permission
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              S_IRUSR  00400 user has read permission
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              S_IWUSR  00200 user has write permission
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              S_IXUSR  00100 user has execute permission
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              S_IRWXG  00070 group has read, write, and execute permission
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              S_IRGRP  00040 group has read permission
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              S_IWGRP  00020 group has write permission
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              S_IXGRP  00010 group has execute permission
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              S_IRWXO  00007 others have read, write, and execute permission
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              S_IROTH  00004 others have read permission
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              S_IWOTH  00002 others have write permission
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              S_IXOTH  00001 others have execute permission
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         也可以通过按位或|将mode的权限给表达出来
+</span></span></span><span style=display:flex><span><span style=color:#75715e>mode为文件本身的权限在创建时给定，flags为程序本次打开对文件的操作，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>如果mode设为不可写，则本次打开就算falgs设为写操作 也不能写
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>//gcc create.c -o create
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//./create
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//在当前目录下生成create.txt 权限为-rwxrwxr-x 为0775 其他组不可写
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//create: No Such Directory
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//flags宏在这个头文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>  </span><span style=color:#75715e>//flags宏在这个头文件里也有
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>     </span><span style=color:#75715e>//函数声明在这个头文件中
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>     </span><span style=color:#75715e>//perror
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>    </span><span style=color:#75715e>//close
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建一个新的文件
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;create.txt&#34;</span>, O_RDWR <span style=color:#f92672>|</span> O_CREAT, <span style=color:#ae81ff>0777</span>); <span style=color:#75715e>//O_RDWR 0777 umask值为0002 最终权限为0775
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (fd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;create:&#34;</span>);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//读写操作 待写
+</span></span></span><span style=display:flex><span>    close(fd); <span style=color:#75715e>//关闭一个文件描述符 并使这个文件描述符不再指向文件 等待被再启用
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>二、read write</strong></p><p>实现一个拷贝txt文件的程序</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>man 2 read
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include &lt;unistd.h&gt;//在这个头文件里 unix_stander
+</span></span></span><span style=display:flex><span><span style=color:#75715e>ssize_t read(int fd, void *buf, size_t count);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    参数:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     -fd:文件描述符 open的返回值 可通过文件描述符操作具体的一个函数（从命令行中读可设置为0）
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     -buf:读到数据具体存放的地方(指定存在内存中这个地方) 给个数组首地址 数组具体多大自己给但小于要读的字节数会返回0
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     -count:读取的字节数（是请求读取的字节数，读上来的数据保 存在buf中，同时文件的当前读写位置向后移）
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    返回值:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     读成功会返回读到的数据的字节数，如果在调read之前已到达文件末尾，则这次read返回0,出现错误返回-1并设置errorno
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     buf是个传出参数。指定读count个字节的数据，这个conut个字节的数据会被保存在buf中我们read后可再继续操作读出来的数据
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     我们可以指定一个较小的buf(不需要buf必须等于或大于被读文件的大小)，指定读取sizeof(buf)个字节每次将buf给读满,然后我们将读到的数据拿去处理,处理完后再继续读，直到将文件读完
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>如果sizeof(buf)&lt;count会导致文件被当写满buf后会继续往后写入野内存直到写满读到的总字节数这是很危险的，所以记住buf的大小要大于等于count，最后一次读到的数据可能会小于count因为读不满提前结束了返回0
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     读常规文件是不会阻塞的，不管读多少字节，read一定会在有限的时间内返回。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     从终端设备或网络读则不一定，如果从终端输入的数据没有换行符，调用read读终端设备就会阻塞，如果网络上没有接收到数据包，调用read从网络读就会阻塞，至于会阻塞多长时间也是不确定的，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     如果一直没有数据到达就一直阻塞在那里。同样，写常规文件是不会阻塞的，而向终端设备或网络写则不一定。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     线程变为阻塞态
+</span></span></span><span style=display:flex><span><span style=color:#75715e>man 2 write
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>ssize_t write(int fd, const void *buf, size_t count);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    参数:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     -fd:文件描述符 open的返回值 可通过文件描述符操作具体的一个函数（输出(写)到命令行中可设置为1）
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     -buf:常量指针 buf指向的数据不能修改(其实也符合write的逻辑 buf是要写入文件的内容
+</span></span></span><span style=display:flex><span><span style=color:#75715e>      相当于范本 范本怎么能改呢) 范本数据(往文件中具体要写的数据)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>     -count:要写多少个字节的数据 从buf中取多少个字节数据向fd文件中写
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    返回值:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>      成功返回buf中被写入fd文件的字节数，返回0表示没有数据被写入fd文件中,出现错误返回-1并设置errorno
+</span></span></span><span style=display:flex><span><span style=color:#75715e>      如果count大于sizeof(buf)，那么会把缓冲区后面的内存中的数据写进去，只不过这些数据我们是不确定的，是野内存，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>      操作野内存有可能会产生问题，所以一般不会这么去做。缓冲区中有多少数据，我们就写多少数据即可。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//read write
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//open flags宏在这个头文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>  </span><span style=color:#75715e>//open flags宏在这个头文件里也有
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>     </span><span style=color:#75715e>//open  close函数声明在这个头文件中
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//通过ll查看english.txt文件的大小为54个字节
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//通过open打开english.txt
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> srcfd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;./english.txt&#34;</span>, O_RDONLY); <span style=color:#75715e>//打开源文件 只给读的权限
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (srcfd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;open_fail:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建一个新的文件
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> dstfd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;./dst.txt&#34;</span>, O_WRONLY <span style=color:#f92672>|</span> O_CREAT, <span style=color:#ae81ff>0664</span>); <span style=color:#75715e>//只写和创造
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (dstfd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;open_fail:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//读写
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>2</span>] <span style=color:#f92672>=</span> {<span style=color:#ae81ff>0</span>}; <span style=color:#75715e>//故意给个很小的buf 指定一个较小的buf(不需要buf必须等于或大于被读文件的大小)
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> read_how_many_bits <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>while</span> ((read_how_many_bits <span style=color:#f92672>=</span> read(srcfd, buf, <span style=color:#66d9ef>sizeof</span>(buf))) <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//read返回-1表示错误 返回0表示读完
+</span></span></span><span style=display:flex><span>    {                                                                <span style=color:#75715e>//大于0则表示文件还没读完
+</span></span></span><span style=display:flex><span>        write(dstfd, buf, read_how_many_bits);                       <span style=color:#75715e>//将读来的buf中的数据写入新的文件
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//read_how_many_bits就是实际读到多少字节 读到多少就写多少
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//关闭文件
+</span></span></span><span style=display:flex><span>    close(dstfd);
+</span></span><span style=display:flex><span>    close(srcfd);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//gcc txt_copy.c -o copy
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>三、lseek</strong></p><p><strong>对应标准c &ndash;seek</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>  标准c fseek
+</span></span></span><span style=display:flex><span><span style=color:#75715e>  #include &lt;stdio.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>  int fseek(FILE *stream, long offset, int whence);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>  linux系统调用
+</span></span></span><span style=display:flex><span><span style=color:#75715e>  #include &lt;sys/types.h&gt;//宏
+</span></span></span><span style=display:flex><span><span style=color:#75715e>  #include &lt;unistd.h&gt;//unix标准中声明
+</span></span></span><span style=display:flex><span><span style=color:#75715e>  off_t lseek(int fd, off_t offset, int whence);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>  通过lseek对文件中的文件读写指针进行移动
+</span></span></span><span style=display:flex><span><span style=color:#75715e>   参数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    -fd open得到的文件描述符
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    -offset 偏移量
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    -whence 指定的标记 (和标准C中指定值是一样的)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       SEEK_SET 参数offset 即为新的读写位置.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              The file offset is set to offset bytes.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       SEEK_CUR 以目前的读写位置往后增加offset 个位移量.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              The file offset is set to its current location plus offset bytes.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       SEEK_END 将读写位置指向文件尾后再增加offset 个位移量
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              The file offset is set to the size of the file plus offset bytes.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       当whence 值为SEEK_CUR 或SEEK_END 时, 参数offet 允许负值的出现.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>   返回值
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回偏移后的文件指针位置
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    欲将读写位置移到文件开头时:lseek( fd, 0, SEEK_SET);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    欲将读写位置移到文件尾时:lseek( fd, 0, SEEK_END);//可以直接获得这个文件的大小
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    想要取得目前文件位置时:lseek( fd, 0, SEEK_CUR);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    拓展文件的大小 lseek( fd, 100, SEEK_END);//为文件增加100字节的大小
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    比如在下载时提前占用要下载文件大小的空间以免被其他进程占用，之后再慢慢往文件中写数据
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>//通过ll查看english.txt文件的大小为54个字节
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//open flags宏在这个头文件 lseek宏在这个头文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>  </span><span style=color:#75715e>//open flags宏在这个头文件里也有
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>     </span><span style=color:#75715e>//open  close函数声明在这个头文件中
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>    </span><span style=color:#75715e>//unix标准中声明
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//gcc lseek.c -o lseek
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;english.txt&#34;</span>, O_RDWR);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (fd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;open:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//拓展文件的大小
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> lseek(fd, <span style=color:#ae81ff>100</span>, SEEK_END);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;lseek:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//写入空数据 需要写入一次数据 拓展的大小才会生效要不然还是原来那么大
+</span></span></span><span style=display:flex><span>    write(fd, <span style=color:#e6db74>&#34;&#34;</span>, <span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//155 = 54 + 100 +写入的空(1)
+</span></span></span><span style=display:flex><span>    close(fd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>四、stat,lstat</strong></p><p>| <img alt=1647068352308-241ebb94-bde3-4401-b433-feae46d897aa.png loading=lazy src=/images/PGzlHECTWfUIWZJU/1647068352308-241ebb94-bde3-4401-b433-feae46d897aa-569149.png> |</p><p>| &mdash; |</p><p>0-11位为1表示有这个权限，为9表示没有权限。每个段下有其对应的宏值，比图S_IRUSR</p><p>00400(8进制)->100(user read为1) 000(group) 000(other)。特殊权限位 setGID设置组id&mldr;.。文件类型120000(8进制)->1010 000 000 000 000(二进制)表示前4位为1010则为符号链接</p><p>1010(文件类型) 000(特殊权限位) 000(user) 000(group) 000(others)</p><p>当我们获取到了文件的mode参数想要<strong>判断这个文件是否有相应的权限 需要将得到的mode与想判断权限的宏按位与来判断，只要结果不为0 则有这个权限。</strong></p><p>判断类型就不是用按位与了，因为文件类型符占四位二进制，</p><p><strong>(st_mode&amp;S_IFMT)==要判断的文件类型宏 S_IFMT = 0170000(8进制)&ndash;>1111 000 000 000 000</strong></p><p><strong>只筛选出前四位来判断。</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>man 2 stat
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/types.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/stat.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int stat(const char *pathname, struct stat *statbuf);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int lstat(const char *pathname, struct stat *statbuf);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       ln -s a.txt b.txt 将b.txt软连接到a.txt上 b.txt-&gt;a.txt 之后再打开b.txt实际上是打开a.txt
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       用stat(b.txt)实际上获取到的是链接到的a.txt文件的信息而非b.txt信息(软连接指向的文件的信息)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       通过lstat(b.txt)获取到是b.txt信息(软连接文件的信息)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       参数:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        -pathname 文件路径
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        -statbuf 结构体指针 为传出参数(保存着获取到的信息)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回值:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        成功返回0 失败返回-1并设置errno
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        struct stat {
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               dev_t     st_dev;//文件的设备编号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               ino_t     st_ino;//节点 Inode
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               mode_t    st_mode;//文件的类型和存取权限
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               //st_mode为16位整数 具体看图
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               nlink_t   st_nlink;//连接到该文件的硬连接数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               uid_t     st_uid;//用户ID
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               gid_t     st_gid;//组ID
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               dev_t     st_rdev;//设备文件的设备编号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               off_t     st_size;//文件大小 字节数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               blksize_t st_blksize;//块大小 每块512字节
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               blkcnt_t  st_blocks; //块数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            struct timespec st_atim;//最后一次访问时间
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            struct timespec st_mtim;//最后一次修改时间
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            struct timespec st_ctim;//最后一次改变时间 指属性
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            #define st_atime st_atim.tv_sec
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            #define st_mtime st_mtim.tv_sec
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            #define st_ctime st_ctim.tv_sec
+</span></span></span><span style=display:flex><span><span style=color:#75715e>           };
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回文件信息在statbuf中给开发者
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       linux中有stat命令
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       stat english.txt
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        文件：english.txt
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        大小：155          块：8          IO 块：4096   普通文件     一个块为4096字节一共占用了8块
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        设备：801h/2049d   Inode：1084266(linux中用于标识文件)     硬链接：1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        权限：(0664/-rw-rw-r--)  Uid(用户id)：( 1000/     wen)   Gid(组id)：( 1000/     wen)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        最近访问：2021-03-31 21:45:17.481908115 +0800
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        最近更改：2021-03-31 21:45:17.421908568 +0800
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        最近改动：2021-03-31 21:45:17.421908568 +0800
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        创建时间：-
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>stat</span> statbuf;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> stat(<span style=color:#e6db74>&#34;english.txt&#34;</span>, <span style=color:#f92672>&amp;</span>statbuf);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;stat:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    print(<span style=color:#e6db74>&#34;size:%ld</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, statbuf.st_size); <span style=color:#75715e>//打印大小
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>五、模拟实现ls -l命令</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*模拟实现ls-l指令
+</span></span></span><span style=display:flex><span><span style=color:#75715e>./app english.txt
+</span></span></span><span style=display:flex><span><span style=color:#75715e>-rw-rw-r-- 1 wen wen 155 4月   6 21:35 english.txt
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>struct stat {
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               dev_t     st_dev;//文件的设备编号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               ino_t     st_ino;//节点 Inode
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               mode_t    st_mode;//文件的类型和存取权限
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               //st_mode为16位整数 具体看图
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               nlink_t   st_nlink;//连接到该文件的硬连接数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               uid_t     st_uid;//用户ID
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               gid_t     st_gid;//组ID
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               dev_t     st_rdev;//设备文件的设备编号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               off_t     st_size;//文件大小 字节数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               blksize_t st_blksize;//块大小 每块512字节
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               blkcnt_t  st_blocks; //块数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            struct timespec st_atim;//最后一次访问时间
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            struct timespec st_mtim;//最后一次修改时间
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            struct timespec st_ctim;//最后一次改变时间 指属性
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            #define st_atime st_atim.tv_sec
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            #define st_mtime st_mtim.tv_sec
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            #define st_ctime st_ctim.tv_sec
+</span></span></span><span style=display:flex><span><span style=color:#75715e>           };
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;pwd.h&gt;</span><span style=color:#75715e>    </span><span style=color:#75715e>//getpwuid
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;grp.h&gt;</span><span style=color:#75715e>    </span><span style=color:#75715e>//getgrgid
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;time.h&gt;</span><span style=color:#75715e>   </span><span style=color:#75715e>//ctime
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//strncpy strlen
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>(<span style=color:#66d9ef>int</span> argc, <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>argv[])
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (argc <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>2</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//一般一定会有一个参数 是可执行文件的路径
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//再加上跟上的文件名 一共至少为两个参数 模拟才会生效
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//所以这里判断一下参数个数小于2个就return
+</span></span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%s filename</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, argv[<span style=color:#ae81ff>0</span>]); <span style=color:#75715e>//argv[0]为执行文件的路径
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>stat</span> statbuf;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//通过stat获得文件的参数
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> stat(argv[<span style=color:#ae81ff>1</span>], <span style=color:#f92672>&amp;</span>statbuf); <span style=color:#75715e>//argv[1]为传入的文件路径
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;stat:&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//获取文件类型和文件权限
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> perms[<span style=color:#ae81ff>11</span>] <span style=color:#f92672>=</span> {<span style=color:#ae81ff>0</span>}; <span style=color:#75715e>//1位文件类型+9位文件权限+一位/0
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//具体文件类型和权限在st_mode中可以具体看word 22页的图
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// (st_mode &amp; S_IFMT) == 要判断的文件类型宏
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// S_IFMT = 0170000(8进制)-- &gt; 1111 000 000 000 000 只筛选出前四位来判断(前四位就指定了文件类型)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>switch</span> (statbuf.st_mode <span style=color:#f92672>&amp;</span> S_IFMT) <span style=color:#75715e>//
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>case</span> S_IFLNK: <span style=color:#75715e>//链接文件
+</span></span></span><span style=display:flex><span>        perms[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> <span style=color:#e6db74>&#39;l&#39;</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>case</span> S_IFDIR: <span style=color:#75715e>//目录
+</span></span></span><span style=display:flex><span>        perms[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> <span style=color:#e6db74>&#39;d&#39;</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>case</span> S_IFREG: <span style=color:#75715e>//普通文件
+</span></span></span><span style=display:flex><span>        perms[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> <span style=color:#e6db74>&#39;-&#39;</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>case</span> S_IFBLK: <span style=color:#75715e>//块文件
+</span></span></span><span style=display:flex><span>        perms[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> <span style=color:#e6db74>&#39;b&#39;</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>case</span> S_IFCHR: <span style=color:#75715e>//字符设备
+</span></span></span><span style=display:flex><span>        perms[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> <span style=color:#e6db74>&#39;c&#39;</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>case</span> S_IFSOCK: <span style=color:#75715e>//套接字文件
+</span></span></span><span style=display:flex><span>        perms[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> <span style=color:#e6db74>&#39;s&#39;</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>case</span> S_IFIFO: <span style=color:#75715e>//管道文件
+</span></span></span><span style=display:flex><span>        perms[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> <span style=color:#e6db74>&#39;p&#39;</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>default</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>        perms[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> <span style=color:#e6db74>&#39;?&#39;</span>; <span style=color:#75715e>//未知文件
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//获取文件的访问权限分为3组
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//文件所有者
+</span></span></span><span style=display:flex><span>    perms[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>=</span> statbuf.st_mode <span style=color:#f92672>&amp;</span> S_IRUSR <span style=color:#f92672>?</span> <span style=color:#e6db74>&#39;r&#39;</span> <span style=color:#f92672>:</span> <span style=color:#e6db74>&#39;-&#39;</span>; <span style=color:#75715e>//用户读权限 有这个权限的话按位与表达式不为0
+</span></span></span><span style=display:flex><span>    perms[<span style=color:#ae81ff>2</span>] <span style=color:#f92672>=</span> statbuf.st_mode <span style=color:#f92672>&amp;</span> S_IWUSR <span style=color:#f92672>?</span> <span style=color:#e6db74>&#39;w&#39;</span> <span style=color:#f92672>:</span> <span style=color:#e6db74>&#39;-&#39;</span>; <span style=color:#75715e>//用户写权限 有这个权限的话按位与表达式不为0
+</span></span></span><span style=display:flex><span>    perms[<span style=color:#ae81ff>3</span>] <span style=color:#f92672>=</span> statbuf.st_mode <span style=color:#f92672>&amp;</span> S_IXUSR <span style=color:#f92672>?</span> <span style=color:#e6db74>&#39;x&#39;</span> <span style=color:#f92672>:</span> <span style=color:#e6db74>&#39;-&#39;</span>; <span style=color:#75715e>//用户执行权限 有这个权限的话按位与表达式不为0
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//文件所在组权限
+</span></span></span><span style=display:flex><span>    perms[<span style=color:#ae81ff>4</span>] <span style=color:#f92672>=</span> statbuf.st_mode <span style=color:#f92672>&amp;</span> S_IRGRP <span style=color:#f92672>?</span> <span style=color:#e6db74>&#39;r&#39;</span> <span style=color:#f92672>:</span> <span style=color:#e6db74>&#39;-&#39;</span>; <span style=color:#75715e>//所在组读权限 有这个权限的话按位与表达式不为0
+</span></span></span><span style=display:flex><span>    perms[<span style=color:#ae81ff>5</span>] <span style=color:#f92672>=</span> statbuf.st_mode <span style=color:#f92672>&amp;</span> S_IWGRP <span style=color:#f92672>?</span> <span style=color:#e6db74>&#39;w&#39;</span> <span style=color:#f92672>:</span> <span style=color:#e6db74>&#39;-&#39;</span>; <span style=color:#75715e>//所在组写权限 有这个权限的话按位与表达式不为0
+</span></span></span><span style=display:flex><span>    perms[<span style=color:#ae81ff>6</span>] <span style=color:#f92672>=</span> statbuf.st_mode <span style=color:#f92672>&amp;</span> S_IXGRP <span style=color:#f92672>?</span> <span style=color:#e6db74>&#39;x&#39;</span> <span style=color:#f92672>:</span> <span style=color:#e6db74>&#39;-&#39;</span>; <span style=color:#75715e>//所在组执行权限 有这个权限的话按位与表达式不为0
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//其他人
+</span></span></span><span style=display:flex><span>    perms[<span style=color:#ae81ff>7</span>] <span style=color:#f92672>=</span> statbuf.st_mode <span style=color:#f92672>&amp;</span> S_IROTH <span style=color:#f92672>?</span> <span style=color:#e6db74>&#39;r&#39;</span> <span style=color:#f92672>:</span> <span style=color:#e6db74>&#39;-&#39;</span>; <span style=color:#75715e>//其他人读权限 有这个权限的话按位与表达式不为0
+</span></span></span><span style=display:flex><span>    perms[<span style=color:#ae81ff>8</span>] <span style=color:#f92672>=</span> statbuf.st_mode <span style=color:#f92672>&amp;</span> S_IWOTH <span style=color:#f92672>?</span> <span style=color:#e6db74>&#39;w&#39;</span> <span style=color:#f92672>:</span> <span style=color:#e6db74>&#39;-&#39;</span>; <span style=color:#75715e>//其他人写权限 有这个权限的话按位与表达式不为0
+</span></span></span><span style=display:flex><span>    perms[<span style=color:#ae81ff>9</span>] <span style=color:#f92672>=</span> statbuf.st_mode <span style=color:#f92672>&amp;</span> S_IXOTH <span style=color:#f92672>?</span> <span style=color:#e6db74>&#39;x&#39;</span> <span style=color:#f92672>:</span> <span style=color:#e6db74>&#39;-&#39;</span>; <span style=color:#75715e>//其他人执行权限 有这个权限的话按位与表达式不为0
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//硬连接数
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> linknum <span style=color:#f92672>=</span> statbuf.st_nlink;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//文件所有者
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// extern struct passwd *getpwuid(__uid_t __uid);
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// struct passwd
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// {
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     char *pw_name;   /* Username. 我们需要的用户名称  */
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     char *pw_passwd; /* Password.  */
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     __uid_t pw_uid;  /* User ID.  */
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     __gid_t pw_gid;  /* Group ID.  */
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     char *pw_gecos;  /* Real name.  */
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     char *pw_dir;    /* Home directory.  */
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     char *pw_shell;  /* Shell program.  */
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// };
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>fileUser <span style=color:#f92672>=</span> getpwuid(statbuf.st_uid)<span style=color:#f92672>-&gt;</span>pw_name; <span style=color:#75715e>//只能得到uid而非用户名称 需要通过getpwuid得到
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//文件所在组 同理
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>fileGrp <span style=color:#f92672>=</span> getgrgid(statbuf.st_gid)<span style=color:#f92672>-&gt;</span>gr_name;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//文件大小
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>long</span> <span style=color:#66d9ef>int</span> fileSize <span style=color:#f92672>=</span> statbuf.st_size;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//获取修改时间
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>time <span style=color:#f92672>=</span> ctime(<span style=color:#f92672>&amp;</span>statbuf.st_mtime); <span style=color:#75715e>//从1970 1.1 0:0到当前的秒数 通过ctime变为当前时间
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//时间自带换行 要将这个换行去掉
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> mtime[<span style=color:#ae81ff>512</span>] <span style=color:#f92672>=</span> {<span style=color:#ae81ff>0</span>};
+</span></span><span style=display:flex><span>    strncpy(mtime, time, strlen(time) <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>); <span style=color:#75715e>//-1就是去掉最后的这个换行符
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>1024</span>];
+</span></span><span style=display:flex><span>    sprintf(buf, <span style=color:#e6db74>&#34;%s %d %s %s %ld %s %s&#34;</span>, perms, linknum, fileUser, fileGrp, fileSize, mtime, argv[<span style=color:#ae81ff>1</span>]);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buf);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//向buf中添加内容 %s文件类型和文件权限 %d连接数 %s所有者 %s所在组 %d文件大小 %s修改时间 %s文件名
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//gcc ls-l.c -o ls  生成可执行文件ls
+</span></span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

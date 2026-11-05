@@ -1,0 +1,131 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>C++ | CantBlog</title><meta name=keywords content><meta name=description content="C++ 语言、STL 与工程实践笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/cpp/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/cpp/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="C++"><meta property="og:description" content="C++ 语言、STL 与工程实践笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="C++"><meta name=twitter:description content="C++ 语言、STL 与工程实践笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>C++</h1><div class=post-description>C++ 语言、STL 与工程实践笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>右值引用详细说明2</h2></header><div class=entry-content><p>例2 auto场景
+Widget&& var1 = someWidget; // var1 is of type Widget&& (no use of auto here) auto&&是万引用 传入左值var1,发生自动推导和引用折叠。auto&&被推导为左值引用Widget& auto&& var2 = var1; // var2 is of type Widget& (see below) 例3 typedef场景
+template&lt;typename T> class Widget { typedef T& LvalueRefType; typedef T&& RvalueRefType; ... }; int main() { Widget&lt;int&> w; } 注意万能引用是万能引用，引用折叠是引用折叠。并不是说引用折叠是万能引用专属的特性。上面这个例子就只发生了引用折叠
+除了右值引用的右值引用会折叠为右值引用，所有其他种类的"引用的引用" (i.e., 组合当中含有lvalue reference) 都会折叠为 lvalue reference。
+推导LvalueRefType，因为传入的T类型实例化为int&，这里T&出现的就是左值引用的左值引用(int& &)，这里出现的T&&就是左值引用的右值引用(int& &&) 根据规则都会发生引用折叠变为左值引用int&。—T==int&(就是这么实例化的) T&== LvalueRefType==int&(因为左值引用的左值引用 发生了引用折叠 变回了左值引用) T&&==RvalueRefType==int&(因为左值引用的右值引用 发生了引用折叠 变回了左值引用)
+如果我们只用这些typedef，一样会发生引用折叠
+void f(Widget&lt;int&>::LvalueRefType&& param); //对typedef扩展void f(int& && param);---左值引用的右值引用发生引用折叠变为 void f(int& param); void f(Widget&lt;int&>::RvalueRefType&& param); //--左值引用(RvalueRefType在上面的推导中也变为int&)的右值引用发生引用折叠变为 void f(int& param); 例4 decltype场景
+...</p></div><footer class=entry-footer><span title=2022-02-21T00:00:00+00:00>创建于 2022-02-21</span>&nbsp;·&nbsp;<span title=2025-06-29T00:00:00+00:00>最后修改于 2025-06-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 右值引用详细说明2" href=https://jler666.github.io/cpp/gwsgwl/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>右值引用详细说明1</h2></header><div class=entry-content><p>假设右值引用是使用&&声明的，那么假设类型声明中出现&& 表示右值引用似乎是合理的。事实并非如此:
+Widget&& var1 = someWidget; // here, “&&” means rvalue reference auto&& var2 = var1; // here, “&&” does not mean rvalue reference template&lt;typename T> void f(std::vector&lt;T>&& param); // here, “&&” means rvalue reference template&lt;typename T> void f(T&& param); // here, “&&”does not mean rvalue reference 类型声明当中的“&&”有的时候意味着rvalue reference，但有的时候意味着rvalue reference 或者 lvalue reference (两种都有可能)。因此，源代码当中出现的 “&&” 有可能是 “&” 的意思，即是说，语法上看着像rvalue reference (“&&”)，但实际上却代表着一个lvalue reference (“&”)。在这种情况下，此种引用比lvalue references 或者 rvalue references都要来的更灵活。
+Rvalue references&&只能绑定到右值上，lvalue references&除了可以绑定到左值上,特殊的常左值引用const…&可以绑定到右值上。
+声明中带 “&&” 的，可能是lvalue references 或者 rvalue references 可以绑定到任何东西上。这种引用灵活也忒灵活了，值得单独给它们起个名字。我称它们为 universal references(万能引用或转发引用、通用引用)。
+...</p></div><footer class=entry-footer><span title=2022-02-21T00:00:00+00:00>创建于 2022-02-21</span>&nbsp;·&nbsp;<span title=2023-02-02T00:00:00+00:00>最后修改于 2023-02-02</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 右值引用详细说明1" href=https://jler666.github.io/cpp/pfzcgf/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>右值引用2 完美转发</h2></header><div class=entry-content><p>先解释一下什么是不完美的转发
+int a = 0; //process内容cout一句话 forward内容cout一句话并调用process void forward(int&& i){cout&lt;&lt;”xxx”&lt;&lt;endl; process(i);} process(a);//调用void process(int&amp;i) a被视为左值 process(1);//调用 void process(int&& i) 1是字面值 是匿名的是个右值 调用右值引用的版本 process(move(a));//调用 void process(int&& i) 通过move强制将左值a变为右值 调用函数的右值版本 forward(2);//1 调用forward(int&& i) 因为2是右值 2 调用process(int&) 问什么不调用process(int&& i)，因为2是个右值被复制给了形参int&& i,i的类型是右值引用但是i是有名的(named object)！！！ i变量是左值！！！, 在调用process时是 process(i);这样来调用i是左值所以肯定调用的是process的左值引用版本process(int&)。
+所以我们上面说c.insert(ite,Vtype(buf)); 是个不完美转发，是先调用insert(…,&&amp;x)，给匿名对象 Vtype(buf)赋名x,接下来因为x有名了所以insert内以x做形参的其他函数都不会调用&&amp;x右值引用版本，但我们本意是 x就是右值，函数内以x为形参的函数都应该将x当作右值，调用x为右值的函数版本。
+形参为匿名对象赋名导致其成为左值 就是不完美转交的根本原因。
+forward(move(a)); //1 调用forward(int&& i) 因为move(a)是右值 2 调用process(int&) //因为是process(i)有名地调用i所以调用的是process的左值引用版本process(int&)原因和上面的一样 forward(a);//编译出错 forward只写了 右值引用版本但是a是有名的，但又没写forward的其他版本所以出错 const int&amp;b=1;//常引用 绑定一个常量 process(b);//编译出错 缺少process(const int&)版本 process(move(b));//编译出错 缺少process(std::remove_reference&lt;const int&>::type)版本 Perfect Forwarding(完美转发)
+自己在写右值移动版本的函数时要注意这点
+template&lt;typename T1,typename T2> void functionA(T1&& t1,T2&& t2) { functionB(std::foward&lt;T1>(t1),std::forward&lt;T2>(t2));//这样t1,t2将依旧保持右值身份 } ...</p></div><footer class=entry-footer><span title=2022-02-20T00:00:00+00:00>创建于 2022-02-20</span>&nbsp;·&nbsp;<span title=2025-06-29T00:00:00+00:00>最后修改于 2025-06-29</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 右值引用2 完美转发" href=https://jler666.github.io/cpp/ek0edl/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>2自己动手来实现一个shared_ptr智能指针2 右值引用1</h2></header><div class=entry-content><p>通过”移动来改善smart_ptr行为”
+template &lt;typename T> class smart_ptr { … smart_ptr(smart_ptr&& other)noexcept//拷贝构造参数改为右值引用 变为移动构造函数 { ptr_ = other.release(); } smart_ptr& operator=(smart_ptr rhs)//不传入引用而传入对象 {//传入对象构造形参rhs时 rhs.swap(*this); return *this; } //原 //smart_ptr& operator=(smart_ptr& rhs) //{ //smart_ptr(rhs).swap(*this); //return *this; //} … }; 1 把拷贝构造函数中的参数类型 smart_ptr& 改成了 smart_ptr&&；现在它成了移动构造函数。
+2 把赋值函数中的参数类型 smart_ptr& 改成了 smart_ptr，在构造参数时直接调用拷贝构造构造形参(原参数是smart_ptr&对象引用 引用形参是不需要调用构造函数去构造的–因为引用的本质是指针，改为了smart_ptr对象类型 是需要构造形参的–如果传入实参的是左值则调用拷贝构造，如果传入的实参是右值则调用移动构造 去构造形参)，从而不再需要在函数体中构造临时对象。现在赋值函数的行为是移动还是拷贝，完全依赖于构造形参时传入的实参是左值还是右值来决定走的是移动构造还是拷贝构造。
+根据 C++ 的规则，如果我提供了移动构造函数而没有手动提供拷贝构造函数，那后者(拷贝构造 包括系统默认的那个拷贝构造)自动被禁用（记住，C++ 里那些复杂的规则也是为方便编程而设立的）。
+侯捷老师右值引用相关内容
+右值引用是为了解决不必要的拷贝(用一个临时对象构造一个对象)，特别是vector在grow up时发生的搬移动作，在移动构造出现之前 搬移动作调用的都是拷贝构造这将耗费大量时间(拷贝原来的堆上内存数据到另一块堆上内存，并将原来的堆上内存释放 — 这一系列操作其实都是没必要的操作)
+左值 可以出现在op=左边(也可以出现在右边) 右值 只能出现在op=的右边 (右值的特点是 不具名–匿名–临时 临时对象一定是右值 函数返回一个对象 注意不是对象引用而是对象 这个返回对象值也是匿名的)
+...</p></div><footer class=entry-footer><span title=2022-02-20T00:00:00+00:00>创建于 2022-02-20</span>&nbsp;·&nbsp;<span title=2022-03-12T00:00:00+00:00>最后修改于 2022-03-12</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 2自己动手来实现一个shared_ptr智能指针2 右值引用1" href=https://jler666.github.io/cpp/ug3xud/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>1堆、栈、RAII：C++里该如何管理资源</h2></header><div class=entry-content><p>RAII的英文全拼是Resource Acquisition Is Initialization的简称，利用的就是C++构造的对象最终会被销毁的原则。在构造时获取对应的资源，在对象声明周期内控制对资源的访问，使之始终保持有效，最后在对象析构的时候，释放构造时获取的资源。–其实就是构造申请内存，析构的时候释放 这个过程
+堆heap，动态分配内存的区域，这个堆跟数据结构里的堆不是一回事(自己初学的时候搞混过)。堆的内存 malloc申请 必须手动free释放。
+C++ 标准里一个相关概念是自由存储区，英文是 free store(其实就是之前内存分配学的 内存池的可用部分)，特指使用 new 和 delete 来分配和释放内存的区域。new 和 delete 操作的区域是 free store ，malloc 和 free 操作的区域是 heap。
+栈stack，指函数调用过程中产生的局部变量所在的区域，这个栈和数据结构中的栈高度相似 都满足后入先出。
+堆
+auto ptr = new std::vector();
+调用expression new申请一个vector的堆上内存，先调用op new(底层调用 malloc)申请内存，再调用 placement new在已申请的堆上内存构造对象。
+void foo() { bar* ptr = new bar(); … delete ptr; } 很简单的new和delete，但是中间省略的代码有两种可能导致delete ptr无法执行，导致内存泄漏
+1 中间省略的代码抛出异常导致最后的delete ptr无法执行
+2 这个代码不符合c++的惯用法，在c++里有99%的可能性不需要堆上内存，因为其new和delete在同一个{}域内，用局部变量(栈上内存)就行了。
+更常见也更合理的c++代码,new分配内存和free释放内存不写在一个函数中
+栈
+下面用一段代码来说明c++里函数调用、本地变量如何使用栈。其具体过程取绝于OS架构，具体细节可能不同但是原理上相同都是后入先出
+void foo(int n) { … } void bar(int n) { int a = n + 1; foo(a); } int main() { … bar(42); … } main中调用bar(42)后栈内的变化如下图
+...</p></div><footer class=entry-footer><span title=2022-02-19T00:00:00+00:00>创建于 2022-02-19</span>&nbsp;·&nbsp;<span title=2022-04-02T00:00:00+00:00>最后修改于 2022-04-02</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to 1堆、栈、RAII：C++里该如何管理资源" href=https://jler666.github.io/cpp/dx2qro/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>allocator16 GNU C++的其他分配器 3 G4.9 bitmap allocator</h2></header><div class=entry-content><p>5 gnu4.9下的bitmap allocator
+bit map allocatot有个特点 当allocate或deallocate的元素个数为1个时(n==1),会调用专门的allocate or deallocate _single_object，当allocate或deallocate的元素个数大于1个调用的是全局的::op new or delete
+super block = super block size + use count +bitmap + blocks
+block 容器要的一个元素(对象)大小的空间 图中的一个小格
+一次性拿64个blocks(未来两倍成长 这个大小增长是指数级的增长极快),一个block区块的大小规定为8的整数倍大小
+super block size = bitmap+blocks+use count(一个计数变量) 的大小，但是不包含自己这个记录size大小的变量本身的大小
+(灰色表示blocks中的第一个block分出去了 则bitmap[0]的第一位设置为0)初始是64个区块 所以需要64个bit(位) 记录每个区块是否被分出去了，这64个bit(位)就是两个bit map(1个32位 unsingned int)–1表示在手中，0表示这个block分出去了
+用了63个余下最后一个的情况
+use count 用于计数分出去了多少个block
+使用一个__mini_vector(并不是标准库vector容器，而是写了一个小型的vector,因为分配器本身就是为容器服务的，但是分配器本身又用到容器 不太好 这个问题之前讨论过)来管理多个 super block(__mini_vector的一个节点为一个super block)—
+__mini_vector除了节点首地址外(相当于数组首地址)有3个成员变量，_M_start,_M_finish分别指向第一个vector节点的首地址和当前正在工作的最后一个vector节点的末尾地址。_M_end_of_storage指向vector最后一个节点(可能并没在工作–并没有让这个节点管理super block)的末尾地址(__mini_vector的容量是2倍成长的，所以__mini_vector可能有节点–superblock并没有用到 是申请出的余量 _M_end_of_storag指针就是指向所有vector节点的最后)，__mini_vector的一个节点 (entry)图中蓝色的两个方块 保存super blocks中的第一个和最后一个block的首地址。
+分配
+当第一个super block(64 blocks)的block用光了(vector中的第一节点(一开始只有一个节点)都没有block可用了)。会申请第二个super block(vector 节点)，第二个super block中block的数量就是第一个super block的两倍为64*2=128个。128个bit所以需要4个32字节的bitmap，注意不止super block中block的个数会两倍成长，vector的growed up每次也会增长为原来两倍的节点数(growed up会引起内存的搬移 比如这张图中的第一个节点的地址在growed up为两个节点后已经发生了移动–注意是节点的地址蓝色小块的开头会变，其中管理的block的地址是不变的)
+...</p></div><footer class=entry-footer><span title=2022-02-18T00:00:00+00:00>创建于 2022-02-18</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to allocator16 GNU C++的其他分配器 3 G4.9 bitmap allocator" href=https://jler666.github.io/cpp/iyxwuo/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>allocator17 allocator 一点补充</h2></header><div class=entry-content><p>6 一些补充
+1 const
+用const修饰的函数内成员变量全部变为const只能读
+对象为const对象(成员变量不可写) 调用const函数(函数内部保证不写成员变量) ok
+非cosnt对象 调用const函数 ok
+非const对象 调用非const函数 ok
+const对象 调用非const函数 fasle!!!!
+const对象只能调用const修饰的函数
+注意c++规定当成员函数的const版本和非const版本同时存在，const对象只能调用const版本的成员函数，非const对象只能调用非const版本的成员函数。
+string的[]重载 有两个函数–const函数修饰 能作为重载的依据，这也是为什么两个函数的形参类型和个数一样，但是可以共存
+上面的[]的重载是在用作右值的时候 比如 char c = s[1];
+此时是只读字符串内容所以加上了const修饰，此时的s为常量或非常量都ok—普通变量=同类型的引用变量是ok的
+下面的[]的重载是在用作左值的时候 比如 s[1] = ‘c’;
+此时的s一定为非常量
+此时需要写s的内容所以[]返回的是个char引用，并且如果s这个字符串是由其他字符串拷贝得到的，在调用左值[]时会发生 写时拷贝 会为其申请属于它自己的堆上内存，并且初始化自己这块堆上内存的reference counting引用计数为1
+c++ string是内存共享的并且是写时拷贝(copy on write)
+通常，string类中必有一个私有成员，其是一个char*，用户记录从堆上分配内存的地址，其在构造时分配内存，在析构时释放内存。
+因为是从堆上分配内存，所以string类在维护这块内存上是格外小心的，string类在返回这块内存地址时，只返回const char*，也就是只读的，如果你要写，也只能通过string提供的方法进行数据的改写。
+string str1 = “hello world”;
+string str2 = str1;
+string str3 = str2;
+str1,str2,str3都是拷贝构造得到的，其内部的char指针指向的是同一块堆上内存。
+printf ("\tstr1 的地址: %x\n", (unsigned int)str1.c_str() );
+...</p></div><footer class=entry-footer><span title=2022-02-18T00:00:00+00:00>创建于 2022-02-18</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to allocator17 allocator 一点补充" href=https://jler666.github.io/cpp/ongr8d/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>allocator15 GNU C++的其他分配器 2 G4.9 array,debug,pool allocator</h2></header><div class=entry-content><p>3 gnu4.9下的array allocator
+std::tr1::array 静态数组(tr1是2003年的一个c++标准)
+_M_array就是一个指向数组的指针
+因为数组是静态的不是堆上内存 所以他不需要释放(deallocate),所以在类中并没有实现deallocate但是其从父类继承来了一个deallocate，但其实父类中的deallocate什么也没做
+使用举例
+int my[65536];//静态全局变量
+array_allocator&lt;int,array&lt;int,65536» myalloc(&amp;my);//_Tp std::tr1::array&lt;type,len>
+myalloc内的_M_array指针就指向了my数组的头
+int* p1 = myalloc.allocate(1);//从_M_array指针指向的空间拿1个type元素的空间
+int* p2 = myalloc.allocate(3);//从_M_array指针指向的空间拿3个type元素的空间 返回3个type大小空间的首地址
+array_allocator中有个成员变量_M_used就是在记录数组已经分出去多少个数组元素的空间了
+myalloc.deallocate(p1);//无动作
+注意deallocate并不会将分出去的空间拿回来而是什么都不做，所以对于array_allocator来说allocate分出去了就是永远都分出去了，永远都要不回来了
+myalloc(&amp;my)无法检测my是堆上地址还是静态空间地址，传入一个堆上地址并不会报错
+4 gnu4.9下的debug allocator
+这是一个包装器wrapper可以包覆于任何allocator之上，它会将客户的申请量添加一些，然后再交给它包装的那个allocator去响应，那多申请的一小些内存用于存放申请这块内存的size信息。在deallocate时会assert检查传入释放的指针p和size是否吻合。 没什么用
+通过模板参数 _Alloc将要被包装的分配器类型传入为_M_allocator,_M_extra为额外的申请的大小 在构造allocator时计算这个额外大小 1 obj_size=sizeof(value_type–分配对象的类型) 2 (sizeof(size_type)+obj_size - 1)/obj_size 计算这个额外大小(size_type类型–一般为4字节)相当于多少个obj类型对象(元素)
+debug allocator申请时调用被包装的那个分配器申请n(申请的对象个数)+_M_extra(size_type算obj类型的个数 至少为1)，返回res+M_extra–(res为首地址，返回给客户的是除去了最前面额外的M_extra空间后)。
+回收deallocate时会将回收的指针_p退回M_extra个元素的空间(__p-_M_extra)作为回收
+4 gnu4.9下的pool allocator
+上图是G2.9下使用pool allocator–叫做std::alloc(就是8-128字节由16条链表管理的那个分配器)
+在G4.9中叫做 __gnu_cxx::__pool_alloc
+G4.9中的用例
+注意如果你要用std::allocator这个默认分配器以外的分配器必须自行#include&lt;ext/…></p></div><footer class=entry-footer><span title=2022-02-17T00:00:00+00:00>创建于 2022-02-17</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to allocator15 GNU C++的其他分配器 2 G4.9 array,debug,pool allocator" href=https://jler666.github.io/cpp/wtrw9i/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>allocator14 GNU C++的其他分配器 1 介绍,vs2013 G4.9</h2></header><div class=entry-content><p>1 GNU C++对allocators的描述
+gnu c++的分配器源代码所在的路径是\版本\include\c++\ext
+\版本\include\c++\bits(是stl的容器和算法)
+分配器就是为容器服务的，当你将元素加入容器中，容器必须分配出更多内存以保存这些元素，于是它们向其模板参数Allocator发出申请，该模板参数class Allocator往往被另命名(aliased–typedef)为allocator_type
+注意字符串也是一个正规的STL容器
+每个元素类型为T的容器的Allocator模板参数默认为allocator,对应这个默认分配器 是使用全局op new(::operator new)来申请空间的
+T* allocate(size_type n,const void* hint=0);
+void deallocate(T* p,size_type n);
+注意这里(gnu4.9)的n和gnu2.9的意义是不一样的，2.9中n是字节数，4.9中n是元素个数。
+4.9中的两个分配器
+new_allocator调用全局::op new和全局::op delete(内部又都是调用标准C的malloc和free),malloc_allocator调用标准C的malloc和free。这两个allocator没有做什么特殊的设计很直接。 这两个分配器的做法比起使用内存池一次性申请一大块的内存相比会慢很多，但优点是简单，适用性强(毕竟所有的OS上的编译器都必须实现标准C的malloc和free)。
+相比于上面两种简单的做法，另一种做法就是将分配得到的内存保留
+pool_allocator–__pool_alloc(fixed-size pooling cache)指的是gnu2.9中16条链表管理8-128字节的内存的这种做法
+bitmap_allocator 用以索引至一个以2的指数倍增长的篮子(exponentially increasing power-of-two-sized buckets)
+上图的三个分配器所申请得到的内存(cache–一次性挖一大块的内存)被程序内所有容器共享
+__mt_alloc是多线程的分配器
+在GNU中会将这些分配器再包装一层(作为父类)，其子类作为对用户的接口，比如__gnu_cxx::new_allocator为父类 其子类为std::allocator(即容器的默认分配器那个类)
+除了上面讲的5种分配器，还有两种特殊的分配器
+__gnu_cxx::debug_allocator 这是一个包装器wrapper可以包覆于任何allocator之上，它会将客户的申请量添加一些，然后再交给它包装的那个allocator去响应，那多申请的一小些内存用于存放申请这块内存的size信息。在deallocate时会assert检查传入释放的指针p和size是否吻合。 没什么用
+__gnu_cxx::array_allocator 允许分配已知且固定大小的内存块，内存来自std::array对象(c++11 容器内部就是一个数组)，用了这个分配器，大小固定容器(比如std::string)就不需要再调用::op new和::op delete
+再程序start up(执行main之前)就可以使用这个分配器。其他所有分配器都是用malloc(堆区)去动态地拿内存，只有这个是使用静态(static 在静态存储区)的数组，在编译完后空间就已经存在了不需要后续程序运行都才会去动态调用malloc来申请。
+2 vs2013和gnu4.9下的new allocator
+如果在vs下想直接调用分配器需要include memory这个头文件
+vs下的模板默认分配器allocator就是直接调用全局的::op new和::op delete(上图红色标明)
+...</p></div><footer class=entry-footer><span title=2022-02-17T00:00:00+00:00>创建于 2022-02-17</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to allocator14 GNU C++的其他分配器 1 介绍,vs2013 G4.9" href=https://jler666.github.io/cpp/dvy4im/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>allocator13 std allocator 9 loki行为分析3</h2></header><div class=entry-content><p>当某个Chunk全回收了(分出去的区块都收回来了)，会进行判断当前是否有两个Chunk都是全回收状态(如果只有一个Chunk全回收，有很大的几率下次又会有使用者申请区块，所以如果只有一个Chunk全回收后，直接释放这个Chunk的内存 在下次又有申请请求到了，又需要再去malloc一个Chunk这回造成很大的不便,所以只在出现两个全回收Chunk的情况下我们将老的那个全回收Chunk的内存给释放了，以免出现频繁地申请)，如果是则将另一个全回收Chunk给Release了(释放在尾部的Chunk的全部堆上内存)。当检查到只有当前这一个Chunk全回收了，则通过swap可以很快地将这个Chunk交换到vector的末尾(vector的pop_back可以很快地删除元素 所以交换到末尾)，这样下次又出现全回收Chunk后可以直接检查vector的末尾是否全回收就能知道是否存在两个全回收Chunk。
+void FixedAllocator::DoDeallocate(void* p) { deallocChunk_->Deallocate(p,blockSize_);//调用下级Chunk的Deallocate，将回收的p区块作为p所属的这个deallocChunk_的first avaliable chunk第一个可用区块，下次allcoate时优先分配这个区块出去 if(deallocChunk_->blocksAvaliable == numBlocks_)//此块Chunk的所有区块都回收回来了(当前可用区块数==一个Chunk的初始区块数) { Chunk& lastChunk = chunks_.back();//末尾Chunk if(&amp;lastChunk==deallocChunk_)//当前全回收的chunk,就是chunks_向量的末尾的Chunk { //检查当前chunks_向量中是否有两个Chunk全回收了 //这只需要往front方向看一眼，deallocChunk_[-1].blocksAvailable_--当前全回收Chunk的上个Chunk有多少个区块可用 if(chunks_.size()>1 && deallocChunk_[-1].blocksAvailable_ == numBlocks_){ //存在两个全回收Chunk 则将当前这个在向量末尾的Chunk内存给释放掉 lastChunk.Release(); chunks_.pop_back(); allocChunk_ =deallocChunk_=&amp;chunks_.front(); }//deallocChunk_[-1].blocksAvailable_ == numBlocks_ return; }//&amp;lastChunk==deallocChunk_ if(lastChunk.blocksAvaliable_==numBlocks_) { //存在两个全回收Chunk 抛弃最后一个 lastChunk.Release(); chunks_.pop_back(); allocChunk_ = deallocChunk_; } else { //只有当前Chunk全回收了，则将当前全回收Chunk与chunks_的最后一块Chunk对调---及只要出现全回收Chunk则一定会将其放到chunks_末尾，这样每次查看是否有两个全回收Chunk，除了某个直接可判断的Chunk外，只需要再检查下chuks_.back() Chunk是否全回收就能知道是否有两个Chunk全回收了，可以将在末尾的全回收Chunk给释放掉 std::swap(*deallocChunk_,lastChunk); allocChunk_=&amp;chunks_.back(); } }//blocksAvaliable == numBlocks_ }//函数结束 有bug,有可能不归还Chunk给系统,对程序修改 新增一个成员变量
+...</p></div><footer class=entry-footer><span title=2022-02-16T00:00:00+00:00>创建于 2022-02-16</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to allocator13 std allocator 9 loki行为分析3" href=https://jler666.github.io/cpp/mdqs0e/></a></article><footer class=page-footer><nav class=pagination><a class=prev href=https://jler666.github.io/cpp/page/5/>«&nbsp;Prev&nbsp;
+</a><a class=next href=https://jler666.github.io/cpp/page/7/>Next&nbsp;&nbsp;»</a></nav></footer></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

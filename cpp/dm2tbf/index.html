@@ -1,0 +1,1033 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>allocator7 std allocator 3 G2.9源码注释 | CantBlog</title><meta name=keywords content><meta name=description content="// #include <cstdlib>
+#include <cstddef>
+#include <new>
+#include <iostream>
+using namespace std;
+
+namespace jj11
+{
+    //本處完全模仿 SGI STL, G2.92 的 std::alloc
+    //放在 namespace 中因此和 std 不衝突
+    //此手法和 G4.92 ext\__pool_alloc.h 也完全相同.
+
+#define __THROW_BAD_ALLOC            \
+    cerr << &#34;out of memory&#34; << endl; \
+    exit(1)
+    //----------------------------------------------
+    // 第1級配置器。
+    //----------------------------------------------
+    template <int inst>
+    //申请的内存大于128字节 调用第一级分配器 第一级分配器直接调用 malloc从堆中拿内存
+    //没有其他多余出来
+    //当第二级分配器 申请内存失败后 会调用第一级分配器的oom_realloc循环申请内存 直到拿到内存
+    //
+    class __malloc_alloc_template
+    {
+    private:
+        static void *oom_malloc(size_t);
+        static void *oom_realloc(void *, size_t);
+        //老版本c++ 新版本调用的是::operator new() 对应的无内存处理是set_new_handler()
+        //在新的gnu版本中不存在第一级分配器
+        static void (*__malloc_alloc_oom_handler)();
+
+    public:
+        static void *allocate(size_t n)
+        {
+            void *result = malloc(n); //直接使用 malloc()
+            if (0 == result)
+                result = oom_malloc(n);
+            return result;
+        }
+        static void deallocate(void *p, size_t /* n */)
+        {
+            free(p); //直接使用 free()
+        }
+        static void *reallocate(void *p, size_t /* old_sz */, size_t new_sz)
+        {
+            void *result = realloc(p, new_sz); //直接使用 realloc()
+            if (0 == result)
+                result = oom_realloc(p, new_sz);
+            return result;
+        }
+        static void (*set_malloc_handler(void (*f)()))()
+        { //類似 C++ 的 set_new_handler().
+            void (*old)() = __malloc_alloc_oom_handler;
+            __malloc_alloc_oom_handler = f;
+            return (old);
+        }
+    };
+    //----------------------------------------------
+    template <int inst>
+    void (*__malloc_alloc_template<inst>::__malloc_alloc_oom_handler)() = 0;
+
+    template <int inst>
+    void *__malloc_alloc_template<inst>::oom_malloc(size_t n)
+    {
+        void (*my_malloc_handler)();
+        void *result;
+
+        for (;;)
+        { //不斷嘗試釋放、配置、再釋放、再配置…
+            my_malloc_handler = __malloc_alloc_oom_handler;
+            if (0 == my_malloc_handler)
+            {
+                __THROW_BAD_ALLOC;
+            }
+            (*my_malloc_handler)(); //呼叫處理常式，企圖釋放記憶體
+            result = malloc(n);     //再次嘗試配置記憶體
+            if (result)
+                return (result);
+        }
+    }
+
+    template <int inst>
+    void *__malloc_alloc_template<inst>::oom_realloc(void *p, size_t n)
+    {
+        void (*my_malloc_handler)();
+        void *result;
+
+        for (;;)
+        { //不斷嘗試釋放、配置、再釋放、再配置…
+            my_malloc_handler = __malloc_alloc_oom_handler;
+            if (0 == my_malloc_handler)
+            {
+                __THROW_BAD_ALLOC;
+            }
+            (*my_malloc_handler)(); //呼叫處理常式，企圖釋放記憶體。
+            result = realloc(p, n); //再次嘗試配置記憶體。
+            if (result)
+                return (result);
+        }
+    }
+    //----------------------------------------------
+
+    //第二级分配器包装
+    //第二级分配器的分配单位是字节 这里通过模板重新包装为以元素个数为分配单位
+    typedef __malloc_alloc_template<0> malloc_alloc;
+
+    template <class T, class Alloc>
+    class simple_alloc
+    {
+    public:
+        static T *allocate(size_t n)
+        {
+            return 0 == n ? 0 : (T *)Alloc::allocate(n * sizeof(T));
+        }
+        static T *allocate(void)
+        {
+            return (T *)Alloc::allocate(sizeof(T));
+        }
+        static void deallocate(T *p, size_t n)
+        {
+            if (0 != n)
+                Alloc::deallocate(p, n * sizeof(T));
+        }
+        static void deallocate(T *p)
+        {
+            Alloc::deallocate(p, sizeof(T));
+        }
+    };
+    // 用例
+    // template <class T, class Alloc = alloc>
+    // class vector
+    // {
+    // protected:
+    //     //专属分配器每次分配一个元素大小
+    //     typedef simple_alloc<T, Alloc> data_allocator;
+    //     ....
+    //     result = data_allocator::allocator;
+    //     ....
+    //     data_allocator::deallocate(result);
+    // };
+
+    //----------------------------------------------
+    //第二級配置器
+    //----------------------------------------------
+    enum
+    {
+        __ALIGN = 8
+    }; //小區塊的上調邊界 ROUNDUP时向上8字节对齐 链表按8字节为间隔区分管理
+    enum
+    {
+        __MAX_BYTES = 128
+    }; //小區塊的上限
+    //8-128字节的申请才会使用第二级分配器
+    enum
+    {
+        __NFREELISTS = __MAX_BYTES / __ALIGN
+    }; //free-lists 個數 16条链表
+
+    //上面的这三个枚举量因该用 static const int x = N
+    //取代 enum { x = N }, 但目前支援該性質的編譯器不多
+
+    //本例中兩個 template 參數完全沒有派上用場
+    template <bool threads, int inst>
+    class __default_alloc_template
+    {
+    private:
+        //上调传入的bytes到它最接近的8的整数倍
+        static size_t ROUND_UP(size_t bytes)
+        {
+            return (((bytes) + __ALIGN - 1) & ~(__ALIGN - 1));
+            //举例 如果bytes = 13
+            //则 (13+7)&~7 --- 10100 & ~(00111)
+            //= 10100 & 11000 = 10000 = 16  ( 其实bytes是8位的 这里只写出5位)
+        }
+
+    private:
+        //改用struct 也可以
+        //嵌入式指针
+        //用struct更好理解
+        //就像链表中的next指针一样 每个obj对象只有1个成员变量就是指针 可以指向obj类的其他对象
+
+        //注意 我们只知道 我们要分配的单个对象的大小 但是不知道我们要分配对象的类型
+        //所以这里malloc没办法强转为那个对象的类型  但是知道大小一样也可以将这一大块空间
+        //分割为多个 szieof(对象)的小块并用指针(上个小块的next指针)指向这小块的首地址 串成一个链表
+
+        // chunk = szieof(对象) * n
+        // p = (obj *)malloc(chunk);
+        // p指针是在不断移动的 不断地指向每一个size大小内存块的首地址
+        //(p其实指向的是size大小空间的前四个字节组成的obj的首地址)  next指针就是free_list_link
+        // |next指针 .... 这块有size大|...next指针 .... 这块有size大|....|
+        // 每块空间首地址被强转为obj型 所以空间中的前4字节暂时被当作next指针 串联其他size大小的空间
+        //      |-------------------------|(next指向下一块的首地址)
+        // 只有在分配和回收的时候我们才需要这个next指针
+        // 在allocate return了这块空间的首地址后 内存块已经不在链表里了next指针没有意义了
+        // 这四个字节可以去存真正的对象内容
+        // 将每一块串成list
+        union obj
+        {
+            union obj *free_list_link;
+        };
+
+    private:
+        static obj *volatile free_list[__NFREELISTS];
+        static size_t FREELIST_INDEX(size_t bytes)
+        {
+            return (((bytes) + __ALIGN - 1) / __ALIGN - 1);
+        }
+
+        // Returns an object of size n, and optionally adds to size n free list.
+        static void *refill(size_t n);
+
+        // Allocates a chunk for nobjs of size &#34;size&#34;.  nobjs may be reduced
+        // if it is inconvenient to allocate the requested number.
+        static char *chunk_alloc(size_t size, int &amp;nobjs);
+
+        // Chunk allocation state.
+        static char *start_free;
+        static char *end_free;
+        static size_t heap_size;
+
+    public:
+        // n为一个对象的大小(字节)
+        static void *allocate(size_t n) //n must be > 0
+        {
+            obj *volatile *my_free_list; //obj** my_free_list; 用于指向16条链表中一条的首地址
+            obj *result;
+
+            //申请的大小大于128字节 调用第一级分配器 直接用malloc来分配
+            if (n > (size_t)__MAX_BYTES)
+            {
+                return (malloc_alloc::allocate(n));
+            }
+
+            my_free_list = free_list + FREELIST_INDEX(n);
+            //my_free_list指向 指向第n条链表头节点的指针(my_free_list为二级指针)
+            result = *my_free_list;
+            if (result == 0) //一个指向第n条链表头节点的指针
+            {
+                //这个指针为0说明 此指针并没有指向链表节点---这条链表内内存节点已经用完了
+                //需要再次分配 去malloc n*20*2+ROUNDUP(HEAPSIZE>>4)的空间给这条链表
+                void *r = refill(ROUND_UP(n));
+                return r;
+            }
+            //result此指针非空 说明result指向的这条链表至少还有一个内存节点(链表头节点)
+            //则返回这个链表头节点给用户
+            //头节点指针指向头节点的下个节点作为新的头节点
+            *my_free_list = result->free_list_link;
+            return (result);
+        }
+
+        //回收对象内存块 p为这个对象内存的首地址 n为这个对象的大小
+        //将这个对象节点 回收到管理对应大小的链表的头节点处(作为链表新的头节点的方式 回收回链表中)
+        static void deallocate(void *p, size_t n) //p may not be 0
+        {
+            obj *q = (obj *)p;
+            obj *volatile *my_free_list; //obj** my_free_list;
+
+            //大小大于128字节 不由第二级分配器管理 直接调用第一级deallocate 由free来回收
+            if (n > (size_t)__MAX_BYTES)
+            {
+                malloc_alloc::deallocate(p, n);
+                return;
+            }
+            //找到管理对应大小的 这条链表的头节点的地址*my_free_list
+            //将回收回来的这个节点p的next指针指向这个头节点
+            //并将头节点指针(*my_free_list)指向p  这样p就是这条链表的新的头节点
+            my_free_list = free_list + FREELIST_INDEX(n);
+            q->free_list_link = *my_free_list;
+            *my_free_list = q;
+        }
+        //1
+        //注意在第二级deallocate中并没有调用free 这意味着16条链表将会无限拉长
+        //deallocate不会将内存还给操作系统 第二级分配器不会将内存还给操作系统
+        //但是电脑上并不会只跑你这一个程序 内存都在你手上 那其他程序怎么办呢?
+
+        //2
+        //如果我不是用第二级分配器申请的内存，比如用直接malloc申请了16个字节
+        //这16个字节的内存是带cookie的
+        //但是我调用了第二级分配器的deallocate 是可以将这个malloc申请的内存
+        //归还到对应大小的链表中 (带cookie并不会有太大的影响 指针是不指向cookie的)
+        //但是如果归还的这块内存 不是用第二级分配器申请的非8的整数倍的内存
+        //归还时回被还到 其最接近且大于它的8的整数倍的链表中
+        //在某次第二级allocate会将这块实际没那么大的内存 当作有这么大交给用户去使用 将会造成内存泄漏
+
+        static void *
+        reallocate(void *p, size_t old_sz, size_t new_sz);
+    };
+    //----------------------------------------------
+    // We allocate memory in large chunks in order to
+    // avoid fragmentingthe malloc heap too much.
+    // We assume that size is properly aligned.
+    // We hold the allocation lock.
+    //----------------------------------------------
+    template <bool threads, int inst>
+    char *
+    __default_alloc_template<threads, inst>::
+        chunk_alloc(size_t size, int &amp;nobjs)
+    {
+        char *result;
+        size_t total_bytes = size * nobjs;         //size为一个对象的大小 n为20
+        size_t bytes_left = end_free - start_free; //当前战备池内剩下多少字节
+
+        if (bytes_left >= total_bytes) //当前战备池内的大小满足 20个对象这个需求
+        {
+            //则返回这20个对象大小的内存
+            //并减少对应的战备池大小
+            result = start_free;
+            start_free += total_bytes; //减少战备池大小
+            //地址是向下增长的 start_free<=end_free
+            return (result); //result 为原start_free-start_free+total_bytes这块连续空间
+        }
+        else if (bytes_left >= size) //当前战备池大小至少能分配一个对象的内存
+        {
+            // 先计算余下大小到底能分配多少个对象
+            // 注意nobjs为引用传入在这里传出后 调用者就能知道究竟是分配了多少个
+            // 对象的内存
+            nobjs = bytes_left / size;
+            total_bytes = size * nobjs;
+            //余下的内存最多分配nobjs个对象 这nobjs个对象的总大小为total_bytes
+            result = start_free;
+            start_free += total_bytes; //减少战备池大小
+            return (result);           //result 为原start_free-start_free+total_bytes这块连续空间
+        }
+        else
+        {
+            //当前战备池大小连一个对象大小的内存空间都不够了
+            //则需要去向系统申请新的内存空间 并且将当前pool作为碎片交给对应的链表管理
+            //申请--(我们之前一直有提到的 2*20*sizeof(对象) + ROUNDUP(累计申请量>>4))
+            //其中20*sizeof(对象)的空间返回给调用者，余下的交给内存池
+            size_t bytes_to_get =
+                2 * total_bytes + ROUND_UP(heap_size >> 4);
+            // Try to make use of the left-over piece.
+            if (bytes_left > 0) //当前pool是有内存的并非刚好用完 则这些内存就是碎片要交给对应的链表管理
+            {
+                //将碎片交给对应的链表管理
+                obj *volatile *my_free_list =
+                    free_list + FREELIST_INDEX(bytes_left);
+                //start_free就是碎片的起始地址
+                ((obj *)start_free)->free_list_link = *my_free_list; //将碎片插到对应链表的头之前
+                *my_free_list = (obj *)start_free;                   //将碎片作为新的头节点
+            }
+            start_free = (char *)malloc(bytes_to_get); //去 malloc 2*20*sizeof(对象) + ROUNDUP(累计申请量>>4)
+            //将新申请的这块内存的首地址 作为pool的新的起始地址start_free
+
+            if (0 == start_free) //malloc 申请失败会返回0
+            {
+                //应对堆中内存不够 malloc申请失败的情况
+                int i;
+                obj *volatile *my_free_list, *p;
+
+                //Try to make do with what we have. That can't
+                //hurt. We do not try smaller requests, since that tends
+                //to result in disaster on multi-process machines.
+                //找当前size对应链表的右边的链表(右边链表中的节点内存都是大于size的) 看右边链表中是否
+                //还有内存节点 有的话应急直接拿来用 切出1个size大内存返回给用户 余下的作为pool战备池
+                //例如szie=80的话 -- 向右边 查看管理88,96,104,112大小的节点
+                //因该从size+__ALIGN开始循环更合理，因为size链表肯定没节点 要不然也不会到当前这个地步
+                for (i = size; i <= __MAX_BYTES; i += __ALIGN)
+                {
+                    my_free_list = free_list + FREELIST_INDEX(i);
+                    p = *my_free_list;
+                    if (0 != p) //有右边的链表 有多余的节点 我们拿来借用
+                    {
+                        //p为我们借用的那块内存节点的首地址(也是那条链表头节点的首地址)
+                        *my_free_list = p->free_list_link; //p被借用了 那条链表更新头节点为下个节点
+
+                        //借来的这块空间 放到战备池中！！！！ start_free指向这块首节地址
+                        start_free = (char *)p;
+                        end_free = start_free + i;
+                        return (chunk_alloc(size, nobjs));
+                        //进行递归调用 在下一层的调用中 就可以直接满足我们的要求
+                        //在上面的两个if就return了对应空间的大小
+                        //这个递归只会向下一层就return 不会继续深入了
+                        //Any leftover piece will eventually make it to the
+                        //right free list.
+                    }
+                }
+                //右边的链表中也没有内存节点(别人也破产了 借不到东西) 穷途末路了
+                //拿不到内存 调用第一级分配器 第一级分配器会调用handler(out of memory)循环请求内存
+                //看是否有进程/线程刚好释放内存则可马上拿来填填补这个需求
+                end_free = 0; //In case of exception.
+                start_free = (char *)malloc_alloc::allocate(bytes_to_get);
+                //This should either throw an exception or
+                //remedy the situation. Thus we assume it
+                //succeeded.
+            }
+            // malloc分配成功 分配了我们要求的bytes_to_get这样大量的内存
+            heap_size += bytes_to_get;            //累计申请量
+            end_free = start_free + bytes_to_get; //战备池池底
+            //成功申请了bytes_left
+            //进行递归调用 在下一层的调用中 就可以直接满足我们的要求
+            //在上面的两个if就return了对应空间的大小
+            //这个递归只会向下一层就return 不会继续深入了
+            return (chunk_alloc(size, nobjs));
+        }
+    }
+    //----------------------------------------------
+    // Returns an object of size n, and optionally adds
+    // to size n free list.We assume that n is properly aligned.
+    // We hold the allocation lock.
+    //----------------------------------------------
+    template <bool threads, int inst>
+    void *__default_alloc_template<threads, inst>::
+        refill(size_t n) //n为字节大小 已经上调为8的倍数
+    {
+        int nobjs = 20; //申请40个对象大小的内存 1个返回用户 19给链表 20个加入战备池中
+        //预设要20个 但不一定能取到20个 nobjs是引用在申请完后会返回究竟申请多少个对象大小的内存
+        char *chunk = chunk_alloc(n, nobjs); //传回nobjs个对象大小的内存(期望是20个)
+        obj *volatile *my_free_list;         //obj** my_free_list;
+        obj *result;
+        obj *current_obj;
+        obj *next_obj;
+        int i;
+
+        if (1 == nobjs) //实际只拿到1个对象大小的内存 则将这块内存直接返回给用户
+            return (chunk);
+        //运行到这里说明有不止1块 1块给用户后还有多余 则多余的交给对应大小的链表管理
+
+        //找到管理对应大小的 这条链表的头节点的地址*my_free_list
+        my_free_list = free_list + FREELIST_INDEX(n);
+
+        //Build free list in chunk
+        //将chunk内多余的内存 挂到对应的链表上
+        result = (obj *)chunk; //大块 中的第一个(对象大小)的区块 作为result返回给用户
+        //余下的区块要串到链表上
+        *my_free_list = next_obj = (obj *)(chunk + n); //第二个区块的首地址
+        for (i = 1;; ++i)                              //从1开始将返回给用户的那个排除
+        {
+            current_obj = next_obj;                   //上次的下一块 就是当前块
+            next_obj = (obj *)((char *)next_obj + n); //下一块
+            //因为拿到的内存是一整块连续的 干净的内存没什么对象变量
+            //我们需要切割成一块又一块 大小为n的区块并将它们串起来
+            //所谓切割就是将指针所指处+n个字节先使其指向下个区块的首地址
+            //再转型为obj(使大小为n区块的前四字节变为指针 可指向下一个区块
+            //从而实现串联)
+            if (nobjs - 1 == i)
+            {
+                //最后一块 其next指针指向null 之后结束循环
+                current_obj->free_list_link = 0;
+                break;
+            }
+            else
+            {
+                current_obj->free_list_link = next_obj; //当前块指向下一块 串成单向链表
+            }
+        }
+        return (result);
+    }
+    //----------------------------------------------
+    template <bool threads, int inst>
+    char *__default_alloc_template<threads, inst>::start_free = 0; //战备池起始地址
+
+    template <bool threads, int inst>
+    char *__default_alloc_template<threads, inst>::end_free = 0; //战备池终止地址
+
+    template <bool threads, int inst>
+    size_t __default_alloc_template<threads, inst>::heap_size = 0; //累计从堆上申请的内存
+
+    template <bool threads, int inst>
+    typename __default_alloc_template<threads, inst>::obj *volatile __default_alloc_template<threads, inst>::free_list[__NFREELISTS] = {
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    }; // free_lsit链表数组
+    //----------------------------------------------
+    //令第2級配置器的名稱為 alloc
+    //实例化模板类型 并重命名
+    typedef __default_alloc_template<false, 0> alloc;
+
+    //
+
+    void test_G29_alloc()
+    {
+        cout << &#34;\n\n\ntest_global_allocator_with_16_freelist().......... \n&#34;;
+
+        void *p1 = alloc::allocate(120);
+        void *p2 = alloc::allocate(72);
+        void *p3 = alloc::allocate(60); //不是 8 倍數
+
+        cout << p1 << ' ' << p2 << ' ' << p3 << endl;
+
+        alloc::deallocate(p1, 120);
+        alloc::deallocate(p2, 72);
+        alloc::deallocate(p3, 60);
+
+        //以下, 不能搭配容器來測試, 因為新版 G++ 對於 allocator 有更多要求 (詢問更多 typedef 而 alloc 都無法回答)
+        //它其實就是 G4.9 __pool_alloc，所以讓 G4.9容器使用 __pool_alloc 也就等同於這裡所要的測試
+        /*
+       vector<int, simple_alloc<int,alloc>> v;
+       for(int i=0; i< 1000; ++i)
+              v.push_back(i);
+       for(int i=700; i< 720; ++i)
+              cout << v[i] << ' ';
+\*/
+
+        cout << endl;
+    }
+} //namespace
+  //----------------------------------------------------
+"><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/dm2tbf/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/dm2tbf/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/dm2tbf/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="allocator7 std allocator 3 G2.9源码注释"><meta property="og:description" content="// #include <cstdlib> #include <cstddef> #include <new> #include <iostream> using namespace std; namespace jj11 { //本處完全模仿 SGI STL, G2.92 的 std::alloc //放在 namespace 中因此和 std 不衝突 //此手法和 G4.92 ext\__pool_alloc.h 也完全相同. #define __THROW_BAD_ALLOC \ cerr << &#34;out of memory&#34; << endl; \ exit(1) //---------------------------------------------- // 第1級配置器。 //---------------------------------------------- template <int inst> //申请的内存大于128字节 调用第一级分配器 第一级分配器直接调用 malloc从堆中拿内存 //没有其他多余出来 //当第二级分配器 申请内存失败后 会调用第一级分配器的oom_realloc循环申请内存 直到拿到内存 // class __malloc_alloc_template { private: static void *oom_malloc(size_t); static void *oom_realloc(void *, size_t); //老版本c++ 新版本调用的是::operator new() 对应的无内存处理是set_new_handler() //在新的gnu版本中不存在第一级分配器 static void (*__malloc_alloc_oom_handler)(); public: static void *allocate(size_t n) { void *result = malloc(n); //直接使用 malloc() if (0 == result) result = oom_malloc(n); return result; } static void deallocate(void *p, size_t /* n */) { free(p); //直接使用 free() } static void *reallocate(void *p, size_t /* old_sz */, size_t new_sz) { void *result = realloc(p, new_sz); //直接使用 realloc() if (0 == result) result = oom_realloc(p, new_sz); return result; } static void (*set_malloc_handler(void (*f)()))() { //類似 C++ 的 set_new_handler(). void (*old)() = __malloc_alloc_oom_handler; __malloc_alloc_oom_handler = f; return (old); } }; //---------------------------------------------- template <int inst> void (*__malloc_alloc_template<inst>::__malloc_alloc_oom_handler)() = 0; template <int inst> void *__malloc_alloc_template<inst>::oom_malloc(size_t n) { void (*my_malloc_handler)(); void *result; for (;;) { //不斷嘗試釋放、配置、再釋放、再配置… my_malloc_handler = __malloc_alloc_oom_handler; if (0 == my_malloc_handler) { __THROW_BAD_ALLOC; } (*my_malloc_handler)(); //呼叫處理常式，企圖釋放記憶體 result = malloc(n); //再次嘗試配置記憶體 if (result) return (result); } } template <int inst> void *__malloc_alloc_template<inst>::oom_realloc(void *p, size_t n) { void (*my_malloc_handler)(); void *result; for (;;) { //不斷嘗試釋放、配置、再釋放、再配置… my_malloc_handler = __malloc_alloc_oom_handler; if (0 == my_malloc_handler) { __THROW_BAD_ALLOC; } (*my_malloc_handler)(); //呼叫處理常式，企圖釋放記憶體。 result = realloc(p, n); //再次嘗試配置記憶體。 if (result) return (result); } } //---------------------------------------------- //第二级分配器包装 //第二级分配器的分配单位是字节 这里通过模板重新包装为以元素个数为分配单位 typedef __malloc_alloc_template<0> malloc_alloc; template <class T, class Alloc> class simple_alloc { public: static T *allocate(size_t n) { return 0 == n ? 0 : (T *)Alloc::allocate(n * sizeof(T)); } static T *allocate(void) { return (T *)Alloc::allocate(sizeof(T)); } static void deallocate(T *p, size_t n) { if (0 != n) Alloc::deallocate(p, n * sizeof(T)); } static void deallocate(T *p) { Alloc::deallocate(p, sizeof(T)); } }; // 用例 // template <class T, class Alloc = alloc> // class vector // { // protected: // //专属分配器每次分配一个元素大小 // typedef simple_alloc<T, Alloc> data_allocator; // .... // result = data_allocator::allocator; // .... // data_allocator::deallocate(result); // }; //---------------------------------------------- //第二級配置器 //---------------------------------------------- enum { __ALIGN = 8 }; //小區塊的上調邊界 ROUNDUP时向上8字节对齐 链表按8字节为间隔区分管理 enum { __MAX_BYTES = 128 }; //小區塊的上限 //8-128字节的申请才会使用第二级分配器 enum { __NFREELISTS = __MAX_BYTES / __ALIGN }; //free-lists 個數 16条链表 //上面的这三个枚举量因该用 static const int x = N //取代 enum { x = N }, 但目前支援該性質的編譯器不多 //本例中兩個 template 參數完全沒有派上用場 template <bool threads, int inst> class __default_alloc_template { private: //上调传入的bytes到它最接近的8的整数倍 static size_t ROUND_UP(size_t bytes) { return (((bytes) + __ALIGN - 1) & ~(__ALIGN - 1)); //举例 如果bytes = 13 //则 (13+7)&~7 --- 10100 & ~(00111) //= 10100 & 11000 = 10000 = 16 ( 其实bytes是8位的 这里只写出5位) } private: //改用struct 也可以 //嵌入式指针 //用struct更好理解 //就像链表中的next指针一样 每个obj对象只有1个成员变量就是指针 可以指向obj类的其他对象 //注意 我们只知道 我们要分配的单个对象的大小 但是不知道我们要分配对象的类型 //所以这里malloc没办法强转为那个对象的类型 但是知道大小一样也可以将这一大块空间 //分割为多个 szieof(对象)的小块并用指针(上个小块的next指针)指向这小块的首地址 串成一个链表 // chunk = szieof(对象) * n // p = (obj *)malloc(chunk); // p指针是在不断移动的 不断地指向每一个size大小内存块的首地址 //(p其实指向的是size大小空间的前四个字节组成的obj的首地址) next指针就是free_list_link // |next指针 .... 这块有size大|...next指针 .... 这块有size大|....| // 每块空间首地址被强转为obj型 所以空间中的前4字节暂时被当作next指针 串联其他size大小的空间 // |-------------------------|(next指向下一块的首地址) // 只有在分配和回收的时候我们才需要这个next指针 // 在allocate return了这块空间的首地址后 内存块已经不在链表里了next指针没有意义了 // 这四个字节可以去存真正的对象内容 // 将每一块串成list union obj { union obj *free_list_link; }; private: static obj *volatile free_list[__NFREELISTS]; static size_t FREELIST_INDEX(size_t bytes) { return (((bytes) + __ALIGN - 1) / __ALIGN - 1); } // Returns an object of size n, and optionally adds to size n free list. static void *refill(size_t n); // Allocates a chunk for nobjs of size &#34;size&#34;. nobjs may be reduced // if it is inconvenient to allocate the requested number. static char *chunk_alloc(size_t size, int &amp;nobjs); // Chunk allocation state. static char *start_free; static char *end_free; static size_t heap_size; public: // n为一个对象的大小(字节) static void *allocate(size_t n) //n must be > 0 { obj *volatile *my_free_list; //obj** my_free_list; 用于指向16条链表中一条的首地址 obj *result; //申请的大小大于128字节 调用第一级分配器 直接用malloc来分配 if (n > (size_t)__MAX_BYTES) { return (malloc_alloc::allocate(n)); } my_free_list = free_list + FREELIST_INDEX(n); //my_free_list指向 指向第n条链表头节点的指针(my_free_list为二级指针) result = *my_free_list; if (result == 0) //一个指向第n条链表头节点的指针 { //这个指针为0说明 此指针并没有指向链表节点---这条链表内内存节点已经用完了 //需要再次分配 去malloc n*20*2+ROUNDUP(HEAPSIZE>>4)的空间给这条链表 void *r = refill(ROUND_UP(n)); return r; } //result此指针非空 说明result指向的这条链表至少还有一个内存节点(链表头节点) //则返回这个链表头节点给用户 //头节点指针指向头节点的下个节点作为新的头节点 *my_free_list = result->free_list_link; return (result); } //回收对象内存块 p为这个对象内存的首地址 n为这个对象的大小 //将这个对象节点 回收到管理对应大小的链表的头节点处(作为链表新的头节点的方式 回收回链表中) static void deallocate(void *p, size_t n) //p may not be 0 { obj *q = (obj *)p; obj *volatile *my_free_list; //obj** my_free_list; //大小大于128字节 不由第二级分配器管理 直接调用第一级deallocate 由free来回收 if (n > (size_t)__MAX_BYTES) { malloc_alloc::deallocate(p, n); return; } //找到管理对应大小的 这条链表的头节点的地址*my_free_list //将回收回来的这个节点p的next指针指向这个头节点 //并将头节点指针(*my_free_list)指向p 这样p就是这条链表的新的头节点 my_free_list = free_list + FREELIST_INDEX(n); q->free_list_link = *my_free_list; *my_free_list = q; } //1 //注意在第二级deallocate中并没有调用free 这意味着16条链表将会无限拉长 //deallocate不会将内存还给操作系统 第二级分配器不会将内存还给操作系统 //但是电脑上并不会只跑你这一个程序 内存都在你手上 那其他程序怎么办呢? //2 //如果我不是用第二级分配器申请的内存，比如用直接malloc申请了16个字节 //这16个字节的内存是带cookie的 //但是我调用了第二级分配器的deallocate 是可以将这个malloc申请的内存 //归还到对应大小的链表中 (带cookie并不会有太大的影响 指针是不指向cookie的) //但是如果归还的这块内存 不是用第二级分配器申请的非8的整数倍的内存 //归还时回被还到 其最接近且大于它的8的整数倍的链表中 //在某次第二级allocate会将这块实际没那么大的内存 当作有这么大交给用户去使用 将会造成内存泄漏 static void * reallocate(void *p, size_t old_sz, size_t new_sz); }; //---------------------------------------------- // We allocate memory in large chunks in order to // avoid fragmentingthe malloc heap too much. // We assume that size is properly aligned. // We hold the allocation lock. //---------------------------------------------- template <bool threads, int inst> char * __default_alloc_template<threads, inst>:: chunk_alloc(size_t size, int &amp;nobjs) { char *result; size_t total_bytes = size * nobjs; //size为一个对象的大小 n为20 size_t bytes_left = end_free - start_free; //当前战备池内剩下多少字节 if (bytes_left >= total_bytes) //当前战备池内的大小满足 20个对象这个需求 { //则返回这20个对象大小的内存 //并减少对应的战备池大小 result = start_free; start_free += total_bytes; //减少战备池大小 //地址是向下增长的 start_free<=end_free return (result); //result 为原start_free-start_free+total_bytes这块连续空间 } else if (bytes_left >= size) //当前战备池大小至少能分配一个对象的内存 { // 先计算余下大小到底能分配多少个对象 // 注意nobjs为引用传入在这里传出后 调用者就能知道究竟是分配了多少个 // 对象的内存 nobjs = bytes_left / size; total_bytes = size * nobjs; //余下的内存最多分配nobjs个对象 这nobjs个对象的总大小为total_bytes result = start_free; start_free += total_bytes; //减少战备池大小 return (result); //result 为原start_free-start_free+total_bytes这块连续空间 } else { //当前战备池大小连一个对象大小的内存空间都不够了 //则需要去向系统申请新的内存空间 并且将当前pool作为碎片交给对应的链表管理 //申请--(我们之前一直有提到的 2*20*sizeof(对象) + ROUNDUP(累计申请量>>4)) //其中20*sizeof(对象)的空间返回给调用者，余下的交给内存池 size_t bytes_to_get = 2 * total_bytes + ROUND_UP(heap_size >> 4); // Try to make use of the left-over piece. if (bytes_left > 0) //当前pool是有内存的并非刚好用完 则这些内存就是碎片要交给对应的链表管理 { //将碎片交给对应的链表管理 obj *volatile *my_free_list = free_list + FREELIST_INDEX(bytes_left); //start_free就是碎片的起始地址 ((obj *)start_free)->free_list_link = *my_free_list; //将碎片插到对应链表的头之前 *my_free_list = (obj *)start_free; //将碎片作为新的头节点 } start_free = (char *)malloc(bytes_to_get); //去 malloc 2*20*sizeof(对象) + ROUNDUP(累计申请量>>4) //将新申请的这块内存的首地址 作为pool的新的起始地址start_free if (0 == start_free) //malloc 申请失败会返回0 { //应对堆中内存不够 malloc申请失败的情况 int i; obj *volatile *my_free_list, *p; //Try to make do with what we have. That can't //hurt. We do not try smaller requests, since that tends //to result in disaster on multi-process machines. //找当前size对应链表的右边的链表(右边链表中的节点内存都是大于size的) 看右边链表中是否 //还有内存节点 有的话应急直接拿来用 切出1个size大内存返回给用户 余下的作为pool战备池 //例如szie=80的话 -- 向右边 查看管理88,96,104,112大小的节点 //因该从size+__ALIGN开始循环更合理，因为size链表肯定没节点 要不然也不会到当前这个地步 for (i = size; i <= __MAX_BYTES; i += __ALIGN) { my_free_list = free_list + FREELIST_INDEX(i); p = *my_free_list; if (0 != p) //有右边的链表 有多余的节点 我们拿来借用 { //p为我们借用的那块内存节点的首地址(也是那条链表头节点的首地址) *my_free_list = p->free_list_link; //p被借用了 那条链表更新头节点为下个节点 //借来的这块空间 放到战备池中！！！！ start_free指向这块首节地址 start_free = (char *)p; end_free = start_free + i; return (chunk_alloc(size, nobjs)); //进行递归调用 在下一层的调用中 就可以直接满足我们的要求 //在上面的两个if就return了对应空间的大小 //这个递归只会向下一层就return 不会继续深入了 //Any leftover piece will eventually make it to the //right free list. } } //右边的链表中也没有内存节点(别人也破产了 借不到东西) 穷途末路了 //拿不到内存 调用第一级分配器 第一级分配器会调用handler(out of memory)循环请求内存 //看是否有进程/线程刚好释放内存则可马上拿来填填补这个需求 end_free = 0; //In case of exception. start_free = (char *)malloc_alloc::allocate(bytes_to_get); //This should either throw an exception or //remedy the situation. Thus we assume it //succeeded. } // malloc分配成功 分配了我们要求的bytes_to_get这样大量的内存 heap_size += bytes_to_get; //累计申请量 end_free = start_free + bytes_to_get; //战备池池底 //成功申请了bytes_left //进行递归调用 在下一层的调用中 就可以直接满足我们的要求 //在上面的两个if就return了对应空间的大小 //这个递归只会向下一层就return 不会继续深入了 return (chunk_alloc(size, nobjs)); } } //---------------------------------------------- // Returns an object of size n, and optionally adds // to size n free list.We assume that n is properly aligned. // We hold the allocation lock. //---------------------------------------------- template <bool threads, int inst> void *__default_alloc_template<threads, inst>:: refill(size_t n) //n为字节大小 已经上调为8的倍数 { int nobjs = 20; //申请40个对象大小的内存 1个返回用户 19给链表 20个加入战备池中 //预设要20个 但不一定能取到20个 nobjs是引用在申请完后会返回究竟申请多少个对象大小的内存 char *chunk = chunk_alloc(n, nobjs); //传回nobjs个对象大小的内存(期望是20个) obj *volatile *my_free_list; //obj** my_free_list; obj *result; obj *current_obj; obj *next_obj; int i; if (1 == nobjs) //实际只拿到1个对象大小的内存 则将这块内存直接返回给用户 return (chunk); //运行到这里说明有不止1块 1块给用户后还有多余 则多余的交给对应大小的链表管理 //找到管理对应大小的 这条链表的头节点的地址*my_free_list my_free_list = free_list + FREELIST_INDEX(n); //Build free list in chunk //将chunk内多余的内存 挂到对应的链表上 result = (obj *)chunk; //大块 中的第一个(对象大小)的区块 作为result返回给用户 //余下的区块要串到链表上 *my_free_list = next_obj = (obj *)(chunk + n); //第二个区块的首地址 for (i = 1;; ++i) //从1开始将返回给用户的那个排除 { current_obj = next_obj; //上次的下一块 就是当前块 next_obj = (obj *)((char *)next_obj + n); //下一块 //因为拿到的内存是一整块连续的 干净的内存没什么对象变量 //我们需要切割成一块又一块 大小为n的区块并将它们串起来 //所谓切割就是将指针所指处+n个字节先使其指向下个区块的首地址 //再转型为obj(使大小为n区块的前四字节变为指针 可指向下一个区块 //从而实现串联) if (nobjs - 1 == i) { //最后一块 其next指针指向null 之后结束循环 current_obj->free_list_link = 0; break; } else { current_obj->free_list_link = next_obj; //当前块指向下一块 串成单向链表 } } return (result); } //---------------------------------------------- template <bool threads, int inst> char *__default_alloc_template<threads, inst>::start_free = 0; //战备池起始地址 template <bool threads, int inst> char *__default_alloc_template<threads, inst>::end_free = 0; //战备池终止地址 template <bool threads, int inst> size_t __default_alloc_template<threads, inst>::heap_size = 0; //累计从堆上申请的内存 template <bool threads, int inst> typename __default_alloc_template<threads, inst>::obj *volatile __default_alloc_template<threads, inst>::free_list[__NFREELISTS] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, }; // free_lsit链表数组 //---------------------------------------------- //令第2級配置器的名稱為 alloc //实例化模板类型 并重命名 typedef __default_alloc_template<false, 0> alloc; // void test_G29_alloc() { cout << &#34;\n\n\ntest_global_allocator_with_16_freelist().......... \n&#34;; void *p1 = alloc::allocate(120); void *p2 = alloc::allocate(72); void *p3 = alloc::allocate(60); //不是 8 倍數 cout << p1 << ' ' << p2 << ' ' << p3 << endl; alloc::deallocate(p1, 120); alloc::deallocate(p2, 72); alloc::deallocate(p3, 60); //以下, 不能搭配容器來測試, 因為新版 G++ 對於 allocator 有更多要求 (詢問更多 typedef 而 alloc 都無法回答) //它其實就是 G4.9 __pool_alloc，所以讓 G4.9容器使用 __pool_alloc 也就等同於這裡所要的測試 /* vector<int, simple_alloc<int,alloc>> v; for(int i=0; i< 1000; ++i) v.push_back(i); for(int i=700; i< 720; ++i) cout << v[i] << ' '; \*/ cout << endl; } } //namespace //----------------------------------------------------"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-02-13T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="allocator7 std allocator 3 G2.9源码注释"><meta name=twitter:description content="// #include <cstdlib> #include <cstddef> #include <new> #include <iostream> using namespace std; namespace jj11 { //本處完全模仿 SGI STL, G2.92 的 std::alloc //放在 namespace 中因此和 std 不衝突 //此手法和 G4.92 ext\__pool_alloc.h 也完全相同. #define __THROW_BAD_ALLOC \ cerr << &#34;out of memory&#34; << endl; \ exit(1) //---------------------------------------------- // 第1級配置器。 //---------------------------------------------- template <int inst> //申请的内存大于128字节 调用第一级分配器 第一级分配器直接调用 malloc从堆中拿内存 //没有其他多余出来 //当第二级分配器 申请内存失败后 会调用第一级分配器的oom_realloc循环申请内存 直到拿到内存 // class __malloc_alloc_template { private: static void *oom_malloc(size_t); static void *oom_realloc(void *, size_t); //老版本c++ 新版本调用的是::operator new() 对应的无内存处理是set_new_handler() //在新的gnu版本中不存在第一级分配器 static void (*__malloc_alloc_oom_handler)(); public: static void *allocate(size_t n) { void *result = malloc(n); //直接使用 malloc() if (0 == result) result = oom_malloc(n); return result; } static void deallocate(void *p, size_t /* n */) { free(p); //直接使用 free() } static void *reallocate(void *p, size_t /* old_sz */, size_t new_sz) { void *result = realloc(p, new_sz); //直接使用 realloc() if (0 == result) result = oom_realloc(p, new_sz); return result; } static void (*set_malloc_handler(void (*f)()))() { //類似 C++ 的 set_new_handler(). void (*old)() = __malloc_alloc_oom_handler; __malloc_alloc_oom_handler = f; return (old); } }; //---------------------------------------------- template <int inst> void (*__malloc_alloc_template<inst>::__malloc_alloc_oom_handler)() = 0; template <int inst> void *__malloc_alloc_template<inst>::oom_malloc(size_t n) { void (*my_malloc_handler)(); void *result; for (;;) { //不斷嘗試釋放、配置、再釋放、再配置… my_malloc_handler = __malloc_alloc_oom_handler; if (0 == my_malloc_handler) { __THROW_BAD_ALLOC; } (*my_malloc_handler)(); //呼叫處理常式，企圖釋放記憶體 result = malloc(n); //再次嘗試配置記憶體 if (result) return (result); } } template <int inst> void *__malloc_alloc_template<inst>::oom_realloc(void *p, size_t n) { void (*my_malloc_handler)(); void *result; for (;;) { //不斷嘗試釋放、配置、再釋放、再配置… my_malloc_handler = __malloc_alloc_oom_handler; if (0 == my_malloc_handler) { __THROW_BAD_ALLOC; } (*my_malloc_handler)(); //呼叫處理常式，企圖釋放記憶體。 result = realloc(p, n); //再次嘗試配置記憶體。 if (result) return (result); } } //---------------------------------------------- //第二级分配器包装 //第二级分配器的分配单位是字节 这里通过模板重新包装为以元素个数为分配单位 typedef __malloc_alloc_template<0> malloc_alloc; template <class T, class Alloc> class simple_alloc { public: static T *allocate(size_t n) { return 0 == n ? 0 : (T *)Alloc::allocate(n * sizeof(T)); } static T *allocate(void) { return (T *)Alloc::allocate(sizeof(T)); } static void deallocate(T *p, size_t n) { if (0 != n) Alloc::deallocate(p, n * sizeof(T)); } static void deallocate(T *p) { Alloc::deallocate(p, sizeof(T)); } }; // 用例 // template <class T, class Alloc = alloc> // class vector // { // protected: // //专属分配器每次分配一个元素大小 // typedef simple_alloc<T, Alloc> data_allocator; // .... // result = data_allocator::allocator; // .... // data_allocator::deallocate(result); // }; //---------------------------------------------- //第二級配置器 //---------------------------------------------- enum { __ALIGN = 8 }; //小區塊的上調邊界 ROUNDUP时向上8字节对齐 链表按8字节为间隔区分管理 enum { __MAX_BYTES = 128 }; //小區塊的上限 //8-128字节的申请才会使用第二级分配器 enum { __NFREELISTS = __MAX_BYTES / __ALIGN }; //free-lists 個數 16条链表 //上面的这三个枚举量因该用 static const int x = N //取代 enum { x = N }, 但目前支援該性質的編譯器不多 //本例中兩個 template 參數完全沒有派上用場 template <bool threads, int inst> class __default_alloc_template { private: //上调传入的bytes到它最接近的8的整数倍 static size_t ROUND_UP(size_t bytes) { return (((bytes) + __ALIGN - 1) & ~(__ALIGN - 1)); //举例 如果bytes = 13 //则 (13+7)&~7 --- 10100 & ~(00111) //= 10100 & 11000 = 10000 = 16 ( 其实bytes是8位的 这里只写出5位) } private: //改用struct 也可以 //嵌入式指针 //用struct更好理解 //就像链表中的next指针一样 每个obj对象只有1个成员变量就是指针 可以指向obj类的其他对象 //注意 我们只知道 我们要分配的单个对象的大小 但是不知道我们要分配对象的类型 //所以这里malloc没办法强转为那个对象的类型 但是知道大小一样也可以将这一大块空间 //分割为多个 szieof(对象)的小块并用指针(上个小块的next指针)指向这小块的首地址 串成一个链表 // chunk = szieof(对象) * n // p = (obj *)malloc(chunk); // p指针是在不断移动的 不断地指向每一个size大小内存块的首地址 //(p其实指向的是size大小空间的前四个字节组成的obj的首地址) next指针就是free_list_link // |next指针 .... 这块有size大|...next指针 .... 这块有size大|....| // 每块空间首地址被强转为obj型 所以空间中的前4字节暂时被当作next指针 串联其他size大小的空间 // |-------------------------|(next指向下一块的首地址) // 只有在分配和回收的时候我们才需要这个next指针 // 在allocate return了这块空间的首地址后 内存块已经不在链表里了next指针没有意义了 // 这四个字节可以去存真正的对象内容 // 将每一块串成list union obj { union obj *free_list_link; }; private: static obj *volatile free_list[__NFREELISTS]; static size_t FREELIST_INDEX(size_t bytes) { return (((bytes) + __ALIGN - 1) / __ALIGN - 1); } // Returns an object of size n, and optionally adds to size n free list. static void *refill(size_t n); // Allocates a chunk for nobjs of size &#34;size&#34;. nobjs may be reduced // if it is inconvenient to allocate the requested number. static char *chunk_alloc(size_t size, int &amp;nobjs); // Chunk allocation state. static char *start_free; static char *end_free; static size_t heap_size; public: // n为一个对象的大小(字节) static void *allocate(size_t n) //n must be > 0 { obj *volatile *my_free_list; //obj** my_free_list; 用于指向16条链表中一条的首地址 obj *result; //申请的大小大于128字节 调用第一级分配器 直接用malloc来分配 if (n > (size_t)__MAX_BYTES) { return (malloc_alloc::allocate(n)); } my_free_list = free_list + FREELIST_INDEX(n); //my_free_list指向 指向第n条链表头节点的指针(my_free_list为二级指针) result = *my_free_list; if (result == 0) //一个指向第n条链表头节点的指针 { //这个指针为0说明 此指针并没有指向链表节点---这条链表内内存节点已经用完了 //需要再次分配 去malloc n*20*2+ROUNDUP(HEAPSIZE>>4)的空间给这条链表 void *r = refill(ROUND_UP(n)); return r; } //result此指针非空 说明result指向的这条链表至少还有一个内存节点(链表头节点) //则返回这个链表头节点给用户 //头节点指针指向头节点的下个节点作为新的头节点 *my_free_list = result->free_list_link; return (result); } //回收对象内存块 p为这个对象内存的首地址 n为这个对象的大小 //将这个对象节点 回收到管理对应大小的链表的头节点处(作为链表新的头节点的方式 回收回链表中) static void deallocate(void *p, size_t n) //p may not be 0 { obj *q = (obj *)p; obj *volatile *my_free_list; //obj** my_free_list; //大小大于128字节 不由第二级分配器管理 直接调用第一级deallocate 由free来回收 if (n > (size_t)__MAX_BYTES) { malloc_alloc::deallocate(p, n); return; } //找到管理对应大小的 这条链表的头节点的地址*my_free_list //将回收回来的这个节点p的next指针指向这个头节点 //并将头节点指针(*my_free_list)指向p 这样p就是这条链表的新的头节点 my_free_list = free_list + FREELIST_INDEX(n); q->free_list_link = *my_free_list; *my_free_list = q; } //1 //注意在第二级deallocate中并没有调用free 这意味着16条链表将会无限拉长 //deallocate不会将内存还给操作系统 第二级分配器不会将内存还给操作系统 //但是电脑上并不会只跑你这一个程序 内存都在你手上 那其他程序怎么办呢? //2 //如果我不是用第二级分配器申请的内存，比如用直接malloc申请了16个字节 //这16个字节的内存是带cookie的 //但是我调用了第二级分配器的deallocate 是可以将这个malloc申请的内存 //归还到对应大小的链表中 (带cookie并不会有太大的影响 指针是不指向cookie的) //但是如果归还的这块内存 不是用第二级分配器申请的非8的整数倍的内存 //归还时回被还到 其最接近且大于它的8的整数倍的链表中 //在某次第二级allocate会将这块实际没那么大的内存 当作有这么大交给用户去使用 将会造成内存泄漏 static void * reallocate(void *p, size_t old_sz, size_t new_sz); }; //---------------------------------------------- // We allocate memory in large chunks in order to // avoid fragmentingthe malloc heap too much. // We assume that size is properly aligned. // We hold the allocation lock. //---------------------------------------------- template <bool threads, int inst> char * __default_alloc_template<threads, inst>:: chunk_alloc(size_t size, int &amp;nobjs) { char *result; size_t total_bytes = size * nobjs; //size为一个对象的大小 n为20 size_t bytes_left = end_free - start_free; //当前战备池内剩下多少字节 if (bytes_left >= total_bytes) //当前战备池内的大小满足 20个对象这个需求 { //则返回这20个对象大小的内存 //并减少对应的战备池大小 result = start_free; start_free += total_bytes; //减少战备池大小 //地址是向下增长的 start_free<=end_free return (result); //result 为原start_free-start_free+total_bytes这块连续空间 } else if (bytes_left >= size) //当前战备池大小至少能分配一个对象的内存 { // 先计算余下大小到底能分配多少个对象 // 注意nobjs为引用传入在这里传出后 调用者就能知道究竟是分配了多少个 // 对象的内存 nobjs = bytes_left / size; total_bytes = size * nobjs; //余下的内存最多分配nobjs个对象 这nobjs个对象的总大小为total_bytes result = start_free; start_free += total_bytes; //减少战备池大小 return (result); //result 为原start_free-start_free+total_bytes这块连续空间 } else { //当前战备池大小连一个对象大小的内存空间都不够了 //则需要去向系统申请新的内存空间 并且将当前pool作为碎片交给对应的链表管理 //申请--(我们之前一直有提到的 2*20*sizeof(对象) + ROUNDUP(累计申请量>>4)) //其中20*sizeof(对象)的空间返回给调用者，余下的交给内存池 size_t bytes_to_get = 2 * total_bytes + ROUND_UP(heap_size >> 4); // Try to make use of the left-over piece. if (bytes_left > 0) //当前pool是有内存的并非刚好用完 则这些内存就是碎片要交给对应的链表管理 { //将碎片交给对应的链表管理 obj *volatile *my_free_list = free_list + FREELIST_INDEX(bytes_left); //start_free就是碎片的起始地址 ((obj *)start_free)->free_list_link = *my_free_list; //将碎片插到对应链表的头之前 *my_free_list = (obj *)start_free; //将碎片作为新的头节点 } start_free = (char *)malloc(bytes_to_get); //去 malloc 2*20*sizeof(对象) + ROUNDUP(累计申请量>>4) //将新申请的这块内存的首地址 作为pool的新的起始地址start_free if (0 == start_free) //malloc 申请失败会返回0 { //应对堆中内存不够 malloc申请失败的情况 int i; obj *volatile *my_free_list, *p; //Try to make do with what we have. That can't //hurt. We do not try smaller requests, since that tends //to result in disaster on multi-process machines. //找当前size对应链表的右边的链表(右边链表中的节点内存都是大于size的) 看右边链表中是否 //还有内存节点 有的话应急直接拿来用 切出1个size大内存返回给用户 余下的作为pool战备池 //例如szie=80的话 -- 向右边 查看管理88,96,104,112大小的节点 //因该从size+__ALIGN开始循环更合理，因为size链表肯定没节点 要不然也不会到当前这个地步 for (i = size; i <= __MAX_BYTES; i += __ALIGN) { my_free_list = free_list + FREELIST_INDEX(i); p = *my_free_list; if (0 != p) //有右边的链表 有多余的节点 我们拿来借用 { //p为我们借用的那块内存节点的首地址(也是那条链表头节点的首地址) *my_free_list = p->free_list_link; //p被借用了 那条链表更新头节点为下个节点 //借来的这块空间 放到战备池中！！！！ start_free指向这块首节地址 start_free = (char *)p; end_free = start_free + i; return (chunk_alloc(size, nobjs)); //进行递归调用 在下一层的调用中 就可以直接满足我们的要求 //在上面的两个if就return了对应空间的大小 //这个递归只会向下一层就return 不会继续深入了 //Any leftover piece will eventually make it to the //right free list. } } //右边的链表中也没有内存节点(别人也破产了 借不到东西) 穷途末路了 //拿不到内存 调用第一级分配器 第一级分配器会调用handler(out of memory)循环请求内存 //看是否有进程/线程刚好释放内存则可马上拿来填填补这个需求 end_free = 0; //In case of exception. start_free = (char *)malloc_alloc::allocate(bytes_to_get); //This should either throw an exception or //remedy the situation. Thus we assume it //succeeded. } // malloc分配成功 分配了我们要求的bytes_to_get这样大量的内存 heap_size += bytes_to_get; //累计申请量 end_free = start_free + bytes_to_get; //战备池池底 //成功申请了bytes_left //进行递归调用 在下一层的调用中 就可以直接满足我们的要求 //在上面的两个if就return了对应空间的大小 //这个递归只会向下一层就return 不会继续深入了 return (chunk_alloc(size, nobjs)); } } //---------------------------------------------- // Returns an object of size n, and optionally adds // to size n free list.We assume that n is properly aligned. // We hold the allocation lock. //---------------------------------------------- template <bool threads, int inst> void *__default_alloc_template<threads, inst>:: refill(size_t n) //n为字节大小 已经上调为8的倍数 { int nobjs = 20; //申请40个对象大小的内存 1个返回用户 19给链表 20个加入战备池中 //预设要20个 但不一定能取到20个 nobjs是引用在申请完后会返回究竟申请多少个对象大小的内存 char *chunk = chunk_alloc(n, nobjs); //传回nobjs个对象大小的内存(期望是20个) obj *volatile *my_free_list; //obj** my_free_list; obj *result; obj *current_obj; obj *next_obj; int i; if (1 == nobjs) //实际只拿到1个对象大小的内存 则将这块内存直接返回给用户 return (chunk); //运行到这里说明有不止1块 1块给用户后还有多余 则多余的交给对应大小的链表管理 //找到管理对应大小的 这条链表的头节点的地址*my_free_list my_free_list = free_list + FREELIST_INDEX(n); //Build free list in chunk //将chunk内多余的内存 挂到对应的链表上 result = (obj *)chunk; //大块 中的第一个(对象大小)的区块 作为result返回给用户 //余下的区块要串到链表上 *my_free_list = next_obj = (obj *)(chunk + n); //第二个区块的首地址 for (i = 1;; ++i) //从1开始将返回给用户的那个排除 { current_obj = next_obj; //上次的下一块 就是当前块 next_obj = (obj *)((char *)next_obj + n); //下一块 //因为拿到的内存是一整块连续的 干净的内存没什么对象变量 //我们需要切割成一块又一块 大小为n的区块并将它们串起来 //所谓切割就是将指针所指处+n个字节先使其指向下个区块的首地址 //再转型为obj(使大小为n区块的前四字节变为指针 可指向下一个区块 //从而实现串联) if (nobjs - 1 == i) { //最后一块 其next指针指向null 之后结束循环 current_obj->free_list_link = 0; break; } else { current_obj->free_list_link = next_obj; //当前块指向下一块 串成单向链表 } } return (result); } //---------------------------------------------- template <bool threads, int inst> char *__default_alloc_template<threads, inst>::start_free = 0; //战备池起始地址 template <bool threads, int inst> char *__default_alloc_template<threads, inst>::end_free = 0; //战备池终止地址 template <bool threads, int inst> size_t __default_alloc_template<threads, inst>::heap_size = 0; //累计从堆上申请的内存 template <bool threads, int inst> typename __default_alloc_template<threads, inst>::obj *volatile __default_alloc_template<threads, inst>::free_list[__NFREELISTS] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, }; // free_lsit链表数组 //---------------------------------------------- //令第2級配置器的名稱為 alloc //实例化模板类型 并重命名 typedef __default_alloc_template<false, 0> alloc; // void test_G29_alloc() { cout << &#34;\n\n\ntest_global_allocator_with_16_freelist().......... \n&#34;; void *p1 = alloc::allocate(120); void *p2 = alloc::allocate(72); void *p3 = alloc::allocate(60); //不是 8 倍數 cout << p1 << ' ' << p2 << ' ' << p3 << endl; alloc::deallocate(p1, 120); alloc::deallocate(p2, 72); alloc::deallocate(p3, 60); //以下, 不能搭配容器來測試, 因為新版 G++ 對於 allocator 有更多要求 (詢問更多 typedef 而 alloc 都無法回答) //它其實就是 G4.9 __pool_alloc，所以讓 G4.9容器使用 __pool_alloc 也就等同於這裡所要的測試 /* vector<int, simple_alloc<int,alloc>> v; for(int i=0; i< 1000; ++i) v.push_back(i); for(int i=700; i< 720; ++i) cout << v[i] << ' '; \*/ cout << endl; } } //namespace //----------------------------------------------------"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"allocator7 std allocator 3 G2.9源码注释","item":"https://jler666.github.io/cpp/dm2tbf/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"allocator7 std allocator 3 G2.9源码注释","name":"allocator7 std allocator 3 G2.9源码注释","description":"// #include \u0026lt;cstdlib\u0026gt; #include \u0026lt;cstddef\u0026gt; #include \u0026lt;new\u0026gt; #include \u0026lt;iostream\u0026gt; using namespace std; namespace jj11 { //本處完全模仿 SGI STL, G2.92 的 std::alloc //放在 namespace 中因此和 std 不衝突 //此手法和 G4.92 ext\\__pool_alloc.h 也完全相同. #define __THROW_BAD_ALLOC \\ cerr \u0026lt;\u0026lt; \u0026#34;out of memory\u0026#34; \u0026lt;\u0026lt; endl; \\ exit(1) //---------------------------------------------- // 第1級配置器。 //---------------------------------------------- template \u0026lt;int inst\u0026gt; //申请的内存大于128字节 调用第一级分配器 第一级分配器直接调用 malloc从堆中拿内存 //没有其他多余出来 //当第二级分配器 申请内存失败后 会调用第一级分配器的oom_realloc循环申请内存 直到拿到内存 // class __malloc_alloc_template { private: static void *oom_malloc(size_t); static void *oom_realloc(void *, size_t); //老版本c++ 新版本调用的是::operator new() 对应的无内存处理是set_new_handler() //在新的gnu版本中不存在第一级分配器 static void (*__malloc_alloc_oom_handler)(); public: static void *allocate(size_t n) { void *result = malloc(n); //直接使用 malloc() if (0 == result) result = oom_malloc(n); return result; } static void deallocate(void *p, size_t /* n */) { free(p); //直接使用 free() } static void *reallocate(void *p, size_t /* old_sz */, size_t new_sz) { void *result = realloc(p, new_sz); //直接使用 realloc() if (0 == result) result = oom_realloc(p, new_sz); return result; } static void (*set_malloc_handler(void (*f)()))() { //類似 C++ 的 set_new_handler(). void (*old)() = __malloc_alloc_oom_handler; __malloc_alloc_oom_handler = f; return (old); } }; //---------------------------------------------- template \u0026lt;int inst\u0026gt; void (*__malloc_alloc_template\u0026lt;inst\u0026gt;::__malloc_alloc_oom_handler)() = 0; template \u0026lt;int inst\u0026gt; void *__malloc_alloc_template\u0026lt;inst\u0026gt;::oom_malloc(size_t n) { void (*my_malloc_handler)(); void *result; for (;;) { //不斷嘗試釋放、配置、再釋放、再配置… my_malloc_handler = __malloc_alloc_oom_handler; if (0 == my_malloc_handler) { __THROW_BAD_ALLOC; } (*my_malloc_handler)(); //呼叫處理常式，企圖釋放記憶體 result = malloc(n); //再次嘗試配置記憶體 if (result) return (result); } } template \u0026lt;int inst\u0026gt; void *__malloc_alloc_template\u0026lt;inst\u0026gt;::oom_realloc(void *p, size_t n) { void (*my_malloc_handler)(); void *result; for (;;) { //不斷嘗試釋放、配置、再釋放、再配置… my_malloc_handler = __malloc_alloc_oom_handler; if (0 == my_malloc_handler) { __THROW_BAD_ALLOC; } (*my_malloc_handler)(); //呼叫處理常式，企圖釋放記憶體。 result = realloc(p, n); //再次嘗試配置記憶體。 if (result) return (result); } } //---------------------------------------------- //第二级分配器包装 //第二级分配器的分配单位是字节 这里通过模板重新包装为以元素个数为分配单位 typedef __malloc_alloc_template\u0026lt;0\u0026gt; malloc_alloc; template \u0026lt;class T, class Alloc\u0026gt; class simple_alloc { public: static T *allocate(size_t n) { return 0 == n ? 0 : (T *)Alloc::allocate(n * sizeof(T)); } static T *allocate(void) { return (T *)Alloc::allocate(sizeof(T)); } static void deallocate(T *p, size_t n) { if (0 != n) Alloc::deallocate(p, n * sizeof(T)); } static void deallocate(T *p) { Alloc::deallocate(p, sizeof(T)); } }; // 用例 // template \u0026lt;class T, class Alloc = alloc\u0026gt; // class vector // { // protected: // //专属分配器每次分配一个元素大小 // typedef simple_alloc\u0026lt;T, Alloc\u0026gt; data_allocator; // .... // result = data_allocator::allocator; // .... // data_allocator::deallocate(result); // }; //---------------------------------------------- //第二級配置器 //---------------------------------------------- enum { __ALIGN = 8 }; //小區塊的上調邊界 ROUNDUP时向上8字节对齐 链表按8字节为间隔区分管理 enum { __MAX_BYTES = 128 }; //小區塊的上限 //8-128字节的申请才会使用第二级分配器 enum { __NFREELISTS = __MAX_BYTES / __ALIGN }; //free-lists 個數 16条链表 //上面的这三个枚举量因该用 static const int x = N //取代 enum { x = N }, 但目前支援該性質的編譯器不多 //本例中兩個 template 參數完全沒有派上用場 template \u0026lt;bool threads, int inst\u0026gt; class __default_alloc_template { private: //上调传入的bytes到它最接近的8的整数倍 static size_t ROUND_UP(size_t bytes) { return (((bytes) + __ALIGN - 1) \u0026amp; ~(__ALIGN - 1)); //举例 如果bytes = 13 //则 (13+7)\u0026amp;~7 --- 10100 \u0026amp; ~(00111) //= 10100 \u0026amp; 11000 = 10000 = 16 ( 其实bytes是8位的 这里只写出5位) } private: //改用struct 也可以 //嵌入式指针 //用struct更好理解 //就像链表中的next指针一样 每个obj对象只有1个成员变量就是指针 可以指向obj类的其他对象 //注意 我们只知道 我们要分配的单个对象的大小 但是不知道我们要分配对象的类型 //所以这里malloc没办法强转为那个对象的类型 但是知道大小一样也可以将这一大块空间 //分割为多个 szieof(对象)的小块并用指针(上个小块的next指针)指向这小块的首地址 串成一个链表 // chunk = szieof(对象) * n // p = (obj *)malloc(chunk); // p指针是在不断移动的 不断地指向每一个size大小内存块的首地址 //(p其实指向的是size大小空间的前四个字节组成的obj的首地址) next指针就是free_list_link // |next指针 .... 这块有size大|...next指针 .... 这块有size大|....| // 每块空间首地址被强转为obj型 所以空间中的前4字节暂时被当作next指针 串联其他size大小的空间 // |-------------------------|(next指向下一块的首地址) // 只有在分配和回收的时候我们才需要这个next指针 // 在allocate return了这块空间的首地址后 内存块已经不在链表里了next指针没有意义了 // 这四个字节可以去存真正的对象内容 // 将每一块串成list union obj { union obj *free_list_link; }; private: static obj *volatile free_list[__NFREELISTS]; static size_t FREELIST_INDEX(size_t bytes) { return (((bytes) + __ALIGN - 1) / __ALIGN - 1); } // Returns an object of size n, and optionally adds to size n free list. static void *refill(size_t n); // Allocates a chunk for nobjs of size \u0026#34;size\u0026#34;. nobjs may be reduced // if it is inconvenient to allocate the requested number. static char *chunk_alloc(size_t size, int \u0026amp;nobjs); // Chunk allocation state. static char *start_free; static char *end_free; static size_t heap_size; public: // n为一个对象的大小(字节) static void *allocate(size_t n) //n must be \u0026gt; 0 { obj *volatile *my_free_list; //obj** my_free_list; 用于指向16条链表中一条的首地址 obj *result; //申请的大小大于128字节 调用第一级分配器 直接用malloc来分配 if (n \u0026gt; (size_t)__MAX_BYTES) { return (malloc_alloc::allocate(n)); } my_free_list = free_list + FREELIST_INDEX(n); //my_free_list指向 指向第n条链表头节点的指针(my_free_list为二级指针) result = *my_free_list; if (result == 0) //一个指向第n条链表头节点的指针 { //这个指针为0说明 此指针并没有指向链表节点---这条链表内内存节点已经用完了 //需要再次分配 去malloc n*20*2+ROUNDUP(HEAPSIZE\u0026gt;\u0026gt;4)的空间给这条链表 void *r = refill(ROUND_UP(n)); return r; } //result此指针非空 说明result指向的这条链表至少还有一个内存节点(链表头节点) //则返回这个链表头节点给用户 //头节点指针指向头节点的下个节点作为新的头节点 *my_free_list = result-\u0026gt;free_list_link; return (result); } //回收对象内存块 p为这个对象内存的首地址 n为这个对象的大小 //将这个对象节点 回收到管理对应大小的链表的头节点处(作为链表新的头节点的方式 回收回链表中) static void deallocate(void *p, size_t n) //p may not be 0 { obj *q = (obj *)p; obj *volatile *my_free_list; //obj** my_free_list; //大小大于128字节 不由第二级分配器管理 直接调用第一级deallocate 由free来回收 if (n \u0026gt; (size_t)__MAX_BYTES) { malloc_alloc::deallocate(p, n); return; } //找到管理对应大小的 这条链表的头节点的地址*my_free_list //将回收回来的这个节点p的next指针指向这个头节点 //并将头节点指针(*my_free_list)指向p 这样p就是这条链表的新的头节点 my_free_list = free_list + FREELIST_INDEX(n); q-\u0026gt;free_list_link = *my_free_list; *my_free_list = q; } //1 //注意在第二级deallocate中并没有调用free 这意味着16条链表将会无限拉长 //deallocate不会将内存还给操作系统 第二级分配器不会将内存还给操作系统 //但是电脑上并不会只跑你这一个程序 内存都在你手上 那其他程序怎么办呢? //2 //如果我不是用第二级分配器申请的内存，比如用直接malloc申请了16个字节 //这16个字节的内存是带cookie的 //但是我调用了第二级分配器的deallocate 是可以将这个malloc申请的内存 //归还到对应大小的链表中 (带cookie并不会有太大的影响 指针是不指向cookie的) //但是如果归还的这块内存 不是用第二级分配器申请的非8的整数倍的内存 //归还时回被还到 其最接近且大于它的8的整数倍的链表中 //在某次第二级allocate会将这块实际没那么大的内存 当作有这么大交给用户去使用 将会造成内存泄漏 static void * reallocate(void *p, size_t old_sz, size_t new_sz); }; //---------------------------------------------- // We allocate memory in large chunks in order to // avoid fragmentingthe malloc heap too much. // We assume that size is properly aligned. // We hold the allocation lock. //---------------------------------------------- template \u0026lt;bool threads, int inst\u0026gt; char * __default_alloc_template\u0026lt;threads, inst\u0026gt;:: chunk_alloc(size_t size, int \u0026amp;nobjs) { char *result; size_t total_bytes = size * nobjs; //size为一个对象的大小 n为20 size_t bytes_left = end_free - start_free; //当前战备池内剩下多少字节 if (bytes_left \u0026gt;= total_bytes) //当前战备池内的大小满足 20个对象这个需求 { //则返回这20个对象大小的内存 //并减少对应的战备池大小 result = start_free; start_free += total_bytes; //减少战备池大小 //地址是向下增长的 start_free\u0026lt;=end_free return (result); //result 为原start_free-start_free+total_bytes这块连续空间 } else if (bytes_left \u0026gt;= size) //当前战备池大小至少能分配一个对象的内存 { // 先计算余下大小到底能分配多少个对象 // 注意nobjs为引用传入在这里传出后 调用者就能知道究竟是分配了多少个 // 对象的内存 nobjs = bytes_left / size; total_bytes = size * nobjs; //余下的内存最多分配nobjs个对象 这nobjs个对象的总大小为total_bytes result = start_free; start_free += total_bytes; //减少战备池大小 return (result); //result 为原start_free-start_free+total_bytes这块连续空间 } else { //当前战备池大小连一个对象大小的内存空间都不够了 //则需要去向系统申请新的内存空间 并且将当前pool作为碎片交给对应的链表管理 //申请--(我们之前一直有提到的 2*20*sizeof(对象) + ROUNDUP(累计申请量\u0026gt;\u0026gt;4)) //其中20*sizeof(对象)的空间返回给调用者，余下的交给内存池 size_t bytes_to_get = 2 * total_bytes + ROUND_UP(heap_size \u0026gt;\u0026gt; 4); // Try to make use of the left-over piece. if (bytes_left \u0026gt; 0) //当前pool是有内存的并非刚好用完 则这些内存就是碎片要交给对应的链表管理 { //将碎片交给对应的链表管理 obj *volatile *my_free_list = free_list + FREELIST_INDEX(bytes_left); //start_free就是碎片的起始地址 ((obj *)start_free)-\u0026gt;free_list_link = *my_free_list; //将碎片插到对应链表的头之前 *my_free_list = (obj *)start_free; //将碎片作为新的头节点 } start_free = (char *)malloc(bytes_to_get); //去 malloc 2*20*sizeof(对象) + ROUNDUP(累计申请量\u0026gt;\u0026gt;4) //将新申请的这块内存的首地址 作为pool的新的起始地址start_free if (0 == start_free) //malloc 申请失败会返回0 { //应对堆中内存不够 malloc申请失败的情况 int i; obj *volatile *my_free_list, *p; //Try to make do with what we have. That can\u0026#39;t //hurt. We do not try smaller requests, since that tends //to result in disaster on multi-process machines. //找当前size对应链表的右边的链表(右边链表中的节点内存都是大于size的) 看右边链表中是否 //还有内存节点 有的话应急直接拿来用 切出1个size大内存返回给用户 余下的作为pool战备池 //例如szie=80的话 -- 向右边 查看管理88,96,104,112大小的节点 //因该从size+__ALIGN开始循环更合理，因为size链表肯定没节点 要不然也不会到当前这个地步 for (i = size; i \u0026lt;= __MAX_BYTES; i += __ALIGN) { my_free_list = free_list + FREELIST_INDEX(i); p = *my_free_list; if (0 != p) //有右边的链表 有多余的节点 我们拿来借用 { //p为我们借用的那块内存节点的首地址(也是那条链表头节点的首地址) *my_free_list = p-\u0026gt;free_list_link; //p被借用了 那条链表更新头节点为下个节点 //借来的这块空间 放到战备池中！！！！ start_free指向这块首节地址 start_free = (char *)p; end_free = start_free + i; return (chunk_alloc(size, nobjs)); //进行递归调用 在下一层的调用中 就可以直接满足我们的要求 //在上面的两个if就return了对应空间的大小 //这个递归只会向下一层就return 不会继续深入了 //Any leftover piece will eventually make it to the //right free list. } } //右边的链表中也没有内存节点(别人也破产了 借不到东西) 穷途末路了 //拿不到内存 调用第一级分配器 第一级分配器会调用handler(out of memory)循环请求内存 //看是否有进程/线程刚好释放内存则可马上拿来填填补这个需求 end_free = 0; //In case of exception. start_free = (char *)malloc_alloc::allocate(bytes_to_get); //This should either throw an exception or //remedy the situation. Thus we assume it //succeeded. } // malloc分配成功 分配了我们要求的bytes_to_get这样大量的内存 heap_size += bytes_to_get; //累计申请量 end_free = start_free + bytes_to_get; //战备池池底 //成功申请了bytes_left //进行递归调用 在下一层的调用中 就可以直接满足我们的要求 //在上面的两个if就return了对应空间的大小 //这个递归只会向下一层就return 不会继续深入了 return (chunk_alloc(size, nobjs)); } } //---------------------------------------------- // Returns an object of size n, and optionally adds // to size n free list.We assume that n is properly aligned. // We hold the allocation lock. //---------------------------------------------- template \u0026lt;bool threads, int inst\u0026gt; void *__default_alloc_template\u0026lt;threads, inst\u0026gt;:: refill(size_t n) //n为字节大小 已经上调为8的倍数 { int nobjs = 20; //申请40个对象大小的内存 1个返回用户 19给链表 20个加入战备池中 //预设要20个 但不一定能取到20个 nobjs是引用在申请完后会返回究竟申请多少个对象大小的内存 char *chunk = chunk_alloc(n, nobjs); //传回nobjs个对象大小的内存(期望是20个) obj *volatile *my_free_list; //obj** my_free_list; obj *result; obj *current_obj; obj *next_obj; int i; if (1 == nobjs) //实际只拿到1个对象大小的内存 则将这块内存直接返回给用户 return (chunk); //运行到这里说明有不止1块 1块给用户后还有多余 则多余的交给对应大小的链表管理 //找到管理对应大小的 这条链表的头节点的地址*my_free_list my_free_list = free_list + FREELIST_INDEX(n); //Build free list in chunk //将chunk内多余的内存 挂到对应的链表上 result = (obj *)chunk; //大块 中的第一个(对象大小)的区块 作为result返回给用户 //余下的区块要串到链表上 *my_free_list = next_obj = (obj *)(chunk + n); //第二个区块的首地址 for (i = 1;; ++i) //从1开始将返回给用户的那个排除 { current_obj = next_obj; //上次的下一块 就是当前块 next_obj = (obj *)((char *)next_obj + n); //下一块 //因为拿到的内存是一整块连续的 干净的内存没什么对象变量 //我们需要切割成一块又一块 大小为n的区块并将它们串起来 //所谓切割就是将指针所指处+n个字节先使其指向下个区块的首地址 //再转型为obj(使大小为n区块的前四字节变为指针 可指向下一个区块 //从而实现串联) if (nobjs - 1 == i) { //最后一块 其next指针指向null 之后结束循环 current_obj-\u0026gt;free_list_link = 0; break; } else { current_obj-\u0026gt;free_list_link = next_obj; //当前块指向下一块 串成单向链表 } } return (result); } //---------------------------------------------- template \u0026lt;bool threads, int inst\u0026gt; char *__default_alloc_template\u0026lt;threads, inst\u0026gt;::start_free = 0; //战备池起始地址 template \u0026lt;bool threads, int inst\u0026gt; char *__default_alloc_template\u0026lt;threads, inst\u0026gt;::end_free = 0; //战备池终止地址 template \u0026lt;bool threads, int inst\u0026gt; size_t __default_alloc_template\u0026lt;threads, inst\u0026gt;::heap_size = 0; //累计从堆上申请的内存 template \u0026lt;bool threads, int inst\u0026gt; typename __default_alloc_template\u0026lt;threads, inst\u0026gt;::obj *volatile __default_alloc_template\u0026lt;threads, inst\u0026gt;::free_list[__NFREELISTS] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, }; // free_lsit链表数组 //---------------------------------------------- //令第2級配置器的名稱為 alloc //实例化模板类型 并重命名 typedef __default_alloc_template\u0026lt;false, 0\u0026gt; alloc; // void test_G29_alloc() { cout \u0026lt;\u0026lt; \u0026#34;\\n\\n\\ntest_global_allocator_with_16_freelist().......... \\n\u0026#34;; void *p1 = alloc::allocate(120); void *p2 = alloc::allocate(72); void *p3 = alloc::allocate(60); //不是 8 倍數 cout \u0026lt;\u0026lt; p1 \u0026lt;\u0026lt; \u0026#39; \u0026#39; \u0026lt;\u0026lt; p2 \u0026lt;\u0026lt; \u0026#39; \u0026#39; \u0026lt;\u0026lt; p3 \u0026lt;\u0026lt; endl; alloc::deallocate(p1, 120); alloc::deallocate(p2, 72); alloc::deallocate(p3, 60); //以下, 不能搭配容器來測試, 因為新版 G++ 對於 allocator 有更多要求 (詢問更多 typedef 而 alloc 都無法回答) //它其實就是 G4.9 __pool_alloc，所以讓 G4.9容器使用 __pool_alloc 也就等同於這裡所要的測試 /* vector\u0026lt;int, simple_alloc\u0026lt;int,alloc\u0026gt;\u0026gt; v; for(int i=0; i\u0026lt; 1000; ++i) v.push_back(i); for(int i=700; i\u0026lt; 720; ++i) cout \u0026lt;\u0026lt; v[i] \u0026lt;\u0026lt; \u0026#39; \u0026#39;; \\*/ cout \u0026lt;\u0026lt; endl; } } //namespace //---------------------------------------------------- ","keywords":[],"articleBody":"// #include #include #include #include using namespace std; namespace jj11 { //本處完全模仿 SGI STL, G2.92 的 std::alloc //放在 namespace 中因此和 std 不衝突 //此手法和 G4.92 ext\\__pool_alloc.h 也完全相同. #define __THROW_BAD_ALLOC \\ cerr \u003c\u003c \"out of memory\" \u003c\u003c endl; \\ exit(1) //---------------------------------------------- // 第1級配置器。 //---------------------------------------------- template \u003cint inst\u003e //申请的内存大于128字节 调用第一级分配器 第一级分配器直接调用 malloc从堆中拿内存 //没有其他多余出来 //当第二级分配器 申请内存失败后 会调用第一级分配器的oom_realloc循环申请内存 直到拿到内存 // class __malloc_alloc_template { private: static void *oom_malloc(size_t); static void *oom_realloc(void *, size_t); //老版本c++ 新版本调用的是::operator new() 对应的无内存处理是set_new_handler() //在新的gnu版本中不存在第一级分配器 static void (*__malloc_alloc_oom_handler)(); public: static void *allocate(size_t n) { void *result = malloc(n); //直接使用 malloc() if (0 == result) result = oom_malloc(n); return result; } static void deallocate(void *p, size_t /* n */) { free(p); //直接使用 free() } static void *reallocate(void *p, size_t /* old_sz */, size_t new_sz) { void *result = realloc(p, new_sz); //直接使用 realloc() if (0 == result) result = oom_realloc(p, new_sz); return result; } static void (*set_malloc_handler(void (*f)()))() { //類似 C++ 的 set_new_handler(). void (*old)() = __malloc_alloc_oom_handler; __malloc_alloc_oom_handler = f; return (old); } }; //---------------------------------------------- template \u003cint inst\u003e void (*__malloc_alloc_template\u003cinst\u003e::__malloc_alloc_oom_handler)() = 0; template \u003cint inst\u003e void *__malloc_alloc_template\u003cinst\u003e::oom_malloc(size_t n) { void (*my_malloc_handler)(); void *result; for (;;) { //不斷嘗試釋放、配置、再釋放、再配置… my_malloc_handler = __malloc_alloc_oom_handler; if (0 == my_malloc_handler) { __THROW_BAD_ALLOC; } (*my_malloc_handler)(); //呼叫處理常式，企圖釋放記憶體 result = malloc(n); //再次嘗試配置記憶體 if (result) return (result); } } template \u003cint inst\u003e void *__malloc_alloc_template\u003cinst\u003e::oom_realloc(void *p, size_t n) { void (*my_malloc_handler)(); void *result; for (;;) { //不斷嘗試釋放、配置、再釋放、再配置… my_malloc_handler = __malloc_alloc_oom_handler; if (0 == my_malloc_handler) { __THROW_BAD_ALLOC; } (*my_malloc_handler)(); //呼叫處理常式，企圖釋放記憶體。 result = realloc(p, n); //再次嘗試配置記憶體。 if (result) return (result); } } //---------------------------------------------- //第二级分配器包装 //第二级分配器的分配单位是字节 这里通过模板重新包装为以元素个数为分配单位 typedef __malloc_alloc_template\u003c0\u003e malloc_alloc; template \u003cclass T, class Alloc\u003e class simple_alloc { public: static T *allocate(size_t n) { return 0 == n ? 0 : (T *)Alloc::allocate(n * sizeof(T)); } static T *allocate(void) { return (T *)Alloc::allocate(sizeof(T)); } static void deallocate(T *p, size_t n) { if (0 != n) Alloc::deallocate(p, n * sizeof(T)); } static void deallocate(T *p) { Alloc::deallocate(p, sizeof(T)); } }; // 用例 // template // class vector // { // protected: // //专属分配器每次分配一个元素大小 // typedef simple_alloc data_allocator; // .... // result = data_allocator::allocator; // .... // data_allocator::deallocate(result); // }; //---------------------------------------------- //第二級配置器 //---------------------------------------------- enum { __ALIGN = 8 }; //小區塊的上調邊界 ROUNDUP时向上8字节对齐 链表按8字节为间隔区分管理 enum { __MAX_BYTES = 128 }; //小區塊的上限 //8-128字节的申请才会使用第二级分配器 enum { __NFREELISTS = __MAX_BYTES / __ALIGN }; //free-lists 個數 16条链表 //上面的这三个枚举量因该用 static const int x = N //取代 enum { x = N }, 但目前支援該性質的編譯器不多 //本例中兩個 template 參數完全沒有派上用場 template \u003cbool threads, int inst\u003e class __default_alloc_template { private: //上调传入的bytes到它最接近的8的整数倍 static size_t ROUND_UP(size_t bytes) { return (((bytes) + __ALIGN - 1) \u0026 ~(__ALIGN - 1)); //举例 如果bytes = 13 //则 (13+7)\u0026~7 --- 10100 \u0026 ~(00111) //= 10100 \u0026 11000 = 10000 = 16 ( 其实bytes是8位的 这里只写出5位) } private: //改用struct 也可以 //嵌入式指针 //用struct更好理解 //就像链表中的next指针一样 每个obj对象只有1个成员变量就是指针 可以指向obj类的其他对象 //注意 我们只知道 我们要分配的单个对象的大小 但是不知道我们要分配对象的类型 //所以这里malloc没办法强转为那个对象的类型 但是知道大小一样也可以将这一大块空间 //分割为多个 szieof(对象)的小块并用指针(上个小块的next指针)指向这小块的首地址 串成一个链表 // chunk = szieof(对象) * n // p = (obj *)malloc(chunk); // p指针是在不断移动的 不断地指向每一个size大小内存块的首地址 //(p其实指向的是size大小空间的前四个字节组成的obj的首地址) next指针就是free_list_link // |next指针 .... 这块有size大|...next指针 .... 这块有size大|....| // 每块空间首地址被强转为obj型 所以空间中的前4字节暂时被当作next指针 串联其他size大小的空间 // |-------------------------|(next指向下一块的首地址) // 只有在分配和回收的时候我们才需要这个next指针 // 在allocate return了这块空间的首地址后 内存块已经不在链表里了next指针没有意义了 // 这四个字节可以去存真正的对象内容 // 将每一块串成list union obj { union obj *free_list_link; }; private: static obj *volatile free_list[__NFREELISTS]; static size_t FREELIST_INDEX(size_t bytes) { return (((bytes) + __ALIGN - 1) / __ALIGN - 1); } // Returns an object of size n, and optionally adds to size n free list. static void *refill(size_t n); // Allocates a chunk for nobjs of size \"size\". nobjs may be reduced // if it is inconvenient to allocate the requested number. static char *chunk_alloc(size_t size, int \u0026nobjs); // Chunk allocation state. static char *start_free; static char *end_free; static size_t heap_size; public: // n为一个对象的大小(字节) static void *allocate(size_t n) //n must be \u003e 0 { obj *volatile *my_free_list; //obj** my_free_list; 用于指向16条链表中一条的首地址 obj *result; //申请的大小大于128字节 调用第一级分配器 直接用malloc来分配 if (n \u003e (size_t)__MAX_BYTES) { return (malloc_alloc::allocate(n)); } my_free_list = free_list + FREELIST_INDEX(n); //my_free_list指向 指向第n条链表头节点的指针(my_free_list为二级指针) result = *my_free_list; if (result == 0) //一个指向第n条链表头节点的指针 { //这个指针为0说明 此指针并没有指向链表节点---这条链表内内存节点已经用完了 //需要再次分配 去malloc n*20*2+ROUNDUP(HEAPSIZE\u003e\u003e4)的空间给这条链表 void *r = refill(ROUND_UP(n)); return r; } //result此指针非空 说明result指向的这条链表至少还有一个内存节点(链表头节点) //则返回这个链表头节点给用户 //头节点指针指向头节点的下个节点作为新的头节点 *my_free_list = result-\u003efree_list_link; return (result); } //回收对象内存块 p为这个对象内存的首地址 n为这个对象的大小 //将这个对象节点 回收到管理对应大小的链表的头节点处(作为链表新的头节点的方式 回收回链表中) static void deallocate(void *p, size_t n) //p may not be 0 { obj *q = (obj *)p; obj *volatile *my_free_list; //obj** my_free_list; //大小大于128字节 不由第二级分配器管理 直接调用第一级deallocate 由free来回收 if (n \u003e (size_t)__MAX_BYTES) { malloc_alloc::deallocate(p, n); return; } //找到管理对应大小的 这条链表的头节点的地址*my_free_list //将回收回来的这个节点p的next指针指向这个头节点 //并将头节点指针(*my_free_list)指向p 这样p就是这条链表的新的头节点 my_free_list = free_list + FREELIST_INDEX(n); q-\u003efree_list_link = *my_free_list; *my_free_list = q; } //1 //注意在第二级deallocate中并没有调用free 这意味着16条链表将会无限拉长 //deallocate不会将内存还给操作系统 第二级分配器不会将内存还给操作系统 //但是电脑上并不会只跑你这一个程序 内存都在你手上 那其他程序怎么办呢? //2 //如果我不是用第二级分配器申请的内存，比如用直接malloc申请了16个字节 //这16个字节的内存是带cookie的 //但是我调用了第二级分配器的deallocate 是可以将这个malloc申请的内存 //归还到对应大小的链表中 (带cookie并不会有太大的影响 指针是不指向cookie的) //但是如果归还的这块内存 不是用第二级分配器申请的非8的整数倍的内存 //归还时回被还到 其最接近且大于它的8的整数倍的链表中 //在某次第二级allocate会将这块实际没那么大的内存 当作有这么大交给用户去使用 将会造成内存泄漏 static void * reallocate(void *p, size_t old_sz, size_t new_sz); }; //---------------------------------------------- // We allocate memory in large chunks in order to // avoid fragmentingthe malloc heap too much. // We assume that size is properly aligned. // We hold the allocation lock. //---------------------------------------------- template \u003cbool threads, int inst\u003e char * __default_alloc_template\u003cthreads, inst\u003e:: chunk_alloc(size_t size, int \u0026nobjs) { char *result; size_t total_bytes = size * nobjs; //size为一个对象的大小 n为20 size_t bytes_left = end_free - start_free; //当前战备池内剩下多少字节 if (bytes_left \u003e= total_bytes) //当前战备池内的大小满足 20个对象这个需求 { //则返回这20个对象大小的内存 //并减少对应的战备池大小 result = start_free; start_free += total_bytes; //减少战备池大小 //地址是向下增长的 start_free\u003c=end_free return (result); //result 为原start_free-start_free+total_bytes这块连续空间 } else if (bytes_left \u003e= size) //当前战备池大小至少能分配一个对象的内存 { // 先计算余下大小到底能分配多少个对象 // 注意nobjs为引用传入在这里传出后 调用者就能知道究竟是分配了多少个 // 对象的内存 nobjs = bytes_left / size; total_bytes = size * nobjs; //余下的内存最多分配nobjs个对象 这nobjs个对象的总大小为total_bytes result = start_free; start_free += total_bytes; //减少战备池大小 return (result); //result 为原start_free-start_free+total_bytes这块连续空间 } else { //当前战备池大小连一个对象大小的内存空间都不够了 //则需要去向系统申请新的内存空间 并且将当前pool作为碎片交给对应的链表管理 //申请--(我们之前一直有提到的 2*20*sizeof(对象) + ROUNDUP(累计申请量\u003e\u003e4)) //其中20*sizeof(对象)的空间返回给调用者，余下的交给内存池 size_t bytes_to_get = 2 * total_bytes + ROUND_UP(heap_size \u003e\u003e 4); // Try to make use of the left-over piece. if (bytes_left \u003e 0) //当前pool是有内存的并非刚好用完 则这些内存就是碎片要交给对应的链表管理 { //将碎片交给对应的链表管理 obj *volatile *my_free_list = free_list + FREELIST_INDEX(bytes_left); //start_free就是碎片的起始地址 ((obj *)start_free)-\u003efree_list_link = *my_free_list; //将碎片插到对应链表的头之前 *my_free_list = (obj *)start_free; //将碎片作为新的头节点 } start_free = (char *)malloc(bytes_to_get); //去 malloc 2*20*sizeof(对象) + ROUNDUP(累计申请量\u003e\u003e4) //将新申请的这块内存的首地址 作为pool的新的起始地址start_free if (0 == start_free) //malloc 申请失败会返回0 { //应对堆中内存不够 malloc申请失败的情况 int i; obj *volatile *my_free_list, *p; //Try to make do with what we have. That can't //hurt. We do not try smaller requests, since that tends //to result in disaster on multi-process machines. //找当前size对应链表的右边的链表(右边链表中的节点内存都是大于size的) 看右边链表中是否 //还有内存节点 有的话应急直接拿来用 切出1个size大内存返回给用户 余下的作为pool战备池 //例如szie=80的话 -- 向右边 查看管理88,96,104,112大小的节点 //因该从size+__ALIGN开始循环更合理，因为size链表肯定没节点 要不然也不会到当前这个地步 for (i = size; i \u003c= __MAX_BYTES; i += __ALIGN) { my_free_list = free_list + FREELIST_INDEX(i); p = *my_free_list; if (0 != p) //有右边的链表 有多余的节点 我们拿来借用 { //p为我们借用的那块内存节点的首地址(也是那条链表头节点的首地址) *my_free_list = p-\u003efree_list_link; //p被借用了 那条链表更新头节点为下个节点 //借来的这块空间 放到战备池中！！！！ start_free指向这块首节地址 start_free = (char *)p; end_free = start_free + i; return (chunk_alloc(size, nobjs)); //进行递归调用 在下一层的调用中 就可以直接满足我们的要求 //在上面的两个if就return了对应空间的大小 //这个递归只会向下一层就return 不会继续深入了 //Any leftover piece will eventually make it to the //right free list. } } //右边的链表中也没有内存节点(别人也破产了 借不到东西) 穷途末路了 //拿不到内存 调用第一级分配器 第一级分配器会调用handler(out of memory)循环请求内存 //看是否有进程/线程刚好释放内存则可马上拿来填填补这个需求 end_free = 0; //In case of exception. start_free = (char *)malloc_alloc::allocate(bytes_to_get); //This should either throw an exception or //remedy the situation. Thus we assume it //succeeded. } // malloc分配成功 分配了我们要求的bytes_to_get这样大量的内存 heap_size += bytes_to_get; //累计申请量 end_free = start_free + bytes_to_get; //战备池池底 //成功申请了bytes_left //进行递归调用 在下一层的调用中 就可以直接满足我们的要求 //在上面的两个if就return了对应空间的大小 //这个递归只会向下一层就return 不会继续深入了 return (chunk_alloc(size, nobjs)); } } //---------------------------------------------- // Returns an object of size n, and optionally adds // to size n free list.We assume that n is properly aligned. // We hold the allocation lock. //---------------------------------------------- template \u003cbool threads, int inst\u003e void *__default_alloc_template\u003cthreads, inst\u003e:: refill(size_t n) //n为字节大小 已经上调为8的倍数 { int nobjs = 20; //申请40个对象大小的内存 1个返回用户 19给链表 20个加入战备池中 //预设要20个 但不一定能取到20个 nobjs是引用在申请完后会返回究竟申请多少个对象大小的内存 char *chunk = chunk_alloc(n, nobjs); //传回nobjs个对象大小的内存(期望是20个) obj *volatile *my_free_list; //obj** my_free_list; obj *result; obj *current_obj; obj *next_obj; int i; if (1 == nobjs) //实际只拿到1个对象大小的内存 则将这块内存直接返回给用户 return (chunk); //运行到这里说明有不止1块 1块给用户后还有多余 则多余的交给对应大小的链表管理 //找到管理对应大小的 这条链表的头节点的地址*my_free_list my_free_list = free_list + FREELIST_INDEX(n); //Build free list in chunk //将chunk内多余的内存 挂到对应的链表上 result = (obj *)chunk; //大块 中的第一个(对象大小)的区块 作为result返回给用户 //余下的区块要串到链表上 *my_free_list = next_obj = (obj *)(chunk + n); //第二个区块的首地址 for (i = 1;; ++i) //从1开始将返回给用户的那个排除 { current_obj = next_obj; //上次的下一块 就是当前块 next_obj = (obj *)((char *)next_obj + n); //下一块 //因为拿到的内存是一整块连续的 干净的内存没什么对象变量 //我们需要切割成一块又一块 大小为n的区块并将它们串起来 //所谓切割就是将指针所指处+n个字节先使其指向下个区块的首地址 //再转型为obj(使大小为n区块的前四字节变为指针 可指向下一个区块 //从而实现串联) if (nobjs - 1 == i) { //最后一块 其next指针指向null 之后结束循环 current_obj-\u003efree_list_link = 0; break; } else { current_obj-\u003efree_list_link = next_obj; //当前块指向下一块 串成单向链表 } } return (result); } //---------------------------------------------- template \u003cbool threads, int inst\u003e char *__default_alloc_template\u003cthreads, inst\u003e::start_free = 0; //战备池起始地址 template \u003cbool threads, int inst\u003e char *__default_alloc_template\u003cthreads, inst\u003e::end_free = 0; //战备池终止地址 template \u003cbool threads, int inst\u003e size_t __default_alloc_template\u003cthreads, inst\u003e::heap_size = 0; //累计从堆上申请的内存 template \u003cbool threads, int inst\u003e typename __default_alloc_template\u003cthreads, inst\u003e::obj *volatile __default_alloc_template\u003cthreads, inst\u003e::free_list[__NFREELISTS] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, }; // free_lsit链表数组 //---------------------------------------------- //令第2級配置器的名稱為 alloc //实例化模板类型 并重命名 typedef __default_alloc_template\u003cfalse, 0\u003e alloc; // void test_G29_alloc() { cout \u003c\u003c \"\\n\\n\\ntest_global_allocator_with_16_freelist().......... \\n\"; void *p1 = alloc::allocate(120); void *p2 = alloc::allocate(72); void *p3 = alloc::allocate(60); //不是 8 倍數 cout \u003c\u003c p1 \u003c\u003c ' ' \u003c\u003c p2 \u003c\u003c ' ' \u003c\u003c p3 \u003c\u003c endl; alloc::deallocate(p1, 120); alloc::deallocate(p2, 72); alloc::deallocate(p3, 60); //以下, 不能搭配容器來測試, 因為新版 G++ 對於 allocator 有更多要求 (詢問更多 typedef 而 alloc 都無法回答) //它其實就是 G4.9 __pool_alloc，所以讓 G4.9容器使用 __pool_alloc 也就等同於這裡所要的測試 /* vector\u003e v; for(int i=0; i\u003c 1000; ++i) v.push_back(i); for(int i=700; i\u003c 720; ++i) cout \u003c\u003c v[i] \u003c\u003c ' '; \\*/ cout \u003c\u003c endl; } } //namespace //---------------------------------------------------- ","wordCount":"1462","inLanguage":"en","datePublished":"2022-02-13T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/dm2tbf/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">allocator7 std allocator 3 G2.9源码注释</h1><div class=post-meta><span title=2022-02-13T00:00:00+00:00>创建于 2022-02-13</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>// #include &lt;cstdlib&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstddef&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;new&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;iostream&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>using</span> <span style=color:#66d9ef>namespace</span> std;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>namespace</span> jj11
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//本處完全模仿 SGI STL, G2.92 的 std::alloc
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//放在 namespace 中因此和 std 不衝突
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//此手法和 G4.92 ext\__pool_alloc.h 也完全相同.
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#define __THROW_BAD_ALLOC            \
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    cerr &lt;&lt; &#34;out of memory&#34; &lt;&lt; endl; \
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    exit(1)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//----------------------------------------------
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 第1級配置器。
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//----------------------------------------------
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span> inst<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//申请的内存大于128字节 调用第一级分配器 第一级分配器直接调用 malloc从堆中拿内存
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//没有其他多余出来
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//当第二级分配器 申请内存失败后 会调用第一级分配器的oom_realloc循环申请内存 直到拿到内存
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>class</span> <span style=color:#a6e22e>__malloc_alloc_template</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>oom_malloc(size_t);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>oom_realloc</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>, size_t);
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//老版本c++ 新版本调用的是::operator new() 对应的无内存处理是set_new_handler()
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//在新的gnu版本中不存在第一级分配器
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#a6e22e>void</span> (<span style=color:#f92672>*</span>__malloc_alloc_oom_handler)();
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>allocate(size_t n)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>result <span style=color:#f92672>=</span> malloc(n); <span style=color:#75715e>//直接使用 malloc()
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (<span style=color:#ae81ff>0</span> <span style=color:#f92672>==</span> result)
+</span></span><span style=display:flex><span>                result <span style=color:#f92672>=</span> oom_malloc(n);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> result;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>deallocate</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>p, size_t <span style=color:#75715e>/* n */</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            free(p); <span style=color:#75715e>//直接使用 free()
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>reallocate</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>p, size_t <span style=color:#75715e>/* old_sz */</span>, size_t new_sz)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>result <span style=color:#f92672>=</span> realloc(p, new_sz); <span style=color:#75715e>//直接使用 realloc()
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (<span style=color:#ae81ff>0</span> <span style=color:#f92672>==</span> result)
+</span></span><span style=display:flex><span>                result <span style=color:#f92672>=</span> oom_realloc(p, new_sz);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> result;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#a6e22e>void</span> (<span style=color:#f92672>*</span>set_malloc_handler(<span style=color:#66d9ef>void</span> (<span style=color:#f92672>*</span>f)()))()
+</span></span><span style=display:flex><span>        { <span style=color:#75715e>//類似 C++ 的 set_new_handler().
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>void</span> (<span style=color:#f92672>*</span>old)() <span style=color:#f92672>=</span> __malloc_alloc_oom_handler;
+</span></span><span style=display:flex><span>            __malloc_alloc_oom_handler <span style=color:#f92672>=</span> f;
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> (old);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    };
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//----------------------------------------------
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span> inst<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> (<span style=color:#f92672>*</span>__malloc_alloc_template<span style=color:#f92672>&lt;</span>inst<span style=color:#f92672>&gt;::</span>__malloc_alloc_oom_handler)() <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span> inst<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>__malloc_alloc_template<span style=color:#f92672>&lt;</span>inst<span style=color:#f92672>&gt;::</span>oom_malloc(size_t n)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>void</span> (<span style=color:#f92672>*</span>my_malloc_handler)();
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>result;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> (;;)
+</span></span><span style=display:flex><span>        { <span style=color:#75715e>//不斷嘗試釋放、配置、再釋放、再配置…
+</span></span></span><span style=display:flex><span>            my_malloc_handler <span style=color:#f92672>=</span> __malloc_alloc_oom_handler;
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (<span style=color:#ae81ff>0</span> <span style=color:#f92672>==</span> my_malloc_handler)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                __THROW_BAD_ALLOC;
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            (<span style=color:#f92672>*</span>my_malloc_handler)(); <span style=color:#75715e>//呼叫處理常式，企圖釋放記憶體
+</span></span></span><span style=display:flex><span>            result <span style=color:#f92672>=</span> malloc(n);     <span style=color:#75715e>//再次嘗試配置記憶體
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (result)
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>return</span> (result);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span> inst<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>__malloc_alloc_template<span style=color:#f92672>&lt;</span>inst<span style=color:#f92672>&gt;::</span>oom_realloc(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>p, size_t n)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>void</span> (<span style=color:#f92672>*</span>my_malloc_handler)();
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>result;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> (;;)
+</span></span><span style=display:flex><span>        { <span style=color:#75715e>//不斷嘗試釋放、配置、再釋放、再配置…
+</span></span></span><span style=display:flex><span>            my_malloc_handler <span style=color:#f92672>=</span> __malloc_alloc_oom_handler;
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (<span style=color:#ae81ff>0</span> <span style=color:#f92672>==</span> my_malloc_handler)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                __THROW_BAD_ALLOC;
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            (<span style=color:#f92672>*</span>my_malloc_handler)(); <span style=color:#75715e>//呼叫處理常式，企圖釋放記憶體。
+</span></span></span><span style=display:flex><span>            result <span style=color:#f92672>=</span> realloc(p, n); <span style=color:#75715e>//再次嘗試配置記憶體。
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (result)
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>return</span> (result);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//----------------------------------------------
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//第二级分配器包装
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//第二级分配器的分配单位是字节 这里通过模板重新包装为以元素个数为分配单位
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>typedef</span> __malloc_alloc_template<span style=color:#f92672>&lt;</span><span style=color:#ae81ff>0</span><span style=color:#f92672>&gt;</span> malloc_alloc;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>T</span>, <span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Alloc</span><span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>class</span> <span style=color:#a6e22e>simple_alloc</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> T <span style=color:#f92672>*</span>allocate(size_t n)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span> <span style=color:#f92672>==</span> n <span style=color:#f92672>?</span> <span style=color:#ae81ff>0</span> <span style=color:#f92672>:</span> (T <span style=color:#f92672>*</span>)Alloc<span style=color:#f92672>::</span>allocate(n <span style=color:#f92672>*</span> <span style=color:#66d9ef>sizeof</span>(T));
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> T <span style=color:#f92672>*</span><span style=color:#a6e22e>allocate</span>(<span style=color:#66d9ef>void</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> (T <span style=color:#f92672>*</span>)Alloc<span style=color:#f92672>::</span>allocate(<span style=color:#66d9ef>sizeof</span>(T));
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>deallocate</span>(T <span style=color:#f92672>*</span>p, size_t n)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (<span style=color:#ae81ff>0</span> <span style=color:#f92672>!=</span> n)
+</span></span><span style=display:flex><span>                Alloc<span style=color:#f92672>::</span>deallocate(p, n <span style=color:#f92672>*</span> <span style=color:#66d9ef>sizeof</span>(T));
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>deallocate</span>(T <span style=color:#f92672>*</span>p)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            Alloc<span style=color:#f92672>::</span>deallocate(p, <span style=color:#66d9ef>sizeof</span>(T));
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    };
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 用例
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// template &lt;class T, class Alloc = alloc&gt;
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// class vector
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// {
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// protected:
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     //专属分配器每次分配一个元素大小
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     typedef simple_alloc&lt;T, Alloc&gt; data_allocator;
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     ....
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     result = data_allocator::allocator;
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     ....
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     data_allocator::deallocate(result);
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// };
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//----------------------------------------------
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//第二級配置器
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//----------------------------------------------
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>enum</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        __ALIGN <span style=color:#f92672>=</span> <span style=color:#ae81ff>8</span>
+</span></span><span style=display:flex><span>    }; <span style=color:#75715e>//小區塊的上調邊界 ROUNDUP时向上8字节对齐 链表按8字节为间隔区分管理
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>enum</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        __MAX_BYTES <span style=color:#f92672>=</span> <span style=color:#ae81ff>128</span>
+</span></span><span style=display:flex><span>    }; <span style=color:#75715e>//小區塊的上限
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//8-128字节的申请才会使用第二级分配器
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>enum</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        __NFREELISTS <span style=color:#f92672>=</span> __MAX_BYTES <span style=color:#f92672>/</span> __ALIGN
+</span></span><span style=display:flex><span>    }; <span style=color:#75715e>//free-lists 個數 16条链表
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//上面的这三个枚举量因该用 static const int x = N
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//取代 enum { x = N }, 但目前支援該性質的編譯器不多
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//本例中兩個 template 參數完全沒有派上用場
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>bool</span> threads, <span style=color:#66d9ef>int</span> inst<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>class</span> <span style=color:#a6e22e>__default_alloc_template</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//上调传入的bytes到它最接近的8的整数倍
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> size_t ROUND_UP(size_t bytes)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> (((bytes) <span style=color:#f92672>+</span> __ALIGN <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>) <span style=color:#f92672>&amp;</span> <span style=color:#f92672>~</span>(__ALIGN <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>));
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//举例 如果bytes = 13
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//则 (13+7)&amp;~7 --- 10100 &amp; ~(00111)
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//= 10100 &amp; 11000 = 10000 = 16  ( 其实bytes是8位的 这里只写出5位)
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//改用struct 也可以
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//嵌入式指针
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//用struct更好理解
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//就像链表中的next指针一样 每个obj对象只有1个成员变量就是指针 可以指向obj类的其他对象
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//注意 我们只知道 我们要分配的单个对象的大小 但是不知道我们要分配对象的类型
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//所以这里malloc没办法强转为那个对象的类型  但是知道大小一样也可以将这一大块空间
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//分割为多个 szieof(对象)的小块并用指针(上个小块的next指针)指向这小块的首地址 串成一个链表
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// chunk = szieof(对象) * n
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// p = (obj *)malloc(chunk);
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// p指针是在不断移动的 不断地指向每一个size大小内存块的首地址
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//(p其实指向的是size大小空间的前四个字节组成的obj的首地址)  next指针就是free_list_link
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// |next指针 .... 这块有size大|...next指针 .... 这块有size大|....|
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 每块空间首地址被强转为obj型 所以空间中的前4字节暂时被当作next指针 串联其他size大小的空间
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//      |-------------------------|(next指向下一块的首地址)
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 只有在分配和回收的时候我们才需要这个next指针
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 在allocate return了这块空间的首地址后 内存块已经不在链表里了next指针没有意义了
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 这四个字节可以去存真正的对象内容
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 将每一块串成list
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>union</span> <span style=color:#a6e22e>obj</span>
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>union</span> <span style=color:#a6e22e>obj</span> <span style=color:#f92672>*</span>free_list_link;
+</span></span><span style=display:flex><span>        };
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> obj <span style=color:#f92672>*</span><span style=color:#66d9ef>volatile</span> free_list[__NFREELISTS];
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> size_t <span style=color:#a6e22e>FREELIST_INDEX</span>(size_t bytes)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> (((bytes) <span style=color:#f92672>+</span> __ALIGN <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>) <span style=color:#f92672>/</span> __ALIGN <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// Returns an object of size n, and optionally adds to size n free list.
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>refill</span>(size_t n);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// Allocates a chunk for nobjs of size &#34;size&#34;.  nobjs may be reduced
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// if it is inconvenient to allocate the requested number.
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span><span style=color:#a6e22e>chunk_alloc</span>(size_t size, <span style=color:#66d9ef>int</span> <span style=color:#f92672>&amp;</span>nobjs);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// Chunk allocation state.
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>start_free;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>end_free;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> size_t heap_size;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// n为一个对象的大小(字节)
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>allocate(size_t n) <span style=color:#75715e>//n must be &gt; 0
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            obj <span style=color:#f92672>*</span><span style=color:#66d9ef>volatile</span> <span style=color:#f92672>*</span>my_free_list; <span style=color:#75715e>//obj** my_free_list; 用于指向16条链表中一条的首地址
+</span></span></span><span style=display:flex><span>            obj <span style=color:#f92672>*</span>result;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//申请的大小大于128字节 调用第一级分配器 直接用malloc来分配
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (n <span style=color:#f92672>&gt;</span> (size_t)__MAX_BYTES)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>return</span> (malloc_alloc<span style=color:#f92672>::</span>allocate(n));
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            my_free_list <span style=color:#f92672>=</span> free_list <span style=color:#f92672>+</span> FREELIST_INDEX(n);
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//my_free_list指向 指向第n条链表头节点的指针(my_free_list为二级指针)
+</span></span></span><span style=display:flex><span>            result <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>my_free_list;
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (result <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//一个指向第n条链表头节点的指针
+</span></span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//这个指针为0说明 此指针并没有指向链表节点---这条链表内内存节点已经用完了
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//需要再次分配 去malloc n*20*2+ROUNDUP(HEAPSIZE&gt;&gt;4)的空间给这条链表
+</span></span></span><span style=display:flex><span>                <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>r <span style=color:#f92672>=</span> refill(ROUND_UP(n));
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>return</span> r;
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//result此指针非空 说明result指向的这条链表至少还有一个内存节点(链表头节点)
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//则返回这个链表头节点给用户
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//头节点指针指向头节点的下个节点作为新的头节点
+</span></span></span><span style=display:flex><span>            <span style=color:#f92672>*</span>my_free_list <span style=color:#f92672>=</span> result<span style=color:#f92672>-&gt;</span>free_list_link;
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> (result);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//回收对象内存块 p为这个对象内存的首地址 n为这个对象的大小
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//将这个对象节点 回收到管理对应大小的链表的头节点处(作为链表新的头节点的方式 回收回链表中)
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>deallocate</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>p, size_t n) <span style=color:#75715e>//p may not be 0
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            obj <span style=color:#f92672>*</span>q <span style=color:#f92672>=</span> (obj <span style=color:#f92672>*</span>)p;
+</span></span><span style=display:flex><span>            obj <span style=color:#f92672>*</span><span style=color:#66d9ef>volatile</span> <span style=color:#f92672>*</span>my_free_list; <span style=color:#75715e>//obj** my_free_list;
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//大小大于128字节 不由第二级分配器管理 直接调用第一级deallocate 由free来回收
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (n <span style=color:#f92672>&gt;</span> (size_t)__MAX_BYTES)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                malloc_alloc<span style=color:#f92672>::</span>deallocate(p, n);
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>return</span>;
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//找到管理对应大小的 这条链表的头节点的地址*my_free_list
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//将回收回来的这个节点p的next指针指向这个头节点
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//并将头节点指针(*my_free_list)指向p  这样p就是这条链表的新的头节点
+</span></span></span><span style=display:flex><span>            my_free_list <span style=color:#f92672>=</span> free_list <span style=color:#f92672>+</span> FREELIST_INDEX(n);
+</span></span><span style=display:flex><span>            q<span style=color:#f92672>-&gt;</span>free_list_link <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>my_free_list;
+</span></span><span style=display:flex><span>            <span style=color:#f92672>*</span>my_free_list <span style=color:#f92672>=</span> q;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//1
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//注意在第二级deallocate中并没有调用free 这意味着16条链表将会无限拉长
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//deallocate不会将内存还给操作系统 第二级分配器不会将内存还给操作系统
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//但是电脑上并不会只跑你这一个程序 内存都在你手上 那其他程序怎么办呢?
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//2
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//如果我不是用第二级分配器申请的内存，比如用直接malloc申请了16个字节
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//这16个字节的内存是带cookie的
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//但是我调用了第二级分配器的deallocate 是可以将这个malloc申请的内存
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//归还到对应大小的链表中 (带cookie并不会有太大的影响 指针是不指向cookie的)
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//但是如果归还的这块内存 不是用第二级分配器申请的非8的整数倍的内存
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//归还时回被还到 其最接近且大于它的8的整数倍的链表中
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//在某次第二级allocate会将这块实际没那么大的内存 当作有这么大交给用户去使用 将会造成内存泄漏
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>reallocate</span>(<span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>p, size_t old_sz, size_t new_sz);
+</span></span><span style=display:flex><span>    };
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//----------------------------------------------
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// We allocate memory in large chunks in order to
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// avoid fragmentingthe malloc heap too much.
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// We assume that size is properly aligned.
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// We hold the allocation lock.
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//----------------------------------------------
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>bool</span> threads, <span style=color:#66d9ef>int</span> inst<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>
+</span></span><span style=display:flex><span>    __default_alloc_template<span style=color:#f92672>&lt;</span>threads, inst<span style=color:#f92672>&gt;::</span>
+</span></span><span style=display:flex><span>        chunk_alloc(size_t size, <span style=color:#66d9ef>int</span> <span style=color:#f92672>&amp;</span>nobjs)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>result;
+</span></span><span style=display:flex><span>        size_t total_bytes <span style=color:#f92672>=</span> size <span style=color:#f92672>*</span> nobjs;         <span style=color:#75715e>//size为一个对象的大小 n为20
+</span></span></span><span style=display:flex><span>        size_t bytes_left <span style=color:#f92672>=</span> end_free <span style=color:#f92672>-</span> start_free; <span style=color:#75715e>//当前战备池内剩下多少字节
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (bytes_left <span style=color:#f92672>&gt;=</span> total_bytes) <span style=color:#75715e>//当前战备池内的大小满足 20个对象这个需求
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//则返回这20个对象大小的内存
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//并减少对应的战备池大小
+</span></span></span><span style=display:flex><span>            result <span style=color:#f92672>=</span> start_free;
+</span></span><span style=display:flex><span>            start_free <span style=color:#f92672>+=</span> total_bytes; <span style=color:#75715e>//减少战备池大小
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//地址是向下增长的 start_free&lt;=end_free
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> (result); <span style=color:#75715e>//result 为原start_free-start_free+total_bytes这块连续空间
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span> <span style=color:#a6e22e>if</span> (bytes_left <span style=color:#f92672>&gt;=</span> size) <span style=color:#75715e>//当前战备池大小至少能分配一个对象的内存
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 先计算余下大小到底能分配多少个对象
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 注意nobjs为引用传入在这里传出后 调用者就能知道究竟是分配了多少个
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 对象的内存
+</span></span></span><span style=display:flex><span>            nobjs <span style=color:#f92672>=</span> bytes_left <span style=color:#f92672>/</span> size;
+</span></span><span style=display:flex><span>            total_bytes <span style=color:#f92672>=</span> size <span style=color:#f92672>*</span> nobjs;
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//余下的内存最多分配nobjs个对象 这nobjs个对象的总大小为total_bytes
+</span></span></span><span style=display:flex><span>            result <span style=color:#f92672>=</span> start_free;
+</span></span><span style=display:flex><span>            start_free <span style=color:#f92672>+=</span> total_bytes; <span style=color:#75715e>//减少战备池大小
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> (result);           <span style=color:#75715e>//result 为原start_free-start_free+total_bytes这块连续空间
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//当前战备池大小连一个对象大小的内存空间都不够了
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//则需要去向系统申请新的内存空间 并且将当前pool作为碎片交给对应的链表管理
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//申请--(我们之前一直有提到的 2*20*sizeof(对象) + ROUNDUP(累计申请量&gt;&gt;4))
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//其中20*sizeof(对象)的空间返回给调用者，余下的交给内存池
+</span></span></span><span style=display:flex><span>            size_t bytes_to_get <span style=color:#f92672>=</span>
+</span></span><span style=display:flex><span>                <span style=color:#ae81ff>2</span> <span style=color:#f92672>*</span> total_bytes <span style=color:#f92672>+</span> ROUND_UP(heap_size <span style=color:#f92672>&gt;&gt;</span> <span style=color:#ae81ff>4</span>);
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// Try to make use of the left-over piece.
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (bytes_left <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//当前pool是有内存的并非刚好用完 则这些内存就是碎片要交给对应的链表管理
+</span></span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//将碎片交给对应的链表管理
+</span></span></span><span style=display:flex><span>                obj <span style=color:#f92672>*</span><span style=color:#66d9ef>volatile</span> <span style=color:#f92672>*</span>my_free_list <span style=color:#f92672>=</span>
+</span></span><span style=display:flex><span>                    free_list <span style=color:#f92672>+</span> FREELIST_INDEX(bytes_left);
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//start_free就是碎片的起始地址
+</span></span></span><span style=display:flex><span>                ((obj <span style=color:#f92672>*</span>)start_free)<span style=color:#f92672>-&gt;</span>free_list_link <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>my_free_list; <span style=color:#75715e>//将碎片插到对应链表的头之前
+</span></span></span><span style=display:flex><span>                <span style=color:#f92672>*</span>my_free_list <span style=color:#f92672>=</span> (obj <span style=color:#f92672>*</span>)start_free;                   <span style=color:#75715e>//将碎片作为新的头节点
+</span></span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            start_free <span style=color:#f92672>=</span> (<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>)malloc(bytes_to_get); <span style=color:#75715e>//去 malloc 2*20*sizeof(对象) + ROUNDUP(累计申请量&gt;&gt;4)
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//将新申请的这块内存的首地址 作为pool的新的起始地址start_free
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (<span style=color:#ae81ff>0</span> <span style=color:#f92672>==</span> start_free) <span style=color:#75715e>//malloc 申请失败会返回0
+</span></span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//应对堆中内存不够 malloc申请失败的情况
+</span></span></span><span style=display:flex><span>                <span style=color:#66d9ef>int</span> i;
+</span></span><span style=display:flex><span>                obj <span style=color:#f92672>*</span><span style=color:#66d9ef>volatile</span> <span style=color:#f92672>*</span>my_free_list, <span style=color:#f92672>*</span>p;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//Try to make do with what we have. That can&#39;t
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//hurt. We do not try smaller requests, since that tends
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//to result in disaster on multi-process machines.
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//找当前size对应链表的右边的链表(右边链表中的节点内存都是大于size的) 看右边链表中是否
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//还有内存节点 有的话应急直接拿来用 切出1个size大内存返回给用户 余下的作为pool战备池
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//例如szie=80的话 -- 向右边 查看管理88,96,104,112大小的节点
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//因该从size+__ALIGN开始循环更合理，因为size链表肯定没节点 要不然也不会到当前这个地步
+</span></span></span><span style=display:flex><span>                <span style=color:#66d9ef>for</span> (i <span style=color:#f92672>=</span> size; i <span style=color:#f92672>&lt;=</span> __MAX_BYTES; i <span style=color:#f92672>+=</span> __ALIGN)
+</span></span><span style=display:flex><span>                {
+</span></span><span style=display:flex><span>                    my_free_list <span style=color:#f92672>=</span> free_list <span style=color:#f92672>+</span> FREELIST_INDEX(i);
+</span></span><span style=display:flex><span>                    p <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>my_free_list;
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>if</span> (<span style=color:#ae81ff>0</span> <span style=color:#f92672>!=</span> p) <span style=color:#75715e>//有右边的链表 有多余的节点 我们拿来借用
+</span></span></span><span style=display:flex><span>                    {
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//p为我们借用的那块内存节点的首地址(也是那条链表头节点的首地址)
+</span></span></span><span style=display:flex><span>                        <span style=color:#f92672>*</span>my_free_list <span style=color:#f92672>=</span> p<span style=color:#f92672>-&gt;</span>free_list_link; <span style=color:#75715e>//p被借用了 那条链表更新头节点为下个节点
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//借来的这块空间 放到战备池中！！！！ start_free指向这块首节地址
+</span></span></span><span style=display:flex><span>                        start_free <span style=color:#f92672>=</span> (<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>)p;
+</span></span><span style=display:flex><span>                        end_free <span style=color:#f92672>=</span> start_free <span style=color:#f92672>+</span> i;
+</span></span><span style=display:flex><span>                        <span style=color:#66d9ef>return</span> (chunk_alloc(size, nobjs));
+</span></span><span style=display:flex><span>                        <span style=color:#75715e>//进行递归调用 在下一层的调用中 就可以直接满足我们的要求
+</span></span></span><span style=display:flex><span>                        <span style=color:#75715e>//在上面的两个if就return了对应空间的大小
+</span></span></span><span style=display:flex><span>                        <span style=color:#75715e>//这个递归只会向下一层就return 不会继续深入了
+</span></span></span><span style=display:flex><span>                        <span style=color:#75715e>//Any leftover piece will eventually make it to the
+</span></span></span><span style=display:flex><span>                        <span style=color:#75715e>//right free list.
+</span></span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//右边的链表中也没有内存节点(别人也破产了 借不到东西) 穷途末路了
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//拿不到内存 调用第一级分配器 第一级分配器会调用handler(out of memory)循环请求内存
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//看是否有进程/线程刚好释放内存则可马上拿来填填补这个需求
+</span></span></span><span style=display:flex><span>                end_free <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//In case of exception.
+</span></span></span><span style=display:flex><span>                start_free <span style=color:#f92672>=</span> (<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>)malloc_alloc<span style=color:#f92672>::</span>allocate(bytes_to_get);
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//This should either throw an exception or
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//remedy the situation. Thus we assume it
+</span></span></span><span style=display:flex><span>                <span style=color:#75715e>//succeeded.
+</span></span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// malloc分配成功 分配了我们要求的bytes_to_get这样大量的内存
+</span></span></span><span style=display:flex><span>            heap_size <span style=color:#f92672>+=</span> bytes_to_get;            <span style=color:#75715e>//累计申请量
+</span></span></span><span style=display:flex><span>            end_free <span style=color:#f92672>=</span> start_free <span style=color:#f92672>+</span> bytes_to_get; <span style=color:#75715e>//战备池池底
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//成功申请了bytes_left
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//进行递归调用 在下一层的调用中 就可以直接满足我们的要求
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//在上面的两个if就return了对应空间的大小
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//这个递归只会向下一层就return 不会继续深入了
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> (chunk_alloc(size, nobjs));
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//----------------------------------------------
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// Returns an object of size n, and optionally adds
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// to size n free list.We assume that n is properly aligned.
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// We hold the allocation lock.
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//----------------------------------------------
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>bool</span> threads, <span style=color:#66d9ef>int</span> inst<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>__default_alloc_template<span style=color:#f92672>&lt;</span>threads, inst<span style=color:#f92672>&gt;::</span>
+</span></span><span style=display:flex><span>        refill(size_t n) <span style=color:#75715e>//n为字节大小 已经上调为8的倍数
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> nobjs <span style=color:#f92672>=</span> <span style=color:#ae81ff>20</span>; <span style=color:#75715e>//申请40个对象大小的内存 1个返回用户 19给链表 20个加入战备池中
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//预设要20个 但不一定能取到20个 nobjs是引用在申请完后会返回究竟申请多少个对象大小的内存
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>chunk <span style=color:#f92672>=</span> chunk_alloc(n, nobjs); <span style=color:#75715e>//传回nobjs个对象大小的内存(期望是20个)
+</span></span></span><span style=display:flex><span>        obj <span style=color:#f92672>*</span><span style=color:#66d9ef>volatile</span> <span style=color:#f92672>*</span>my_free_list;         <span style=color:#75715e>//obj** my_free_list;
+</span></span></span><span style=display:flex><span>        obj <span style=color:#f92672>*</span>result;
+</span></span><span style=display:flex><span>        obj <span style=color:#f92672>*</span>current_obj;
+</span></span><span style=display:flex><span>        obj <span style=color:#f92672>*</span>next_obj;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> i;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (<span style=color:#ae81ff>1</span> <span style=color:#f92672>==</span> nobjs) <span style=color:#75715e>//实际只拿到1个对象大小的内存 则将这块内存直接返回给用户
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> (chunk);
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//运行到这里说明有不止1块 1块给用户后还有多余 则多余的交给对应大小的链表管理
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//找到管理对应大小的 这条链表的头节点的地址*my_free_list
+</span></span></span><span style=display:flex><span>        my_free_list <span style=color:#f92672>=</span> free_list <span style=color:#f92672>+</span> FREELIST_INDEX(n);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//Build free list in chunk
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//将chunk内多余的内存 挂到对应的链表上
+</span></span></span><span style=display:flex><span>        result <span style=color:#f92672>=</span> (obj <span style=color:#f92672>*</span>)chunk; <span style=color:#75715e>//大块 中的第一个(对象大小)的区块 作为result返回给用户
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//余下的区块要串到链表上
+</span></span></span><span style=display:flex><span>        <span style=color:#f92672>*</span>my_free_list <span style=color:#f92672>=</span> next_obj <span style=color:#f92672>=</span> (obj <span style=color:#f92672>*</span>)(chunk <span style=color:#f92672>+</span> n); <span style=color:#75715e>//第二个区块的首地址
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> (i <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>;; <span style=color:#f92672>++</span>i)                              <span style=color:#75715e>//从1开始将返回给用户的那个排除
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            current_obj <span style=color:#f92672>=</span> next_obj;                   <span style=color:#75715e>//上次的下一块 就是当前块
+</span></span></span><span style=display:flex><span>            next_obj <span style=color:#f92672>=</span> (obj <span style=color:#f92672>*</span>)((<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>)next_obj <span style=color:#f92672>+</span> n); <span style=color:#75715e>//下一块
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//因为拿到的内存是一整块连续的 干净的内存没什么对象变量
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//我们需要切割成一块又一块 大小为n的区块并将它们串起来
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//所谓切割就是将指针所指处+n个字节先使其指向下个区块的首地址
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//再转型为obj(使大小为n区块的前四字节变为指针 可指向下一个区块
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//从而实现串联)
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (nobjs <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>==</span> i)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                <span style=color:#75715e>//最后一块 其next指针指向null 之后结束循环
+</span></span></span><span style=display:flex><span>                current_obj<span style=color:#f92672>-&gt;</span>free_list_link <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                current_obj<span style=color:#f92672>-&gt;</span>free_list_link <span style=color:#f92672>=</span> next_obj; <span style=color:#75715e>//当前块指向下一块 串成单向链表
+</span></span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> (result);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//----------------------------------------------
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>bool</span> threads, <span style=color:#66d9ef>int</span> inst<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>__default_alloc_template<span style=color:#f92672>&lt;</span>threads, inst<span style=color:#f92672>&gt;::</span>start_free <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//战备池起始地址
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>bool</span> threads, <span style=color:#66d9ef>int</span> inst<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>__default_alloc_template<span style=color:#f92672>&lt;</span>threads, inst<span style=color:#f92672>&gt;::</span>end_free <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//战备池终止地址
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>bool</span> threads, <span style=color:#66d9ef>int</span> inst<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>    size_t __default_alloc_template<span style=color:#f92672>&lt;</span>threads, inst<span style=color:#f92672>&gt;::</span>heap_size <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//累计从堆上申请的内存
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>bool</span> threads, <span style=color:#66d9ef>int</span> inst<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>typename</span> __default_alloc_template<span style=color:#f92672>&lt;</span>threads, inst<span style=color:#f92672>&gt;::</span>obj <span style=color:#f92672>*</span><span style=color:#66d9ef>volatile</span> __default_alloc_template<span style=color:#f92672>&lt;</span>threads, inst<span style=color:#f92672>&gt;::</span>free_list[__NFREELISTS] <span style=color:#f92672>=</span> {
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ae81ff>0</span>,
+</span></span><span style=display:flex><span>    }; <span style=color:#75715e>// free_lsit链表数组
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//----------------------------------------------
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//令第2級配置器的名稱為 alloc
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//实例化模板类型 并重命名
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>typedef</span> __default_alloc_template<span style=color:#f92672>&lt;</span>false, <span style=color:#ae81ff>0</span><span style=color:#f92672>&gt;</span> alloc;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>test_G29_alloc</span>()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n\n\n</span><span style=color:#e6db74>test_global_allocator_with_16_freelist().......... </span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>p1 <span style=color:#f92672>=</span> alloc<span style=color:#f92672>::</span>allocate(<span style=color:#ae81ff>120</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>p2 <span style=color:#f92672>=</span> alloc<span style=color:#f92672>::</span>allocate(<span style=color:#ae81ff>72</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>p3 <span style=color:#f92672>=</span> alloc<span style=color:#f92672>::</span>allocate(<span style=color:#ae81ff>60</span>); <span style=color:#75715e>//不是 8 倍數
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        cout <span style=color:#f92672>&lt;&lt;</span> p1 <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#39; &#39;</span> <span style=color:#f92672>&lt;&lt;</span> p2 <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#39; &#39;</span> <span style=color:#f92672>&lt;&lt;</span> p3 <span style=color:#f92672>&lt;&lt;</span> endl;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        alloc<span style=color:#f92672>::</span>deallocate(p1, <span style=color:#ae81ff>120</span>);
+</span></span><span style=display:flex><span>        alloc<span style=color:#f92672>::</span>deallocate(p2, <span style=color:#ae81ff>72</span>);
+</span></span><span style=display:flex><span>        alloc<span style=color:#f92672>::</span>deallocate(p3, <span style=color:#ae81ff>60</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//以下, 不能搭配容器來測試, 因為新版 G++ 對於 allocator 有更多要求 (詢問更多 typedef 而 alloc 都無法回答)
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//它其實就是 G4.9 __pool_alloc，所以讓 G4.9容器使用 __pool_alloc 也就等同於這裡所要的測試
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       vector&lt;int, simple_alloc&lt;int,alloc&gt;&gt; v;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       for(int i=0; i&lt; 1000; ++i)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              v.push_back(i);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       for(int i=700; i&lt; 720; ++i)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>              cout &lt;&lt; v[i] &lt;&lt; &#39; &#39;;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        cout <span style=color:#f92672>&lt;&lt;</span> endl;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>} <span style=color:#75715e>//namespace
+</span></span></span><span style=display:flex><span>  <span style=color:#75715e>//----------------------------------------------------
+</span></span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

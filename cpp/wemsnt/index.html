@@ -1,0 +1,927 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>c++基础41-48 | CantBlog</title><meta name=keywords content><meta name=description content="41 运行时类型识别RTTI
+虚函数表，可以发现父类的虚函数在 vtable 中的索引（下标）是固定的，不会随着继承层次的增加而改变，子类新增的虚函数放在vtable的最后。如果子类有同名的虚函数覆盖了父/祖先类的虚函数，那么将使用子类的虚函数替换父类的虚函数，子类同名虚函数在子类的vtable中替换父/祖先类虚函数，其索引和父/祖先类表中的同名父类虚函数的索引是一样的。
+即虚表中记录的是本类中出现的对应函数原型的形态(函数名，参数，返回值&mldr;) 的函数的地址，虚表中的索引和函数形态是一一对应的(某个索引只存这种函数形态)，虚函数表中存的是 此类中出现此函数形态的虚函数地址。
+当通过up_cast调用虚函数时，先取出对象中存的虚函数表指针vfptr(虚函数表指针一般就是存在对象空间的最上面，直接取对象地址其实取到的就是这个虚表指针的地址),我们根据调用的虚函数原型在虚函数表中查询是否有对应形态的函数，找到了就取出此虚函数地址然后执行。
+class A{
+protected:
+    int a1;
+public:
+    virtual int A_virt1();
+    virtual int A_virt2();
+    static void A_static1();
+    void A_simple1();
+};
+class B{
+protected:
+    int b1;
+    int b2;
+public:
+    virtual int B_virt1();
+    virtual int B_virt2();
+};
+class C: public A, public B{
+protected:
+    int c1;
+public:
+    virtual int A_virt2();
+    virtual int B_virt2();
+};
+类包含了虚函数，那么该类的对象内存中还会额外增加类型信息，也即 type_info 对象。对象的虚函数指针所指虚函数表头的上方，有一个type_info对象的地址，这个type_info对象中就有保存此类的信息(类名,类编码,hash)可以唯一地确定一个类(只有类中包含了虚函数时才会启用 RTTI 机制，其他所有情况都可以在编译阶段确定类型信息)
+这样在出现多态情况下 Base* p = new Derive();  编译器通过类似*(p->vfptr - 1)就获得了p所指向对象的type_info，通过查看type_info就知道p是否是指向Base的后代类 类型对象，还需要通过继承链来确定type_info中的类是否是Base的后代类，对于type_info+继承链(当前类信息表+继承信息表)的具体实现方法在VS中的具体做法如下
+下图中的 &类名_meta就是type_info 对象的地址
+
+dynamic_cast中也用上面类似的RTTI方式来判断，是否可以进行down_cast(向下转型)。
+typeid 经过固定次数的间接转换返回 type_info 对象，间接次数不会随着继承层次的增加而增加，对效率的影响很小，读者可以放心使用。而 dynamic_cast 运算符和异常处理不仅要经过数次间接转换，还要遍历继承链，如果继承层次较深，那么它们的性能堪忧，读者应当谨慎使用(上图的这种继承链遍历)！
+42 模板简单介绍"><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/wemsnt/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/wemsnt/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/wemsnt/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="c++基础41-48"><meta property="og:description" content="41 运行时类型识别RTTI
+虚函数表，可以发现父类的虚函数在 vtable 中的索引（下标）是固定的，不会随着继承层次的增加而改变，子类新增的虚函数放在vtable的最后。如果子类有同名的虚函数覆盖了父/祖先类的虚函数，那么将使用子类的虚函数替换父类的虚函数，子类同名虚函数在子类的vtable中替换父/祖先类虚函数，其索引和父/祖先类表中的同名父类虚函数的索引是一样的。
+即虚表中记录的是本类中出现的对应函数原型的形态(函数名，参数，返回值…) 的函数的地址，虚表中的索引和函数形态是一一对应的(某个索引只存这种函数形态)，虚函数表中存的是 此类中出现此函数形态的虚函数地址。
+当通过up_cast调用虚函数时，先取出对象中存的虚函数表指针vfptr(虚函数表指针一般就是存在对象空间的最上面，直接取对象地址其实取到的就是这个虚表指针的地址),我们根据调用的虚函数原型在虚函数表中查询是否有对应形态的函数，找到了就取出此虚函数地址然后执行。
+class A{ protected: int a1; public: virtual int A_virt1(); virtual int A_virt2(); static void A_static1(); void A_simple1(); }; class B{ protected: int b1; int b2; public: virtual int B_virt1(); virtual int B_virt2(); }; class C: public A, public B{ protected: int c1; public: virtual int A_virt2(); virtual int B_virt2(); }; 类包含了虚函数，那么该类的对象内存中还会额外增加类型信息，也即 type_info 对象。对象的虚函数指针所指虚函数表头的上方，有一个type_info对象的地址，这个type_info对象中就有保存此类的信息(类名,类编码,hash)可以唯一地确定一个类(只有类中包含了虚函数时才会启用 RTTI 机制，其他所有情况都可以在编译阶段确定类型信息)
+这样在出现多态情况下 Base* p = new Derive(); 编译器通过类似*(p->vfptr - 1)就获得了p所指向对象的type_info，通过查看type_info就知道p是否是指向Base的后代类 类型对象，还需要通过继承链来确定type_info中的类是否是Base的后代类，对于type_info+继承链(当前类信息表+继承信息表)的具体实现方法在VS中的具体做法如下
+下图中的 &类名_meta就是type_info 对象的地址
+dynamic_cast中也用上面类似的RTTI方式来判断，是否可以进行down_cast(向下转型)。
+typeid 经过固定次数的间接转换返回 type_info 对象，间接次数不会随着继承层次的增加而增加，对效率的影响很小，读者可以放心使用。而 dynamic_cast 运算符和异常处理不仅要经过数次间接转换，还要遍历继承链，如果继承层次较深，那么它们的性能堪忧，读者应当谨慎使用(上图的这种继承链遍历)！
+42 模板简单介绍"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-04-27T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="c++基础41-48"><meta name=twitter:description content="41 运行时类型识别RTTI
+虚函数表，可以发现父类的虚函数在 vtable 中的索引（下标）是固定的，不会随着继承层次的增加而改变，子类新增的虚函数放在vtable的最后。如果子类有同名的虚函数覆盖了父/祖先类的虚函数，那么将使用子类的虚函数替换父类的虚函数，子类同名虚函数在子类的vtable中替换父/祖先类虚函数，其索引和父/祖先类表中的同名父类虚函数的索引是一样的。
+即虚表中记录的是本类中出现的对应函数原型的形态(函数名，参数，返回值…) 的函数的地址，虚表中的索引和函数形态是一一对应的(某个索引只存这种函数形态)，虚函数表中存的是 此类中出现此函数形态的虚函数地址。
+当通过up_cast调用虚函数时，先取出对象中存的虚函数表指针vfptr(虚函数表指针一般就是存在对象空间的最上面，直接取对象地址其实取到的就是这个虚表指针的地址),我们根据调用的虚函数原型在虚函数表中查询是否有对应形态的函数，找到了就取出此虚函数地址然后执行。
+class A{ protected: int a1; public: virtual int A_virt1(); virtual int A_virt2(); static void A_static1(); void A_simple1(); }; class B{ protected: int b1; int b2; public: virtual int B_virt1(); virtual int B_virt2(); }; class C: public A, public B{ protected: int c1; public: virtual int A_virt2(); virtual int B_virt2(); }; 类包含了虚函数，那么该类的对象内存中还会额外增加类型信息，也即 type_info 对象。对象的虚函数指针所指虚函数表头的上方，有一个type_info对象的地址，这个type_info对象中就有保存此类的信息(类名,类编码,hash)可以唯一地确定一个类(只有类中包含了虚函数时才会启用 RTTI 机制，其他所有情况都可以在编译阶段确定类型信息)
+这样在出现多态情况下 Base* p = new Derive(); 编译器通过类似*(p->vfptr - 1)就获得了p所指向对象的type_info，通过查看type_info就知道p是否是指向Base的后代类 类型对象，还需要通过继承链来确定type_info中的类是否是Base的后代类，对于type_info+继承链(当前类信息表+继承信息表)的具体实现方法在VS中的具体做法如下
+下图中的 &类名_meta就是type_info 对象的地址
+dynamic_cast中也用上面类似的RTTI方式来判断，是否可以进行down_cast(向下转型)。
+typeid 经过固定次数的间接转换返回 type_info 对象，间接次数不会随着继承层次的增加而增加，对效率的影响很小，读者可以放心使用。而 dynamic_cast 运算符和异常处理不仅要经过数次间接转换，还要遍历继承链，如果继承层次较深，那么它们的性能堪忧，读者应当谨慎使用(上图的这种继承链遍历)！
+42 模板简单介绍"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"c++基础41-48","item":"https://jler666.github.io/cpp/wemsnt/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"c++基础41-48","name":"c\u002b\u002b基础41-48","description":"41 运行时类型识别RTTI\n虚函数表，可以发现父类的虚函数在 vtable 中的索引（下标）是固定的，不会随着继承层次的增加而改变，子类新增的虚函数放在vtable的最后。如果子类有同名的虚函数覆盖了父/祖先类的虚函数，那么将使用子类的虚函数替换父类的虚函数，子类同名虚函数在子类的vtable中替换父/祖先类虚函数，其索引和父/祖先类表中的同名父类虚函数的索引是一样的。\n即虚表中记录的是本类中出现的对应函数原型的形态(函数名，参数，返回值\u0026hellip;) 的函数的地址，虚表中的索引和函数形态是一一对应的(某个索引只存这种函数形态)，虚函数表中存的是 此类中出现此函数形态的虚函数地址。\n当通过up_cast调用虚函数时，先取出对象中存的虚函数表指针vfptr(虚函数表指针一般就是存在对象空间的最上面，直接取对象地址其实取到的就是这个虚表指针的地址),我们根据调用的虚函数原型在虚函数表中查询是否有对应形态的函数，找到了就取出此虚函数地址然后执行。\nclass A{ protected: int a1; public: virtual int A_virt1(); virtual int A_virt2(); static void A_static1(); void A_simple1(); }; class B{ protected: int b1; int b2; public: virtual int B_virt1(); virtual int B_virt2(); }; class C: public A, public B{ protected: int c1; public: virtual int A_virt2(); virtual int B_virt2(); }; 类包含了虚函数，那么该类的对象内存中还会额外增加类型信息，也即 type_info 对象。对象的虚函数指针所指虚函数表头的上方，有一个type_info对象的地址，这个type_info对象中就有保存此类的信息(类名,类编码,hash)可以唯一地确定一个类(只有类中包含了虚函数时才会启用 RTTI 机制，其他所有情况都可以在编译阶段确定类型信息)\n这样在出现多态情况下 Base* p = new Derive(); 编译器通过类似*(p-\u0026gt;vfptr - 1)就获得了p所指向对象的type_info，通过查看type_info就知道p是否是指向Base的后代类 类型对象，还需要通过继承链来确定type_info中的类是否是Base的后代类，对于type_info+继承链(当前类信息表+继承信息表)的具体实现方法在VS中的具体做法如下\n下图中的 \u0026amp;类名_meta就是type_info 对象的地址\ndynamic_cast中也用上面类似的RTTI方式来判断，是否可以进行down_cast(向下转型)。\ntypeid 经过固定次数的间接转换返回 type_info 对象，间接次数不会随着继承层次的增加而增加，对效率的影响很小，读者可以放心使用。而 dynamic_cast 运算符和异常处理不仅要经过数次间接转换，还要遍历继承链，如果继承层次较深，那么它们的性能堪忧，读者应当谨慎使用(上图的这种继承链遍历)！\n42 模板简单介绍\n","keywords":[],"articleBody":"41 运行时类型识别RTTI\n虚函数表，可以发现父类的虚函数在 vtable 中的索引（下标）是固定的，不会随着继承层次的增加而改变，子类新增的虚函数放在vtable的最后。如果子类有同名的虚函数覆盖了父/祖先类的虚函数，那么将使用子类的虚函数替换父类的虚函数，子类同名虚函数在子类的vtable中替换父/祖先类虚函数，其索引和父/祖先类表中的同名父类虚函数的索引是一样的。\n即虚表中记录的是本类中出现的对应函数原型的形态(函数名，参数，返回值…) 的函数的地址，虚表中的索引和函数形态是一一对应的(某个索引只存这种函数形态)，虚函数表中存的是 此类中出现此函数形态的虚函数地址。\n当通过up_cast调用虚函数时，先取出对象中存的虚函数表指针vfptr(虚函数表指针一般就是存在对象空间的最上面，直接取对象地址其实取到的就是这个虚表指针的地址),我们根据调用的虚函数原型在虚函数表中查询是否有对应形态的函数，找到了就取出此虚函数地址然后执行。\nclass A{ protected: int a1; public: virtual int A_virt1(); virtual int A_virt2(); static void A_static1(); void A_simple1(); }; class B{ protected: int b1; int b2; public: virtual int B_virt1(); virtual int B_virt2(); }; class C: public A, public B{ protected: int c1; public: virtual int A_virt2(); virtual int B_virt2(); }; 类包含了虚函数，那么该类的对象内存中还会额外增加类型信息，也即 type_info 对象。对象的虚函数指针所指虚函数表头的上方，有一个type_info对象的地址，这个type_info对象中就有保存此类的信息(类名,类编码,hash)可以唯一地确定一个类(只有类中包含了虚函数时才会启用 RTTI 机制，其他所有情况都可以在编译阶段确定类型信息)\n这样在出现多态情况下 Base* p = new Derive(); 编译器通过类似*(p-\u003evfptr - 1)就获得了p所指向对象的type_info，通过查看type_info就知道p是否是指向Base的后代类 类型对象，还需要通过继承链来确定type_info中的类是否是Base的后代类，对于type_info+继承链(当前类信息表+继承信息表)的具体实现方法在VS中的具体做法如下\n下图中的 \u0026类名_meta就是type_info 对象的地址\ndynamic_cast中也用上面类似的RTTI方式来判断，是否可以进行down_cast(向下转型)。\ntypeid 经过固定次数的间接转换返回 type_info 对象，间接次数不会随着继承层次的增加而增加，对效率的影响很小，读者可以放心使用。而 dynamic_cast 运算符和异常处理不仅要经过数次间接转换，还要遍历继承链，如果继承层次较深，那么它们的性能堪忧，读者应当谨慎使用(上图的这种继承链遍历)！\n42 模板简单介绍\n对于函数模板而言，模板类型参数可以用来指定返回类型或函数的参数类型，以及在函数体内用于变量声明或类型转换。\n函数模板实例化：当调用一个模板时，编译器用函数实参来推断模板实参，从而使用实参的类型来确定绑定到模板参数的类型。\ntemplate \u003ctypename T\u003e T add_fun(const T \u0026 tmp1, const T \u0026 tmp2){ return tmp1 + tmp2; } add_fun(var1, var2);// 调用时不需要指明类型，让编译器自动推导 add_fun\u003cint\u003e(var1, var2);//函数模板也可以指定类型 类模板：类似函数模板，类模板以关键字 template 开始，后跟模板参数列表。但是，编译器不能为类模板推断模板参数类型，需要在使用该类模板时，在模板名后面的尖括号中指明类型。(C++17以实现模板类自动推导，不需要指明类型)\ntemplate \u003ctypename T\u003e class Complex { public: //构造函数 Complex(T a, T b) { this-\u003ea = a; this-\u003eb = b; } //运算符重载 Complex\u003cT\u003e operator+(Complex \u0026c) { Complex\u003cT\u003e tmp(this-\u003ea + c.a, this-\u003eb + c.b); cout \u003c\u003c tmp.a \u003c\u003c \" \" \u003c\u003c tmp.b \u003c\u003c endl; return tmp; } private: T a; T b; }; Complex\u003cint\u003e b(20, 30);// 指明T类型 Complex ex2(30, 40);// C++17 自动推导 函数模板和类模板的区别\n函数模板是可以被重载的（类模板不能被重载），也就是说允许存在两个同名的函数模板，还可以对它们进行实例化，使它们具有相同的参数类型。\n//函数模板 template \u003ctypename T\u003e int fun(T){ return 1; } //函数模板的重载 template \u003ctypename T\u003e int fun(T*){// 重载指针版本 return 2; } int fun(int i)// 重载int版本 { return 3; } 类模板和函数模板都可以全特化\n函数全特化\ntemplate \u003c\u003e int fun\u003cint\u003e(int i ) { return 3; } 就一般而言，特化是一种更通用的技巧，最主要的原因是特化可以用在类模板和函数模板上，而重载只能用于函数。\n通用而言，Herb Sutter 给出了明确的建议：对函数使用重载，对类模板进行特化。 当函数重载和特化版本同时满足要求时，重载比特化优先，编译器优先调用重载版本(函数模板特化 有大坑！！！\ntemplate\u003ctypename T1, typename T2\u003e class A{ public: void function(T1 value1, T2 value2){ cout\u003c\u003c\"value1 = \"\u003c\u003cvalue1\u003c\u003cendl; cout\u003c\u003c\"value2 = \"\u003c\u003cvalue2\u003c\u003cendl; } }; //类模板全特化 template\u003c\u003e class A\u003cint, double\u003e{ // 类型明确化，为全特化类 public: void function(int value1, double value2){ cout\u003c\u003c\"intValue = \"\u003c\u003cvalue1\u003c\u003cendl; cout\u003c\u003c\"doubleValue = \"\u003c\u003cvalue2\u003c\u003cendl; } }; 偏特化介于普通模板和全特化之间，只存在部分的类型明确化，而非将模板唯一化。\n再次划重点函数模板不能被偏特化。\ntemplate\u003ctypename T1, typename T2\u003e class A{ public: void function(T1 value1, T2 value2){ cout\u003c\u003c\"value1 = \"\u003c\u003cvalue1\u003c\u003cendl; cout\u003c\u003c\"value2 = \"\u003c\u003cvalue2\u003c\u003cendl; } }; template\u003ctypename T\u003e class A\u003cT, double\u003e{ // 部分类型明确化，为偏特化类 public: void function(T value1, double value2){ cout\u003c\u003c\"Value = \"\u003c\u003cvalue1\u003c\u003cendl; cout\u003c\u003c\"doubleValue = \"\u003c\u003cvalue2\u003c\u003cendl; } }; // 一般化设计 template \u003cclass T, class T1\u003e class TestClass { public: TestClass() { cout\u003c\u003c\"T, T1\"\u003c\u003cendl; } }; // 针对普通指针的偏特化设计 // T指针偏特化版本 还可以进一步特化T类型 所以这是个偏特化 template \u003cclass T, class T1\u003e class TestClass\u003cT*, T1*\u003e { public: TestClass() { cout\u003c\u003c\"T*, T1*\"\u003c\u003cendl; } }; // 针对const指针的偏特化设计 // T常指针偏特化版本 还可以进一步特化T类型 所以这是个偏特化 template \u003cclass T, class T1\u003e class TestClass\u003cconst T*, T1*\u003e { public: TestClass() { cout\u003c\u003c\"const T*, T1*\"\u003c\u003cendl; } }; 对于模板、模板的特化和模板的偏特化都存在的情况下，编译器在编译阶段进行匹配时，是如何抉择的呢？从哲学的角度来说，**应该先照顾最特殊的(全特化版本)，然后才是次特殊的(偏特化版本)，最后才是最普通的(模板版本)。编译器进行抉择也是尊从的这个道理。**从上面的例子中，我们也可以看的出来，这就就不再举例说明。\n43 可变参数模板简单介绍\n可变参数模板：接受可变数目参数的模板函数或模板类。将可变数目的参数被称为参数包，包括模板参数包和函数参数包。\n模板参数包：表示零个或多个模板参数；\n函数参数包：表示零个或多个函数参数。\n// 广泛用于STL中的容器类 template \u003ctypename T, typename... Args\u003e // Args 是模板参数包 void foo(const T \u0026t, const Args\u0026... rest); // 可变参数模板，rest 是函数参数包 // 递归模板展开的 终止版本 template \u003ctypename T\u003e void print_fun(const T \u0026t) { cout \u003c\u003c t \u003c\u003c endl; // 最后一个元素 } // 递归展开Args模板参数 template \u003ctypename T, typename... Args\u003e void print_fun(const T \u0026t, const Args \u0026...args) { cout \u003c\u003c t \u003c\u003c \" \"; print_fun(args...); } int main() { print_fun(\"Hello\", \"wolrd\", \"!\"); return 0; } 这一步会将args中的第一个参数赋值给void print_fun(const T \u0026t, const Args \u0026…args)，剩余的参数赋值给args，所以每一步的递归过程中，args中参数的数量都是不断减少的。直到args中只有一个参数，再使用print_fun(args…)时直接调用void print_fun(const T \u0026t)函数（递归基）。\n44 一些小tips\ninclude\u003c文件名\u003e 和 #include\"文件名\" 的区别:\n查找文件的位置：include\u003c文件名\u003e 在标准库头文件所在的目录中查找(尖括号不能在当前源文件路径下寻找)；#include\"文件名\" 在当前源文件所在目录中进行查找，如果没有；再到系统目录中查找。\n使用习惯：对于标准库中的头文件常用 include\u003c文件名\u003e，对于自己定义的头文件，常用 #include\"文件名\"\n45 容器迭代器使用介绍\n迭代器本质是泛化的指针\n迭代器按照定义方式分成以下四种。\n正向迭代器，定义方法如下： 容器类名::iterator 迭代器名;\n支持以下操作：++p，p++，*p。此外，两个正向迭代器可以互相赋值，还可以用==和!=运算符进行比较。\n常量正向迭代器，定义方法如下： 容器类名::const_iterator 迭代器名;\n反向迭代器，定义方法如下： 容器类名::reverse_iterator 迭代器名;\n常量反向迭代器，定义方法如下： 容器类名::const_reverse_iterator 迭代器名;\n随机访问迭代器这里没提，因为我们用到迭代器的场景一般就是完整遍历某一容器\n通过迭代器可以读取它指向的元素，*迭代器名就表示迭代器指向的元素。通过非常量迭代器还能修改其指向的元素。\n迭代器都可以进行++操作。反向迭代器和正向迭代器的区别在于：\n对正向迭代器进行++操作时，迭代器会指向容器中的后一个元素；\n而对反向迭代器进行++操作时，迭代器会指向容器中的前一个元素。\nfor (int n = 0; n\u003c5; ++n) v.push_back(n); //push_back成员函数在vector容器尾部添加一个元素 // 0 1 2 3 4 vector\u003cint\u003e::iterator i; //定义正向迭代器 for (i = v.begin(); i != v.end(); ++i) { //用迭代器遍历容器 cout \u003c\u003c *i \u003c\u003c \" \"; //*i 就是迭代器i指向的元素 } cout \u003c\u003c endl; // 4 3 2 1 0 //用反向迭代器遍历容器 for (vector\u003cint\u003e::reverse_iterator j = v.rbegin(); j != v.rend(); ++j) cout \u003c\u003c *j \u003c\u003c \" \"; 双向迭代器。双向迭代器具有正向迭代器的全部功能。除此之外，若 p 是一个双向迭代器，则–p和p–都是有定义的。–p使得 p 朝和++p相反的方向移动。\n随机访问迭代器。随机访问迭代器具有双向迭代器的全部功能。若 p 是一个随机访问迭代器，i 是一个整型变量或常量，则 p 还支持以下操作：\np+=i：使得 p 往后移动 i 个元素。\np-=i：使得 p 往前移动 i 个元素。\np+i：返回 p 后面第 i 个元素的迭代器。\np-i：返回 p 前面第 i 个元素的迭代器。\np[i]：返回 p 后面第 i 个元素的引用。\n两个随机访问迭代器 p1、p2 还可以用 \u003c、\u003e、\u003c=、\u003e= 运算符进行比较。p1 对于两个随机访问迭代器 p1、p2，表达式p2-p1也是有定义的，其返回值是 p2 所指向元素和 p1 所指向元素的序号之差（也可以说是 p2 和 p1 之间的元素个数减一）。\n不同容器的迭代器类型\nvector\t随机访问\ndeque\t随机访问\nlist\t双向\nset / multiset\t双向\nmap / multimap\t双向\nstack\t不支持迭代器\nqueue\t不支持迭代器\npriority_queue\t不支持迭代器\nvector\t随机访问,可用来遍历的几种迭代器做法\nvector\u003cint\u003e v(100); //v被初始化成有100个元素 for(int i = 0;i \u003c v.size() ; ++i) //size返回元素个数 cout \u003c\u003c v[i]; //像普通数组一样使用vector容器 vector\u003cint\u003e::iterator i; for(i = v.begin(); i != v.end (); ++i) //用 != 比较两个迭代器 cout \u003c\u003c * i; for(i = v.begin(); i \u003c v.end ();++i) //用 \u003c 比较两个迭代器 cout \u003c\u003c * i; i = v.begin(); while(i \u003c v.end()) { //间隔一个输出 cout \u003c\u003c * i; i += 2; // 随机访问迭代器支持 \"+= 整数\" 的操作 } 几个迭代器辅助函数\n#include //要使用操作迭代器的函数模板，需要包含此文件\nadvance(p, n)：使迭代器 p 向前或向后移动 n 个元素。n\u003e0向前 n\u003c0向后\ndistance(p, q)：计算两个迭代器之间的距离，即迭代器 p 经过多少次 + + 操作后和迭代器 q 相等。如果调用时 p 已经指向 q 的后面，则这个函数会陷入死循环。\niter_swap(p, q)：用于交换两个迭代器 p、q 指向的内容。\n46 类型萃取\n什么是类型萃取\n类型萃取，英文为 type traits，直译过来为类型的特点。\n举个例子，无论是 int\u0026\u0026, int\u0026，都算是 int 类型的变种，int就是 int\u0026\u0026、int\u0026 类型的一个特点。\n那么，怎么通过 int\u0026\u0026 获得它的特点，即 int 类型呢？\nremove_reference_t 等同于 int，即通过这个表达式，我们获得了 int\u0026\u0026 类型的特点，即去除掉引用后，int\u0026\u0026 等同于 int。\n再举个例子，\nis_const_v 返回 false,\nis_const_v 返回 true。\n即通过 is_const_v\u003c类型\u003e 模板，我们可以知道一个类型是否为 const修饰的类型，这就是所谓的类型萃取。\n类型萃取都是在编译时进行的,在之前的笔记中的编译期类型推导中有提到就是专门用于类型萃取的库,上面的is_const_v和remove_reference_t都在这个头文件中。\nmove移动函数是类型萃取的一个典型应用\ntemplate\u003ctypename T\u003e remove_reference\u003cT\u003e::type\u0026\u0026 move(T\u0026\u0026 t) { return static_cast\u003cremove_reference\u003cT\u003e::type \u0026\u0026\u003e(t); } 是把 t 转换为右值，无论传入时t 原本是左值还是右值。\nremove_reference_t把 t 对应的类型 T 上的引用给“去掉”,remove_reference_t里面其实做的就是几个typedef利用万能引用，得到去掉引用后的类型，remove_reference_t的结果是一个类型\ntemplate\u003ctypename _Tp\u003e struct remove_reference { typedef _Tp type; }; //如果传入_Tp为 // 特化版本 特化了_Tp\u0026 _Tp\u0026\u0026的struct 对于struct中的参数_Tp是确定 template\u003ctypename _Tp\u003e struct remove_reference\u003c_Tp\u0026\u003e { typedef _Tp type; }; template\u003ctypename _Tp\u003e struct remove_reference\u003c_Tp\u0026\u0026\u003e { typedef _Tp type; }; template \u003cclass T\u003e typename tinySTL::remove_reference\u003cT\u003e::type\u0026\u0026 move(T\u0026\u0026 t) noexcept { using return_type = typename tinySTL::remove_reference\u003cT\u003e::type\u0026\u0026; return static_cast\u003creturn_type\u003e(t); } 然后，再把右值给强行绑上remove_reference_t\u0026\u0026\n47 设计模式\n设计模式有 6 大设计原则：\n单一职责原则：就一个类而言，应该仅有一个引起它变化的原因。\n开放封闭原则：软件实体可以扩展，但是不可修改。即面对需求，对程序的改动可以通过增加代码来完成，但是不能改动现有的代码。\n里氏代换原则：一个软件实体如果使用的是一个基类，那么一定适用于其派生类。即在软件中，把基类替换成派生类，程序的行为没有变化。\n依赖倒转原则：抽象不应该依赖细节，细节应该依赖抽象。即针对接口编程，不要对实现编程。\n迪米特原则：如果两个类不直接通信，那么这两个类就不应当发生直接的相互作用。如果一个类需要调用另一个类的某个方法的话，可以通过第三个类转发这个调用。\n接口隔离原则：每个接口中不存在派生类用不到却必须实现的方法，如果不然，就要将接口拆分，使用多个隔离的接口。\n下面介绍常见的几种设计模式：\n单例模式：保证一个类仅有一个实例，并提供一个访问它的全局访问点。\n工厂模式：包括简单工厂模式、抽象工厂模式、工厂方法模式\n简单工厂模式：主要用于创建对象。用一个工厂来根据输入的条件产生不同的类，然后根据不同类的虚函数得到不同的结果。\n工厂方法模式：修正了简单工厂模式中不遵守开放封闭原则。把选择判断移到了客户端去实现，如果想添加新功能就不用修改原来的类，直接修改客户端即可。\n抽象工厂模式：定义了一个创建一系列相关或相互依赖的接口，而无需指定他们的具体类。\n观察者模式：定义了一种一对多的关系，让多个观察对象同时监听一个主题对象，主题对象发生变化时，会通知所有的观察者，使他们能够更新自己。\n装饰模式：动态地给一个对象添加一些额外的职责，就增加功能来说，装饰模式比生成派生类更为灵活。\n单例模式：保证类的实例化对象仅有一个，并且提供一个访问他的全局访问方式。\n单例模式可以通过全局或者静态变量的形式实现，这样比较简单，但是这样会影响封装性，难以保证别的代码不会对全局变量造成影响。我们使用以下方式来达到封装单例的行为\n默认的构造函数、拷贝构造函数、赋值构造函数声明为私有的，这样可以禁止在类的外部创建该对象；\n全局访问方式使用类的静态成员函数(不会将this指针传入函数内)实现，没有参数，返回单例所拥有的堆上单例对象(对象地址使用类中静态指针变量来保存)。如下\nclass Singleton{ private: static Singleton * instance; Singleton(const Singleton\u0026 tmp){} Singleton\u0026 operator=(const Singleton\u0026 tmp){} // 如果单例要被继承 则构造和析构都声明为protected Singleton(){} ~Singleton();// 禁止外部析构 public: static Singleton* getInstance(){// 静态成员函数只能访问静态成员 if(instance == NULL){ instance = new Singleton();// 第一次调用单例对象没有创建 则将这个单例对象在堆上创建出来，如果已经有了则返回堆上单例对象的指针 } return instance; } }; Singleton* Singleton::instance = NULL; 上面的这种实现方式叫做，懒汉实现直到第一次用到类的实例时才去实例化(第一次调用getInstance时单例对象才会在堆上被创建),注意上述的实现方法并没有考虑线程安全问题，当两个线程同时调用getInstance 方法，并且同时检测到 instance 是 NULL，两个线程会同时实例化对象，不符合单例模式的要求。\n加锁的懒汉保证线程安全\nclass Singleton{ private: static Singleton * instance; static pthread_mutex_t mutex; Singleton(const Singleton\u0026 tmp){} Singleton\u0026 operator=(const Singleton\u0026 tmp){} // 如果单例要被继承 则构造和析构都声明为protected Singleton(){ pthread_mutex_init(\u0026mutex, NULL); } ~Singleton();// 禁止外部析构 public: static Singleton* getInstance(){// 静态成员函数只能访问静态成员 // 这里使用了两个 if判断语句的技术称为双检锁；好处是，只有第一次判断指针为空的时候才加锁， // 如果第一个if判断不加则每次调用 getInstance的方法都加锁， // 锁的开销毕竟还是有点大的。 if (instance == NULL) { pthread_mutex_lock(\u0026mutex);// 加锁 if(instance == NULL) instance = new Singleton();// 第一次调用单例对象没有创建 则将这个单例对象在堆上创建出来，如果已经有了则返回堆上单例对象的指针 pthread_mutex_unlock(\u0026mutex); } return instance; } }; pthread_mutex_t Singleton::mutex; Singleton* Singleton::instance = NULL; 内部静态变量的懒汉单例（C++11 线程安全）最推荐的方法\nC++11中，静态局部变量是在第一次调用方法时分配内存的，C++11保证了静态局部对象是线程安全的，所以这就能实现一种完美单例模式(内部静态的懒汉模式)。如下\nclass Singleton{ private: //直接定义一个同类型的静态成员变量也是被允许的 // static Singleton s;// 正确 Singleton(const Singleton\u0026 temp){} Singleton\u0026 operator=(const Singleton\u0026 temp){} // 如果单例要被继承 则构造和析构都声明为protected ~Singleton();// 禁止外部析构 Singleton(){} public: static Singleton* getInstance(){ // Lock(); // not needed after C++0x static Singleton s;// C++11中，静态局部变量是在第一次调用方法时分配内存 // UnLock(); // not needed after C++0x return \u0026s; } }; 介绍饿汉(在类定义的时候就实例化堆上单例对象)实现单例模式，和懒汉实现只有一点不同。\nclass Singleton{ private: static Singleton* instance; Singleton(const Singleton\u0026 temp){} Singleton\u0026 operator=(const Singleton\u0026 temp){} // 私有内嵌类 class Garbo //它的唯一工作就是在析构函数中删除Singleton的instance实例 { public: // Garbo的构造和析构 必须声明成public，否则编译失败！！！ ~Garbo() { // 内嵌类只能访问外部类的静态成员变量 // 内嵌类可访问外部类的私有+保护+公有函数成员 if( Singleton::instance ) { cout\u003c\u003c\"Garbo dtor\"\u003c\u003cendl; delete Singleton::instance;//instance是堆上资源而非静态资源，所以需要这样回收，如果是静态资源则和Garbo 一样在程序结束后由系统回收，我们就不需要关系写的这么麻烦 Singleton::instance = nullptr; } } }; static Garbo garbo; //定义一个静态成员，程序结束时，系统会自动调用它的析构函数 // garbo是静态成员变量，其和instance构造的先后顺序依赖于静态对象的声明顺序， // 但是析构顺序经过测试一直是garbo(成员变量)先析构，然后在garbo的析构函数中 //将instance给delete析构了(可以在内嵌类中调用delete 调用Singleton的私有析构函数) // 这样就可以实现garbo是静态资源在程序(进程)结束时由系统回收调用garbo的析构函数， // 在garbo的析构中实现了回收堆上的instance资源。这样我们就不需要管instance资源是否被释放， // 只要程序结束了，instance资源自动被回收了。 // 如果单例要被继承 则构造和析构都声明为protected ~Singleton();// 禁止外部析构 Singleton(){} public: static Singleton* getInstance(){ return instance; } }; Singleton::Garbo Singleton::garbo; // 一定要初始化，不然程序结束时不会析构garbo // 没有使用全局或静态实现单例，这里的单例是静态成员对象，需要通过类才能访问(还是实现了一层的封装，无法在全局作用域下随便访问到) //静态成员变量的类外初始化是不受访问控制符的限制！！！！！！！ Singleton* Singleton::instance = new Singleton(); // 这里经过测试将 构造设为保护或私有都是可以正确运行的 https://zhuanlan.zhihu.com/p/83535678\n工厂模式：**在工厂模式中，我们在创建对象时不会对客户端暴露创建逻辑，并且是通过使用一个共同的接口来指向新创建的对象。定义一个用于创建对象的接口，让子类决定实例化哪一个类，工厂方法使一个类的实例化延迟到其子类。**简单来说，使用了C++多态的特性，将存在继承关系的类，通过一个工厂类创建对应的子类（派生类）对象。在项目复杂的情况下，可以便于子类对象的创建。\n工厂模式的实现方式可分别简单工厂模式、工厂方法模式、抽象工厂模式，每个实现方式都存在优和劣。\n简单工厂\n鞋厂可以指定生产耐克、阿迪达斯和李宁牌子的鞋子，需要哪个就生产哪个\n// 鞋子抽象类 是具体产品类的继承的父类或实现的接口 class Shoes { public: virtual ~Shoes() {} virtual void Show() = 0; }; // 耐克鞋子 具体产品类：工厂类所创建的对象就是此具体产品实例 class NiKeShoes : public Shoes { public: void Show() { std::cout \u003c\u003c \"我是耐克球鞋，我的广告语：Just do it\" \u003c\u003c std::endl; } }; // 阿迪达斯鞋子 class AdidasShoes : public Shoes { public: void Show() { std::cout \u003c\u003c \"我是阿迪达斯球鞋，我的广告语:Impossible is nothing\" \u003c\u003c std::endl; } }; // 李宁鞋子 class LiNingShoes : public Shoes { public: void Show() { std::cout \u003c\u003c \"我是李宁球鞋，我的广告语：Everything is possible\" \u003c\u003c std::endl; } }; 简单工厂的缺点就在这里，扩展性非常差，新增产品的时候，需要去修改工厂类代码(添加枚举常量，在工厂类中创建对象的函数中添加 创建新产品分支的代码)。简单工厂模式，，需要去修改工厂类，这违背了设计模式的开闭法则。\nenum SHOES_TYPE // 枚举常量代表 鞋品牌 { NIKE, LINING, ADIDAS }; // 总鞋厂 工厂类封装了创建具体产品对象的函数。 class ShoesFactory { public: // 根据鞋子类型创建对应的鞋子对象 // 返回直接实现up_cast，返回的是基类指针，并且是指向派生类对象的基类指针 Shoes *CreateShoes(SHOES_TYPE type) { switch (type) { case NIKE: return new NiKeShoes(); break; case LINING: return new LiNingShoes(); break; case ADIDAS: return new AdidasShoes(); break; default: return NULL; break; } } }; // 使用 // 构造工厂对象 ShoesFactory shoesFactory; Shoes *pNikeShoes = shoesFactory.CreateShoes(NIKE); if (pNikeShoes != NULL) { // 耐克球鞋广告喊起 pNikeShoes-\u003eShow();// 多态调用派生类函数 // 释放资源 delete pNikeShoes; pNikeShoes = NULL; } // 从鞋工厂对象创建阿迪达斯鞋对象 Shoes *pLiNingShoes = shoesFactory.CreateShoes(LINING); if (pLiNingShoes != NULL) { // 李宁球鞋广告喊起 pLiNingShoes-\u003eShow();// 多态调用派生类函数 // 释放资源 delete pLiNingShoes; pLiNingShoes = NULL; } 工厂方法模式\n针对不同品牌的鞋子开设独立的生产线，那么每个生产线就只能生产同类型品牌的鞋\n本质上就是生产的产品由同一抽象类(Shoes)得来,生产产品的工厂也由同一抽象类(ShoesFactory )得来。\n// 这里的Shoes(抽象产品类：它是具体产品继承的父类（基类）),NikeShoes,AdidasShoes,LiningShoes(具体产品类：具体工厂所创建的对象，就是此类)和上面简单工厂的代码是一摸一样的这里就不写了。\n// 总鞋厂\n工厂方法模式抽象出了工厂类，提供创建具体产品的接口，交由子类去实现。\nclass ShoesFactory // 抽象工厂类：工厂方法模式的核心类，提供创建具体产品的接口，由具体工厂类实现。 { public: virtual Shoes *CreateShoes() = 0; virtual ~ShoesFactory() {} }; 工厂方法模式的应用并不只是为了封装具体产品对象的创建，而是要把具体产品对象的创建放到具体工厂类实现。\n不违反设计模式的开闭法则了，但每新增一个产品，就需要增加一个对应的产品的具体工厂类。相比简单工厂模式而言，工厂方法模式需要更多的类定义。\n// 耐克生产者/生产链 只生产NiKeShoes类对象 具体工厂类：继承于抽象工厂，实现创建对应具体产品对象的方式 class NiKeProducer : public ShoesFactory { public: // 返回直接实现up_cast，返回的是基类指针，并且是指向派生类对象的基类指针 Shoes *CreateShoes() { return new NiKeShoes(); } }; // 阿迪达斯生产者/生产链 只生产AdidasShoes类对象 具体工厂类：继承于抽象工厂，实现创建对应具体产品对象的方式 class AdidasProducer : public ShoesFactory { public: // 返回直接实现up_cast，返回的是基类指针，并且是指向派生类对象的基类指针 Shoes *CreateShoes() { return new AdidasShoes(); } }; // 李宁生产者/生产链 只生产LiNingShoes类对象 具体工厂类：继承于抽象工厂，实现创建对应具体产品对象的方式 class LiNingProducer : public ShoesFactory { public: // 返回直接实现up_cast，返回的是基类指针，并且是指向派生类对象的基类指针 Shoes *CreateShoes() { return new LiNingShoes(); } }; // 使用 // ================ 生产耐克流程 ==================== // // 鞋厂开设耐克生产线 ShoesFactory *niKeProducer = new NiKeProducer(); // 耐克生产线产出球鞋 Shoes *nikeShoes = niKeProducer-\u003eCreateShoes(); // 耐克球鞋广告喊起 nikeShoes-\u003eShow(); // 释放资源 delete nikeShoes; delete niKeProducer; // ================ 生产阿迪达斯流程 ==================== // // 鞋厂开设阿迪达斯生产者 ShoesFactory *adidasProducer = new AdidasProducer(); // 阿迪达斯生产线产出球鞋 Shoes *adidasShoes = adidasProducer-\u003eCreateShoes(); // 阿迪达斯球鞋广喊起 adidasShoes-\u003eShow(); // 释放资源 delete adidasShoes; delete adidasProducer; 抽象工厂模式\n鞋厂为了扩大了业务，不仅只生产鞋子，把运动品牌的衣服也一起生产了(工厂的生产类别增多)。\n本质上就是生产的产品由同一抽象类(Shoes，Clothes)得来,生产产品的工厂也由同一抽象类(Factory )得来，并且每个生产工厂抽象类要负责 对不同产品抽象类的生产(Factory 中有CreateShoes和CreateClothe两个返回不同种类产品抽象类的函数** )。每添加一种基础抽象产品都需要增加一个对应的产品的具体工厂类，这就会增大了代码的编写量。**\n// 基类 衣服 class Clothe { public: virtual void Show() = 0; virtual ~Clothe() {} }; // 耐克衣服 class NiKeClothe : public Clothe { public: void Show() { std::cout \u003c\u003c \"我是耐克衣服，时尚我最在行！\" \u003c\u003c std::endl; } }; // 基类 鞋子 class Shoes { public: virtual void Show() = 0; virtual ~Shoes() {} }; // 耐克鞋子 class NiKeShoes : public Shoes { public: void Show() { std::cout \u003c\u003c \"我是耐克球鞋，让你酷起来！\" \u003c\u003c std::endl; } }; // 总厂 class Factory { public: virtual Shoes *CreateShoes() = 0; virtual Clothe *CreateClothe() = 0; virtual ~Factory() {} }; // 耐克生产者/生产链 class NiKeProducer : public Factory { public: // 返回直接实现up_cast，返回的是基类指针，并且是指向派生类对象的基类指针 Shoes *CreateShoes() { return new NiKeShoes(); } Clothe *CreateClothe() { return new NiKeClothe(); } }; // 使用 // ================ 生产耐克流程 ==================== // // 鞋厂开设耐克生产线 Factory *niKeProducer = new NiKeProducer(); // 耐克生产线产出球鞋 Shoes *nikeShoes = niKeProducer-\u003eCreateShoes(); // 耐克生产线产出衣服 Clothe *nikeClothe = niKeProducer-\u003eCreateClothe(); // 耐克球鞋广告喊起 nikeShoes-\u003eShow(); // 耐克衣服广告喊起 nikeClothe-\u003eShow(); // 释放资源 delete nikeShoes; delete nikeClothe; delete niKeProducer; 以上三种方式，在新增产品时，要么修改工厂类，要么需新增具体的工厂类，说明工厂类的封装性还不够好。\n将工厂类的封装性提高，达到新增产品时，也不需要修改工厂类，不需要新增具体的工厂类。封装性高的工厂类特点是扩展性高、复用性也高。\n模板工厂\n针对工厂方法模式封装成模板工厂类，那么这样在新增产品时，是不需要新增具体的工厂类，减少了代码的编写量。\n可以解决产品新增时，不需要新增具体工厂类，但是缺少一个可以随时随地获取产品对象的方式。\n// 基类 鞋子 class Shoes { public: virtual void Show() = 0; virtual ~Shoes() {} }; // 耐克鞋子 class NiKeShoes : public Shoes { public: void Show() { std::cout \u003c\u003c \"我是耐克球鞋，我的广告语：Just do it\" \u003c\u003c std::endl; } }; // 基类 衣服 class Clothe { public: virtual void Show() = 0; virtual ~Clothe() {} }; // 优衣库衣服 class UniqloClothe : public Clothe { public: void Show() { std::cout \u003c\u003c \"我是优衣库衣服，我的广告语：I am Uniqlo\" \u003c\u003c std::endl; } }; // 抽象模板工厂和具体模板工厂(负责创建具体产品) // 抽象模板工厂类 // 模板参数：AbstractProduct_t 产品抽象类 template \u003cclass AbstractProduct_t\u003e class AbstractFactory { public: virtual AbstractProduct_t *CreateProduct() = 0; virtual ~AbstractFactory() {} }; // 具体模板工厂类 // 模板参数：AbstractProduct_t 产品抽象类，ConcreteProduct_t 产品具体类 template \u003cclass AbstractProduct_t, class ConcreteProduct_t\u003e class ConcreteFactory : public AbstractFactory\u003cAbstractProduct_t\u003e { public: // 返回直接实现up_cast，返回的是基类指针，并且是指向派生类对象的基类指针 AbstractProduct_t *CreateProduct() { return new ConcreteProduct_t(); } }; // 使用 // 构造耐克鞋的工厂对象 ConcreteFactory\u003cShoes, NiKeShoes\u003e nikeFactory;// // 创建耐克鞋对象 Shoes *pNiKeShoes = nikeFactory.CreateProduct(); // 打印耐克鞋广告语 pNiKeShoes-\u003eShow(); // 构造优衣库衣服的工厂对象 ConcreteFactory\u003cClothe, UniqloClothe\u003e uniqloFactory; // 创建优衣库衣服对象 Clothe *pUniqloClothe = uniqloFactory.CreateProduct(); // 打印优衣库广告语 pUniqloClothe-\u003eShow(); // 释放资源 delete pNiKeShoes; pNiKeShoes = NULL; delete pUniqloClothe; pUniqloClothe = NULL; 产品注册模板类+单例工厂模板类\n前面的模板工厂虽然在新增产品的时候，不需要新增具体的工厂类，但是缺少一个可以统一随时随地获取指定的产品对象的类。\n把产品注册的功能封装成产品注册模板类(Registrar)。注册的产品对象保存在工厂模板类的std::unordered_map，便于产品对象的获取。\n把获取产品对象的功能封装成工厂模板类。为了能随时随地获取指定产品对象，则把工厂设计成单例模式。\n// 基类，产品注册模板接口类 // 模板参数 ProductType_t 表示的类是产品抽象类 template \u003cclass ProductType_t\u003e class IProductRegistrar { public: // 获取产品对象抽象接口 virtual ProductType_t *CreateProduct() = 0; protected: // 禁止外部构造和析构, 子类的\"内部\"的其他函数可以调用 IProductRegistrar() {} virtual ~IProductRegistrar() {} private: // 禁止外部拷贝和赋值操作 IProductRegistrar(const IProductRegistrar \u0026); const IProductRegistrar \u0026operator=(const IProductRegistrar \u0026); }; // 产品注册模板类，用于创建具体产品和从工厂里注册产品 // 模板参数 ProductType_t 表示的类是产品抽象类（基类 Shoes），ProductImpl_t 表示的类是具体产品（产品种类的子类 NikeShoes） template \u003cclass ProductType_t, class ProductImpl_t\u003e class ProductRegistrar : public IProductRegistrar\u003cProductType_t\u003e { private: string product_name; public: // 构造函数，用于注册产品到工厂，只能显示调用 explicit ProductRegistrar(std::string name):product_name(name) { // 通过工厂单例把产品注册到工厂 // 在第一次创建实际产品 注册器时 会创建静态抽象工厂单例，并将实际产品注册器登录到工厂的哈希表中 // 重复注册问题，将会导致之前的同具体产品注册器失效 if(!ProductFactory\u003cProductType_t\u003e::Instance().RegisterProduct(this, name)) // 后注册的注册器无效，设置其名字为空，防止其析构时误将正在用的注册器从哈希表中删除了 name = “”; } // 创建具体产品对象指针 ProductType_t *CreateProduct() { return new ProductImpl_t(); } //当注册器对象析构后 对应name里记录的就是野指针，还需要在注册器析构的时候将哈希表中对应的键值对给删除了 // 产品登出(删除产品) 需要保证只能在 注册器析构的时候调用这个函数 ~ProductRegistrar() { ProductFactory\u003cProductType_t\u003e::Instance().deRegisterProduct(product_name); } }; // 工厂模板类，用于获取和注册产品对象 // 模板参数 ProductType_t 表示的类是产品抽象类 template \u003cclass ProductType_t\u003e class ProductFactory { public: // 获取工厂单例，工厂的实例是唯一的 static ProductFactory\u003cProductType_t\u003e \u0026Instance() { static ProductFactory\u003cProductType_t\u003e instance;// 静态懒汉 线程安全 return instance; } // 产品注册 bool RegisterProduct(cosnst IProductRegistrar\u003cProductType_t\u003e *registrar, cosnst std::string\u0026 name) { // 有点问题 当注册器对象析构后 对应name里记录的就是野指针，还需要在注册器析构的时候将哈希表中对应的键值对给删除了 // 防止重复登记同名产品，只保留第一次登记的那个注册器指针 if (m_ProductRegistry.find(name) != m_ProductRegistry.end()) { // 后注册的注册器无效，设置其名字为空，防止其析构时误将正在用的注册器从哈希表中删除了 return false; } m_ProductRegistry[name] = registrar;// 键 产品名 值 产品注册器指针(产品注册器有CreateProduct可以直接生产产品) return true; } // 根据名字name，获取对应具体的产品对象 ProductType_t *GetProduct(std::string name) { // 从哈希表找到已经注册过的产品(产品注册器)，并返回产品对象 if (m_ProductRegistry.find(name) != m_ProductRegistry.end()) { return m_ProductRegistry[name]-\u003eCreateProduct(); } // 未注册的产品，则报错未找到 std::cout \u003c\u003c \"No product found for \" \u003c\u003c name \u003c\u003c std::endl; return NULL; } private: // 禁止外部构造和析构 ProductFactory() {} ~ProductFactory() {} // 禁止外部拷贝和赋值操作 ProductFactory(const ProductFactory \u0026); const ProductFactory \u0026operator=(const ProductFactory \u0026); // 保存注册过的产品，key:产品名字 , value:产品类型 std::unordered_map\u003cstd::string, IProductRegistrar\u003cProductType_t\u003e *\u003e m_ProductRegistry; }; 对于不同的产品种类有专门的单例工厂用于生产这种产品\nProductFactory::Instance()\nProductFactory\u003c抽象产品类别\u003e::Instance()\n每种抽象产品工厂类单例的ProductFactory\u003c抽象产品类别\u003e::Instance()初次构造是在ProductRegistrar\u003c抽象产品类别,具体产品\u003e的构造函数体中，创建了静态工厂单例，并将这种产品注册器ProductRegistrar\u003c抽象产品类别,具体产品\u003e的指针登记到 抽象产品工厂ProductRegistrar\u003c抽象产品类别\u003e工厂的哈希表中[实际产品名字符串]=实际产品注册器 中，通过实际产品注册器可以实现创建实际产品对象\n// 实际使用 // 产品注册器ProductRegistrar在注册阶段 // ========================== 生产耐克球鞋过程 ===========================// // 注册产品种类为Shoes（基类），产品为NiKe（子类）到工厂，产品名为nike ProductRegistrar\u003cShoes, NiKeShoes\u003e nikeShoes(\"nike\");// 首次创建产品注册器，在其构造函数中会创建抽象产品工厂单例，并将注册器(以指明实际产品)登录到 工厂的哈希表中[实际产品名字符串]=实际产品注册器 中，通过实际产品注册器可以实现创建实际产品对象 // ========================== 生产优衣库衣服过程 ===========================// // 注册产品种类为Clothe（基类），产品为UniqloClothe（子类）到工厂，产品名为uniqlo ProductRegistrar\u003cClothe, UniqloClothe\u003e uniqloClothe(\"uniqlo\"); // 从工厂获取产品种类为Clothe，名称为uniqlo的产品对象 // 从工厂获取产品种类为Shoes，名称为nike的产品对象 Shoes *pNiKeShoes = ProductFactory\u003cShoes\u003e::Instance().GetProduct(\"nike\"); Clothe *pUniqloClothe = ProductFactory\u003cClothe\u003e::Instance().GetProduct(\"uniqlo\"); // 显示产品的广告语 pNiKeShoes-\u003eShow(); // 显示产品的广告语 pUniqloClothe-\u003eShow(); // 释放资源 if (pNiKeShoes) { delete pNiKeShoes; } // 释放资源 if (pUniqloClothe) { delete pUniqloClothe; } https://www.cnblogs.com/carsonzhu/p/5770253.html\n观察者模式\n观察者模式：定义一种一（被观察类）对多（观察类）的关系，让多个观察对象同时监听一个被观察对象，被观察对象状态发生变化时，会通知所有的观察对象，使他们能够更新自己的状态。(这种交互也称为发布-订阅(publish-subscribe)。目标是通知的发布者，它发出通知时并不需要知道谁是它的观察者)\n观察者模式中存在两种角色：\n观察者：内部包含被观察者对象，当被观察者对象的状态发生变化时，更新自己的状态。（接收通知更新状态）\n被观察者：内部包含了所有观察者对象，当状态发生变化时通知所有的观察者更新自己的状态。（发送通知）\n应用场景：\n当一个对象的改变需要同时改变其他对象，且不知道具体有多少对象有待改变时，应该考虑使用观察者模式；\n一个抽象模型有两个方面，其中一方面依赖于另一方面，这时可以用观察者模式将这两者封装在独立的对象中使它们各自独立地改变和复用。\n这里的目标 Subject 提供依赖于它的观察者 Observer 的注册（ Attach） 和注销（ Detach）操作(添加删除对Subject 对象的观察者 Observer)，并且提供了使得依赖于它的所有观察者同步的操作（ Notify）。 观察者 Observer 则提供一个 Update 操作， 注意这里的 Observer 的 Update 操作并不在 Observer 改变了 Subject 目标状态的时候就对自己进行更新， 这个更新操作要延迟到 Subject 对象发出 Notify 通知所有Observer 进行修改（调用 Update）。\nclass Subject; //抽象观察者 class Observer { protected: string name;// 每个观察者特有的名字 Subject *sub;// 保存其具体观察的对象 指针 public: Observer(string name, Subject *sub) { this-\u003ename = name; this-\u003esub = sub; } virtual void update() = 0; }; //具体的观察者，看股票的 class StockObserver :public Observer { public: StockObserver(string name, Subject *sub) :Observer(name, sub) { } void update();// 在被观察者通知notify后做这个特别的观察者的特殊动作 }; void StockObserver::update() { cout \u003c\u003c name \u003c\u003c \" 收到消息：\" \u003c\u003c sub-\u003eaction \u003c\u003c endl; if (sub-\u003eaction == \"梁所长来了!\") { cout \u003c\u003c \"我马上关闭股票，装做很认真工作的样子！\" \u003c\u003c endl; } } //具体的观察者，看NBA的 class NBAObserver :public Observer { public: NBAObserver(string name, Subject *sub) :Observer(name, sub) { } void update();// 在被观察者通知notify后做这个特别的观察者的特殊动作 }; void NBAObserver::update() { cout \u003c\u003c name \u003c\u003c \" 收到消息：\" \u003c\u003c sub-\u003eaction \u003c\u003c endl; if (sub-\u003eaction == \"梁所长来了!\") { cout \u003c\u003c \"我马上关闭NBA，装做很认真工作的样子！\" \u003c\u003c endl; } } //抽象通知者 class Subject { protected: list\u003cObserver*\u003e observers;// 登记观察自己的观察者列表 // 双向链表实现，其实用哈希表更好，观察者本身每个都有一个独一无二的name // 可以用name做键，观察者地址做值 public: string action; virtual void attach(Observer*) = 0;// 登记观察自己的观察者 virtual void detach(Observer*) = 0;// 删除观察自己的观察者 virtual void notify() = 0; }; //具体通知者，秘书 class Secretary :public Subject { public: string act; void attach(Observer *observer)// 登记观察自己的观察者 { observers.push_back(observer); } void detach(Observer *observer) { list\u003cObserver *\u003e::iterator iter = observers.begin(); while (iter != observers.end()) { if ((*iter) == observer) { observers.erase(iter);// 删除观察自己的观察者 } ++iter; } } void notify() { list\u003cObserver *\u003e::iterator iter = observers.begin(); action = \"梁所长来了!\"; // 遍历登记在observers中的所有观察者，并发出自己状态改变(做出action)的通知,使所有观察者自己的状态发生对应的变化 while (iter != observers.end()) { (*iter)-\u003eupdate(); ++iter; } } }; 观察者本质，被观察对象Subject为一对多的关系在Subject中需要用容器保存登记所有正在观察他的观察者，在被观察对象的状态发生改变后，需要被观察对象Subject遍历容器依次调用观察者的update函数，来让观察者的状态根据被观察对象的变化发生对应的改变。\n//使用 Subject *dwq = new Secretary(); //被观察的对象 Observer *xs = new NBAObserver(\"xiaoshuai\", dwq); Observer *zy = new NBAObserver(\"zouyue\", dwq); Observer *lm = new StockObserver(\"limin\", dwq); //加入观察队列 dwq-\u003eattach(xs); dwq-\u003eattach(zy); dwq-\u003eattach(lm); dwq-\u003enotify(); 48 关于构造和析构的访问权限\n基类的构造和析构在派生类内的访问权限需要是public或protected否则无法在派生类内调用基类的构造或析构函数，会直接报错。\n最后由主函数构造的派生类，其构造或析构必须是要是public的否则在 主函数内无法构造或析构，会直接报错。\n标准模板库的六大组件：\n1、容器\n2、算法\n3、迭代器\n4、分配器\n5、仿函数\n6、适配器\n","wordCount":"2381","inLanguage":"en","datePublished":"2022-04-27T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/wemsnt/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">c++基础41-48</h1><div class=post-meta><span title=2022-04-27T00:00:00+00:00>创建于 2022-04-27</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>41 运行时类型识别RTTI</strong></p><p>虚函数表，可以发现父类的虚函数在 vtable 中的索引（下标）是固定的，不会随着继承层次的增加而改变，子类新增的虚函数放在vtable的最后。如果子类有同名的虚函数覆盖了父/祖先类的虚函数，那么将使用子类的虚函数替换父类的虚函数，子类同名虚函数在子类的vtable中替换父/祖先类虚函数，其索引和父/祖先类表中的同名父类虚函数的索引是一样的。</p><p>即虚表中记录的是本类中出现的对应函数原型的形态(函数名，参数，返回值&mldr;) 的函数的地址，<strong>虚表中的索引和函数形态是一一对应的(某个索引只存这种函数形态)，虚函数表中存的是 此类中出现此函数形态的虚函数地址</strong>。</p><p>当通过up_cast调用虚函数时，先取出对象中存的虚函数表指针vfptr(虚函数表指针一般就是存在对象空间的最上面，直接取对象地址其实取到的就是这个虚表指针的地址),我们根据调用的虚函数原型在虚函数表中查询是否有对应形态的函数，找到了就取出此虚函数地址然后执行。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>A</span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>protected</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> a1;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>int</span> A_virt1();
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>A_virt2</span>();
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>A_static1</span>();
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>A_simple1</span>();
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>B</span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>protected</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> b1;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> b2;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>int</span> B_virt1();
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>B_virt2</span>();
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>C</span><span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> A, <span style=color:#66d9ef>public</span> B{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>protected</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> c1;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>int</span> A_virt2();
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>B_virt2</span>();
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><p>类包含了虚函数，那么该类的对象内存中还会额外增加类型信息，也即 type_info 对象。对象的虚函数指针所指虚函数表头的上方，有一个type_info对象的地址，这个type_info对象中就有保存此类的信息(类名,类编码,hash)可以唯一地确定一个类(<strong>只有类中包含了虚函数时才会启用 RTTI 机制，其他所有情况都可以在编译阶段确定类型信息</strong>)</p><p>这样在出现多态情况下 Base* p = new Derive(); 编译器通过类似*(p->vfptr - 1)就获得了p所指向对象的type_info，通过查看type_info就知道p是否是指向Base的后代类 类型对象，还需要通过继承链来确定type_info中的类是否是Base的后代类，对于type_info+继承链(当前类信息表+继承信息表)的具体实现方法在VS中的具体做法如下</p><p>下图中的 &类名_meta就是type_info 对象的地址</p><p><img alt=1659497994633-de4a14ba-6797-42a4-a723-3930318e1fae.png loading=lazy src=/images/wWrYkd9pcejqXSAy/1659497994633-de4a14ba-6797-42a4-a723-3930318e1fae-841522.png></p><p>dynamic_cast中也用上面类似的RTTI方式来判断，是否可以进行down_cast(向下转型)。</p><p>typeid 经过固定次数的间接转换返回 type_info 对象，间接次数不会随着继承层次的增加而增加，对效率的影响很小，读者可以放心使用。<strong>而 dynamic_cast 运算符和异常处理不仅要经过数次间接转换，还要遍历继承链，如果继承层次较深，那么它们的性能堪忧，读者应当谨慎使用(上图的这种继承链遍历)</strong>！</p><p><strong>42 模板简单介绍</strong></p><p>对于函数模板而言，模板类型参数可以用来指定返回类型或函数的参数类型，以及在函数体内用于变量声明或类型转换。</p><p>函数模板实例化：当调用一个模板时，编译器用函数实参来推断模板实参，从而使用实参的类型来确定绑定到模板参数的类型。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>T add_fun(<span style=color:#66d9ef>const</span> T <span style=color:#f92672>&amp;</span> tmp1, <span style=color:#66d9ef>const</span> T <span style=color:#f92672>&amp;</span> tmp2){
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> tmp1 <span style=color:#f92672>+</span> tmp2;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>add_fun(var1, var2);<span style=color:#75715e>// 调用时不需要指明类型，让编译器自动推导
+</span></span></span><span style=display:flex><span>add_fun<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span><span style=color:#f92672>&gt;</span>(var1, var2);<span style=color:#75715e>//函数模板也可以指定类型
+</span></span></span></code></pre></div><p>类模板：类似函数模板，类模板以关键字 template 开始，后跟模板参数列表。但是，<strong>编译器不能为类模板推断模板参数类型，需要在使用该类模板时，在模板名后面的尖括号中指明类型。(C++17以实现模板类自动推导，不需要指明类型)</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Complex</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//构造函数
+</span></span></span><span style=display:flex><span>    Complex(T a, T b)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>a <span style=color:#f92672>=</span> a;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>b <span style=color:#f92672>=</span> b;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//运算符重载
+</span></span></span><span style=display:flex><span>    Complex<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;</span> <span style=color:#66d9ef>operator</span><span style=color:#f92672>+</span>(Complex <span style=color:#f92672>&amp;</span>c)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        Complex<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;</span> tmp(<span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>a <span style=color:#f92672>+</span> c.a, <span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>b <span style=color:#f92672>+</span> c.b);
+</span></span><span style=display:flex><span>        cout <span style=color:#f92672>&lt;&lt;</span> tmp.a <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34; &#34;</span> <span style=color:#f92672>&lt;&lt;</span> tmp.b <span style=color:#f92672>&lt;&lt;</span> endl;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> tmp;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    T a;
+</span></span><span style=display:flex><span>    T b;
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>Complex<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span><span style=color:#f92672>&gt;</span> b(<span style=color:#ae81ff>20</span>, <span style=color:#ae81ff>30</span>);<span style=color:#75715e>// 指明T类型
+</span></span></span><span style=display:flex><span>Complex <span style=color:#a6e22e>ex2</span>(<span style=color:#ae81ff>30</span>, <span style=color:#ae81ff>40</span>);<span style=color:#75715e>// C++17 自动推导
+</span></span></span></code></pre></div><p>函数模板和类模板的区别</p><p><strong>函数模板是可以被重载的（类模板不能被重载）</strong>，也就是说允许存在两个同名的函数模板，还可以对它们进行实例化，使它们具有相同的参数类型。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>//函数模板
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> fun(T){
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//函数模板的重载
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> fun(T<span style=color:#f92672>*</span>){<span style=color:#75715e>// 重载指针版本
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>2</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>fun</span>(<span style=color:#66d9ef>int</span> i)<span style=color:#75715e>// 重载int版本
+</span></span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>3</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>类模板和函数模板都可以全特化</p><p><strong>函数全特化</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> fun<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span><span style=color:#f92672>&gt;</span>(<span style=color:#66d9ef>int</span> i )
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>3</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>就一般而言，特化是一种更通用的技巧，最主要的原因是<strong>特化可以用在类模板和函数模板上，而重载只能用于函数</strong>。</p><p>通用而言，Herb Sutter 给出了明确的建议：<strong>对函数使用重载，对类模板进行特化</strong>。 当函数重载和特化版本同时满足要求时，<strong>重载比特化优先，编译器优先调用重载版本</strong>(函数模板特化 有大坑！！！</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T1, <span style=color:#66d9ef>typename</span> T2<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>A</span>{
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>void</span> function(T1 value1, T2 value2){
+</span></span><span style=display:flex><span>                        cout<span style=color:#f92672>&lt;&lt;</span><span style=color:#e6db74>&#34;value1 = &#34;</span><span style=color:#f92672>&lt;&lt;</span>value1<span style=color:#f92672>&lt;&lt;</span>endl;
+</span></span><span style=display:flex><span>                        cout<span style=color:#f92672>&lt;&lt;</span><span style=color:#e6db74>&#34;value2 = &#34;</span><span style=color:#f92672>&lt;&lt;</span>value2<span style=color:#f92672>&lt;&lt;</span>endl;
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>//类模板全特化
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>A</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span>, <span style=color:#66d9ef>double</span><span style=color:#f92672>&gt;</span>{ <span style=color:#75715e>// 类型明确化，为全特化类
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>void</span> function(<span style=color:#66d9ef>int</span> value1, <span style=color:#66d9ef>double</span> value2){
+</span></span><span style=display:flex><span>                        cout<span style=color:#f92672>&lt;&lt;</span><span style=color:#e6db74>&#34;intValue = &#34;</span><span style=color:#f92672>&lt;&lt;</span>value1<span style=color:#f92672>&lt;&lt;</span>endl;
+</span></span><span style=display:flex><span>                        cout<span style=color:#f92672>&lt;&lt;</span><span style=color:#e6db74>&#34;doubleValue = &#34;</span><span style=color:#f92672>&lt;&lt;</span>value2<span style=color:#f92672>&lt;&lt;</span>endl;
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><p>偏特化介于普通模板和全特化之间，只存在部分的类型明确化，而非将模板唯一化。</p><p><strong>再次划重点函数模板不能被偏特化</strong>。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T1, <span style=color:#66d9ef>typename</span> T2<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>A</span>{
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>void</span> function(T1 value1, T2 value2){
+</span></span><span style=display:flex><span>                        cout<span style=color:#f92672>&lt;&lt;</span><span style=color:#e6db74>&#34;value1 = &#34;</span><span style=color:#f92672>&lt;&lt;</span>value1<span style=color:#f92672>&lt;&lt;</span>endl;
+</span></span><span style=display:flex><span>                        cout<span style=color:#f92672>&lt;&lt;</span><span style=color:#e6db74>&#34;value2 = &#34;</span><span style=color:#f92672>&lt;&lt;</span>value2<span style=color:#f92672>&lt;&lt;</span>endl;
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>A</span><span style=color:#f92672>&lt;</span>T, <span style=color:#66d9ef>double</span><span style=color:#f92672>&gt;</span>{ <span style=color:#75715e>// 部分类型明确化，为偏特化类
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>void</span> function(T value1, <span style=color:#66d9ef>double</span> value2){
+</span></span><span style=display:flex><span>                        cout<span style=color:#f92672>&lt;&lt;</span><span style=color:#e6db74>&#34;Value = &#34;</span><span style=color:#f92672>&lt;&lt;</span>value1<span style=color:#f92672>&lt;&lt;</span>endl;
+</span></span><span style=display:flex><span>                        cout<span style=color:#f92672>&lt;&lt;</span><span style=color:#e6db74>&#34;doubleValue = &#34;</span><span style=color:#f92672>&lt;&lt;</span>value2<span style=color:#f92672>&lt;&lt;</span>endl;
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>// 一般化设计
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>T</span>, <span style=color:#66d9ef>class</span> <span style=color:#a6e22e>T1</span><span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>TestClass</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>     TestClass()
+</span></span><span style=display:flex><span>     {
+</span></span><span style=display:flex><span>          cout<span style=color:#f92672>&lt;&lt;</span><span style=color:#e6db74>&#34;T, T1&#34;</span><span style=color:#f92672>&lt;&lt;</span>endl;
+</span></span><span style=display:flex><span>     }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 针对普通指针的偏特化设计
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//  T指针偏特化版本 还可以进一步特化T类型 所以这是个偏特化
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>T</span>, <span style=color:#66d9ef>class</span> <span style=color:#a6e22e>T1</span><span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>TestClass</span><span style=color:#f92672>&lt;</span>T<span style=color:#f92672>*</span>, T1<span style=color:#f92672>*&gt;</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>     TestClass()
+</span></span><span style=display:flex><span>     {
+</span></span><span style=display:flex><span>          cout<span style=color:#f92672>&lt;&lt;</span><span style=color:#e6db74>&#34;T*, T1*&#34;</span><span style=color:#f92672>&lt;&lt;</span>endl;
+</span></span><span style=display:flex><span>     }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 针对const指针的偏特化设计
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//  T常指针偏特化版本 还可以进一步特化T类型 所以这是个偏特化
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>T</span>, <span style=color:#66d9ef>class</span> <span style=color:#a6e22e>T1</span><span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>TestClass</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>const</span> T<span style=color:#f92672>*</span>, T1<span style=color:#f92672>*&gt;</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>     TestClass()
+</span></span><span style=display:flex><span>     {
+</span></span><span style=display:flex><span>          cout<span style=color:#f92672>&lt;&lt;</span><span style=color:#e6db74>&#34;const T*, T1*&#34;</span><span style=color:#f92672>&lt;&lt;</span>endl;
+</span></span><span style=display:flex><span>     }
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><p>对于模板、模板的特化和模板的偏特化都存在的情况下，编译器在编译阶段进行匹配时，是如何抉择的呢？从哲学的角度来说，**应该先照顾最特殊的(全特化版本)，然后才是次特殊的(偏特化版本)，最后才是最普通的(模板版本)。编译器进行抉择也是尊从的这个道理。**从上面的例子中，我们也可以看的出来，这就就不再举例说明。</p><p><strong>43 可变参数模板简单介绍</strong></p><p>可变参数模板：<strong>接受可变数目参数的模板函数或模板类</strong>。将可变数目的参数被称为参数包，包括模板参数包和函数参数包。</p><p>模板参数包：表示零个或多个模板参数；</p><p>函数参数包：表示零个或多个函数参数。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>// 广泛用于STL中的容器类
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T, <span style=color:#66d9ef>typename</span>... Args<span style=color:#f92672>&gt;</span> <span style=color:#75715e>// Args 是模板参数包
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> foo(<span style=color:#66d9ef>const</span> T <span style=color:#f92672>&amp;</span>t, <span style=color:#66d9ef>const</span> Args<span style=color:#f92672>&amp;</span>... rest); <span style=color:#75715e>// 可变参数模板，rest 是函数参数包
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 递归模板展开的 终止版本
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> print_fun(<span style=color:#66d9ef>const</span> T <span style=color:#f92672>&amp;</span>t)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    cout <span style=color:#f92672>&lt;&lt;</span> t <span style=color:#f92672>&lt;&lt;</span> endl; <span style=color:#75715e>// 最后一个元素
+</span></span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 递归展开Args模板参数
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T, <span style=color:#66d9ef>typename</span>... Args<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> print_fun(<span style=color:#66d9ef>const</span> T <span style=color:#f92672>&amp;</span>t, <span style=color:#66d9ef>const</span> Args <span style=color:#f92672>&amp;</span>...args)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    cout <span style=color:#f92672>&lt;&lt;</span> t <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34; &#34;</span>;
+</span></span><span style=display:flex><span>    print_fun(args...);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    print_fun(<span style=color:#e6db74>&#34;Hello&#34;</span>, <span style=color:#e6db74>&#34;wolrd&#34;</span>, <span style=color:#e6db74>&#34;!&#34;</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>这一步会将args中的第一个参数赋值给void print_fun(const T &amp;t, const Args &&mldr;args)，剩余的参数赋值给args，所以每一步的递归过程中，args中参数的数量都是不断减少的。直到args中只有一个参数，再使用print_fun(args&mldr;)时直接调用void print_fun(const T &amp;t)函数（递归基）。</p><p><strong>44 一些小tips</strong></p><p>include&lt;文件名> 和 #include"文件名" 的区别:</p><p>查找文件的位置：<strong>include&lt;文件名> 在标准库头文件所在的目录中查找(尖括号不能在当前源文件路径下寻找)</strong>；<strong>#include"文件名" 在当前源文件所在目录中进行查找，如果没有；再到系统目录中查找</strong>。</p><p>使用习惯：对于标准库中的头文件常用 include&lt;文件名>，对于自己定义的头文件，常用 #include"文件名"</p><p><strong>45 容器迭代器使用介绍</strong></p><p>迭代器本质是泛化的指针</p><p>迭代器按照定义方式分成以下四种。</p><ol><li>正向迭代器，定义方法如下：</li></ol><p>容器类名::iterator 迭代器名;</p><p>支持以下操作：++p，p++，*p。此外，两个正向迭代器可以互相赋值，还可以用==和!=运算符进行比较。</p><ol start=2><li>常量正向迭代器，定义方法如下：</li></ol><p>容器类名::const_iterator 迭代器名;</p><ol start=3><li>反向迭代器，定义方法如下：</li></ol><p>容器类名::reverse_iterator 迭代器名;</p><ol start=4><li>常量反向迭代器，定义方法如下：</li></ol><p>容器类名::const_reverse_iterator 迭代器名;</p><p>随机访问迭代器这里没提，因为我们用到迭代器的场景一般就是完整遍历某一容器</p><p>通过迭代器可以读取它指向的元素，*迭代器名就表示迭代器指向的元素。通过非常量迭代器还能修改其指向的元素。</p><p>迭代器都可以进行++操作。反向迭代器和正向迭代器的区别在于：</p><p><strong>对正向迭代器进行++操作时，迭代器会指向容器中的后一个元素；</strong></p><p><strong>而对反向迭代器进行++操作时，迭代器会指向容器中的前一个元素。</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span>     <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> n <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; n<span style=color:#f92672>&lt;</span><span style=color:#ae81ff>5</span>; <span style=color:#f92672>++</span>n)
+</span></span><span style=display:flex><span>        v.push_back(n);  <span style=color:#75715e>//push_back成员函数在vector容器尾部添加一个元素
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 0 1 2 3 4
+</span></span></span><span style=display:flex><span>    vector<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span><span style=color:#f92672>&gt;::</span>iterator i;  <span style=color:#75715e>//定义正向迭代器
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (i <span style=color:#f92672>=</span> v.begin(); i <span style=color:#f92672>!=</span> v.end(); <span style=color:#f92672>++</span>i) {  <span style=color:#75715e>//用迭代器遍历容器
+</span></span></span><span style=display:flex><span>        cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#f92672>*</span>i <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34; &#34;</span>;  <span style=color:#75715e>//*i 就是迭代器i指向的元素
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    cout <span style=color:#f92672>&lt;&lt;</span> endl;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 4 3 2 1 0
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//用反向迭代器遍历容器
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (vector<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span><span style=color:#f92672>&gt;::</span>reverse_iterator j <span style=color:#f92672>=</span> v.rbegin(); j <span style=color:#f92672>!=</span> v.rend(); <span style=color:#f92672>++</span>j)
+</span></span><span style=display:flex><span>        cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#f92672>*</span>j <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34; &#34;</span>;
+</span></span></code></pre></div><p>双向迭代器。双向迭代器具有正向迭代器的全部功能。除此之外，若 p 是一个双向迭代器，则&ndash;p和p&ndash;都是有定义的。&ndash;p使得 p 朝和++p相反的方向移动。</p><p>随机访问迭代器。随机访问迭代器具有双向迭代器的全部功能。若 p 是一个随机访问迭代器，i 是一个整型变量或常量，则 p 还支持以下操作：</p><p>p+=i：使得 p 往后移动 i 个元素。</p><p>p-=i：使得 p 往前移动 i 个元素。</p><p>p+i：返回 p 后面第 i 个元素的迭代器。</p><p>p-i：返回 p 前面第 i 个元素的迭代器。</p><p>p[i]：返回 p 后面第 i 个元素的引用。</p><p>两个随机访问迭代器 p1、p2 还可以用 &lt;、>、&lt;=、>= 运算符进行比较。p1&lt;p2的含义是：p1 经过若干次（至少一次）++操作后，就会等于 p2。其他比较方式的含义与此类似。</p><p>对于两个随机访问迭代器 p1、p2，表达式p2-p1也是有定义的，其返回值是 p2 所指向元素和 p1 所指向元素的序号之差（也可以说是 p2 和 p1 之间的元素个数减一）。</p><p>不同容器的迭代器类型</p><p>vector 随机访问</p><p>deque 随机访问</p><p>list 双向</p><p>set / multiset 双向</p><p>map / multimap 双向</p><p>stack 不支持迭代器</p><p>queue 不支持迭代器</p><p>priority_queue 不支持迭代器</p><p>vector 随机访问,可用来遍历的几种迭代器做法</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span>vector<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span><span style=color:#f92672>&gt;</span> v(<span style=color:#ae81ff>100</span>); <span style=color:#75715e>//v被初始化成有100个元素
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>for</span>(<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;i <span style=color:#f92672>&lt;</span> v.size() ; <span style=color:#f92672>++</span>i) <span style=color:#75715e>//size返回元素个数
+</span></span></span><span style=display:flex><span>   cout <span style=color:#f92672>&lt;&lt;</span> v[i]; <span style=color:#75715e>//像普通数组一样使用vector容器
+</span></span></span><span style=display:flex><span>vector<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span><span style=color:#f92672>&gt;::</span>iterator i;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>for</span>(i <span style=color:#f92672>=</span> v.begin(); i <span style=color:#f92672>!=</span> v.end (); <span style=color:#f92672>++</span>i) <span style=color:#75715e>//用 != 比较两个迭代器
+</span></span></span><span style=display:flex><span>    cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#f92672>*</span> i;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>for</span>(i <span style=color:#f92672>=</span> v.begin(); i <span style=color:#f92672>&lt;</span> v.end ();<span style=color:#f92672>++</span>i) <span style=color:#75715e>//用 &lt; 比较两个迭代器
+</span></span></span><span style=display:flex><span>    cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#f92672>*</span> i;
+</span></span><span style=display:flex><span>i <span style=color:#f92672>=</span> v.begin();
+</span></span><span style=display:flex><span><span style=color:#66d9ef>while</span>(i <span style=color:#f92672>&lt;</span> v.end()) { <span style=color:#75715e>//间隔一个输出
+</span></span></span><span style=display:flex><span>   cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#f92672>*</span> i;
+</span></span><span style=display:flex><span>    i <span style=color:#f92672>+=</span> <span style=color:#ae81ff>2</span>; <span style=color:#75715e>// 随机访问迭代器支持 &#34;+= 整数&#34;  的操作
+</span></span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>几个迭代器辅助函数</p><p>#include //要使用操作迭代器的函数模板，需要包含此文件</p><p>advance(p, n)：使迭代器 p 向前或向后移动 n 个元素。n>0向前 n&lt;0向后</p><p>distance(p, q)：计算两个迭代器之间的距离，即迭代器 p 经过多少次 + + 操作后和迭代器 q 相等。<strong>如果调用时 p 已经指向 q 的后面，则这个函数会陷入死循环</strong>。</p><p>iter_swap(p, q)：用于<strong>交换两个迭代器</strong> p、q <strong>指向的内容</strong>。</p><p><strong>46 类型萃取</strong></p><p>什么是类型萃取</p><p>类型萃取，英文为 type traits，直译过来为类型的特点。</p><p>举个例子，无论是 int&&, int&，都算是 int 类型的变种，<strong>int就是 int&&、int& 类型的一个特点</strong>。</p><p>那么，怎么通过 int&& 获得它的特点，即 int 类型呢？</p><p><strong>remove_reference_t&lt;int&&> 等同于 int，即通过这个表达式，我们获得了 int&& 类型的特点，即去除掉引用后，int&& 等同于 int。</strong></p><p>再举个例子，</p><p>is_const_v 返回 false,</p><p>is_const_v 返回 true。</p><p>即<strong>通过 is_const_v&lt;类型> 模板，我们可以知道一个类型是否为 const修饰的类型，这就是所谓的类型萃取</strong>。</p><p><strong>类型萃取都是在编译时进行的,在之前的笔记中的编译期类型推导中有提到&lt;type_traits>就是专门用于类型萃取的库,上面的is_const_v和remove_reference_t都在这个头文件中。</strong></p><p><strong>move移动函数是类型萃取的一个典型应用</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>remove_reference<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;::</span>type<span style=color:#f92672>&amp;&amp;</span> move(T<span style=color:#f92672>&amp;&amp;</span> t) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>static_cast</span><span style=color:#f92672>&lt;</span>remove_reference<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;::</span>type <span style=color:#f92672>&amp;&amp;&gt;</span>(t);
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>是把 t 转换为右值，无论传入时t 原本是左值还是右值。</p><p>remove_reference_t把 t 对应的类型 T 上的引用给“去掉”,remove_reference_t里面其实做的就是几个typedef利用万能引用，得到去掉引用后的类型，remove_reference_t的结果是一个类型</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> _Tp<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>remove_reference</span>
+</span></span><span style=display:flex><span>{ <span style=color:#66d9ef>typedef</span> _Tp   type; };
+</span></span><span style=display:flex><span><span style=color:#75715e>//如果传入_Tp为
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 特化版本  特化了_Tp&amp; _Tp&amp;&amp;的struct 对于struct中的参数_Tp是确定
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> _Tp<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>remove_reference</span><span style=color:#f92672>&lt;</span>_Tp<span style=color:#f92672>&amp;&gt;</span>
+</span></span><span style=display:flex><span>{ <span style=color:#66d9ef>typedef</span> _Tp   type; };
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> _Tp<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>remove_reference</span><span style=color:#f92672>&lt;</span>_Tp<span style=color:#f92672>&amp;&amp;&gt;</span>
+</span></span><span style=display:flex><span>{ <span style=color:#66d9ef>typedef</span> _Tp   type; };
+</span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>T</span><span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typename</span> tinySTL<span style=color:#f92672>::</span>remove_reference<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;::</span>type<span style=color:#f92672>&amp;&amp;</span> move(T<span style=color:#f92672>&amp;&amp;</span> t) <span style=color:#66d9ef>noexcept</span> {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>using</span> return_type <span style=color:#f92672>=</span> <span style=color:#66d9ef>typename</span> tinySTL<span style=color:#f92672>::</span>remove_reference<span style=color:#f92672>&lt;</span>T<span style=color:#f92672>&gt;::</span>type<span style=color:#f92672>&amp;&amp;</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>static_cast</span><span style=color:#f92672>&lt;</span>return_type<span style=color:#f92672>&gt;</span>(t);
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>然后，再把右值给强行绑上remove_reference_t&&</p><p><strong>47 设计模式</strong></p><p>设计模式有 6 大设计原则：</p><p>单一职责原则：就一个类而言，应该仅有一个引起它变化的原因。</p><p>开放封闭原则：软件实体可以扩展，但是不可修改。即面对需求，<strong>对程序的改动可以通过增加代码来完成，但是不能改动现有的代码</strong>。</p><p>里氏代换原则：一个软件实体如果使用的是一个基类，那么一定适用于其派生类。<strong>即在软件中，把基类替换成派生类，程序的行为没有变化</strong>。</p><p>依赖倒转原则：抽象不应该依赖细节，细节应该依赖抽象。即针对接口编程，不要对实现编程。</p><p>迪米特原则：如果两个类不直接通信，那么这两个类就不应当发生直接的相互作用。<strong>如果一个类需要调用另一个类的某个方法的话，可以通过第三个类转发这个调用</strong>。</p><p>接口隔离原则：<strong>每个接口中不存在派生类用不到却必须实现的方法，如果不然，就要将接口拆分，使用多个隔离的接口</strong>。</p><p>下面介绍常见的几种设计模式：</p><p>单例模式：保证一个类仅有一个实例，并提供一个访问它的全局访问点。</p><p>工厂模式：包括简单工厂模式、抽象工厂模式、工厂方法模式</p><p>简单工厂模式：主要用于创建对象。用一个工厂来根据输入的条件产生不同的类，然后根据不同类的虚函数得到不同的结果。</p><p>工厂方法模式：修正了简单工厂模式中不遵守开放封闭原则。把选择判断移到了客户端去实现，如果想添加新功能就不用修改原来的类，直接修改客户端即可。</p><p>抽象工厂模式：定义了一个创建一系列相关或相互依赖的接口，而无需指定他们的具体类。</p><p>观察者模式：定义了一种一对多的关系，让多个观察对象同时监听一个主题对象，主题对象发生变化时，会通知所有的观察者，使他们能够更新自己。</p><p>装饰模式：动态地给一个对象添加一些额外的职责，就增加功能来说，装饰模式比生成派生类更为灵活。</p><p><strong>单例模式：保证类的实例化对象仅有一个，并且提供一个访问他的全局访问方式。</strong></p><p>单例模式可以通过全局或者静态变量的形式实现，这样比较简单，但是这样会影响封装性，难以保证别的代码不会对全局变量造成影响。我们使用以下方式来达到封装单例的行为</p><p><strong>默认的构造函数、拷贝构造函数、赋值构造函数声明为私有的，这样可以禁止在类的外部创建该对象；</strong></p><p><strong>全局访问方式使用类的静态成员函数(不会将this指针传入函数内)实现，没有参数，返回单例所拥有的堆上单例对象(对象地址使用类中静态指针变量来保存)</strong>。如下</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Singleton</span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> Singleton <span style=color:#f92672>*</span> instance;
+</span></span><span style=display:flex><span>    Singleton(<span style=color:#66d9ef>const</span> Singleton<span style=color:#f92672>&amp;</span> tmp){}
+</span></span><span style=display:flex><span>    Singleton<span style=color:#f92672>&amp;</span> <span style=color:#66d9ef>operator</span><span style=color:#f92672>=</span>(<span style=color:#66d9ef>const</span> Singleton<span style=color:#f92672>&amp;</span> tmp){}
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 如果单例要被继承 则构造和析构都声明为protected
+</span></span></span><span style=display:flex><span>    Singleton(){}
+</span></span><span style=display:flex><span>    <span style=color:#f92672>~</span>Singleton();<span style=color:#75715e>// 禁止外部析构
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> Singleton<span style=color:#f92672>*</span> getInstance(){<span style=color:#75715e>// 静态成员函数只能访问静态成员
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span>(instance <span style=color:#f92672>==</span> NULL){
+</span></span><span style=display:flex><span>            instance <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> Singleton();<span style=color:#75715e>// 第一次调用单例对象没有创建 则将这个单例对象在堆上创建出来，如果已经有了则返回堆上单例对象的指针
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> instance;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>Singleton<span style=color:#f92672>*</span> Singleton<span style=color:#f92672>::</span>instance <span style=color:#f92672>=</span> NULL;
+</span></span></code></pre></div><p>上面的这种实现方式叫做，<strong>懒汉实现直到第一次用到类的实例时才去实例化</strong>(第一次调用getInstance时单例对象才会在堆上被创建),注意上述的实现方法并没有考虑线程安全问题，当两个线程同时调用getInstance 方法，<strong>并且同时检测到 instance 是 NULL，两个线程会同时实例化对象</strong>，不符合单例模式的要求。</p><p>加锁的懒汉保证线程安全</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Singleton</span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>static</span> Singleton <span style=color:#f92672>*</span> instance;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>static</span> pthread_mutex_t mutex;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    Singleton(<span style=color:#66d9ef>const</span> Singleton<span style=color:#f92672>&amp;</span> tmp){}
+</span></span><span style=display:flex><span>    Singleton<span style=color:#f92672>&amp;</span> <span style=color:#66d9ef>operator</span><span style=color:#f92672>=</span>(<span style=color:#66d9ef>const</span> Singleton<span style=color:#f92672>&amp;</span> tmp){}
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 如果单例要被继承 则构造和析构都声明为protected
+</span></span></span><span style=display:flex><span>    Singleton(){ pthread_mutex_init(<span style=color:#f92672>&amp;</span>mutex, NULL); }
+</span></span><span style=display:flex><span>    <span style=color:#f92672>~</span>Singleton();<span style=color:#75715e>// 禁止外部析构
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>static</span> Singleton<span style=color:#f92672>*</span> getInstance(){<span style=color:#75715e>// 静态成员函数只能访问静态成员
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//  这里使用了两个 if判断语句的技术称为双检锁；好处是，只有第一次判断指针为空的时候才加锁，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 如果第一个if判断不加则每次调用 getInstance的方法都加锁，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 锁的开销毕竟还是有点大的。
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (instance <span style=color:#f92672>==</span> NULL)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>      pthread_mutex_lock(<span style=color:#f92672>&amp;</span>mutex);<span style=color:#75715e>// 加锁
+</span></span></span><span style=display:flex><span>      <span style=color:#66d9ef>if</span>(instance <span style=color:#f92672>==</span> NULL)
+</span></span><span style=display:flex><span>         instance <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> Singleton();<span style=color:#75715e>// 第一次调用单例对象没有创建 则将这个单例对象在堆上创建出来，如果已经有了则返回堆上单例对象的指针
+</span></span></span><span style=display:flex><span>      pthread_mutex_unlock(<span style=color:#f92672>&amp;</span>mutex);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>     <span style=color:#66d9ef>return</span> instance;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>pthread_mutex_t Singleton<span style=color:#f92672>::</span>mutex;
+</span></span><span style=display:flex><span>Singleton<span style=color:#f92672>*</span> Singleton<span style=color:#f92672>::</span>instance <span style=color:#f92672>=</span> NULL;
+</span></span></code></pre></div><p><strong>内部静态变量的懒汉单例（C++11 线程安全）最推荐的方法</strong></p><p>C++11中，静态局部变量是在第一次调用方法时分配内存的，C++11保证了静态局部对象是线程安全的，所以这就能实现一种完美单例模式(内部静态的懒汉模式)。如下</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Singleton</span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//直接定义一个同类型的静态成员变量也是被允许的
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// static Singleton s;// 正确
+</span></span></span><span style=display:flex><span>    Singleton(<span style=color:#66d9ef>const</span> Singleton<span style=color:#f92672>&amp;</span> temp){}
+</span></span><span style=display:flex><span>    Singleton<span style=color:#f92672>&amp;</span> <span style=color:#66d9ef>operator</span><span style=color:#f92672>=</span>(<span style=color:#66d9ef>const</span> Singleton<span style=color:#f92672>&amp;</span> temp){}
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 如果单例要被继承 则构造和析构都声明为protected
+</span></span></span><span style=display:flex><span>    <span style=color:#f92672>~</span>Singleton();<span style=color:#75715e>// 禁止外部析构
+</span></span></span><span style=display:flex><span>	Singleton(){}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>static</span> Singleton<span style=color:#f92672>*</span> getInstance(){
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//   Lock(); // not needed after C++0x
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>static</span> Singleton s;<span style=color:#75715e>// C++11中，静态局部变量是在第一次调用方法时分配内存
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//   UnLock(); // not needed after C++0x
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>&amp;</span>s;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><p>介绍饿汉(<strong>在类定义的时候就实例化堆上单例对象</strong>)实现单例模式，和懒汉实现只有一点不同。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Singleton</span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> Singleton<span style=color:#f92672>*</span> instance;
+</span></span><span style=display:flex><span>    Singleton(<span style=color:#66d9ef>const</span> Singleton<span style=color:#f92672>&amp;</span> temp){}
+</span></span><span style=display:flex><span>    Singleton<span style=color:#f92672>&amp;</span> <span style=color:#66d9ef>operator</span><span style=color:#f92672>=</span>(<span style=color:#66d9ef>const</span> Singleton<span style=color:#f92672>&amp;</span> temp){}
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 私有内嵌类
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Garbo</span> <span style=color:#75715e>//它的唯一工作就是在析构函数中删除Singleton的instance实例
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>       <span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>  <span style=color:#75715e>// Garbo的构造和析构 必须声明成public，否则编译失败！！！
+</span></span></span><span style=display:flex><span>       <span style=color:#f92672>~</span>Garbo()
+</span></span><span style=display:flex><span>       {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 内嵌类只能访问外部类的静态成员变量
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// 内嵌类可访问外部类的私有+保护+公有函数成员
+</span></span></span><span style=display:flex><span>          <span style=color:#66d9ef>if</span>( Singleton<span style=color:#f92672>::</span>instance )
+</span></span><span style=display:flex><span>          {
+</span></span><span style=display:flex><span>                    cout<span style=color:#f92672>&lt;&lt;</span><span style=color:#e6db74>&#34;Garbo dtor&#34;</span><span style=color:#f92672>&lt;&lt;</span>endl;
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>delete</span> Singleton<span style=color:#f92672>::</span>instance;<span style=color:#75715e>//instance是堆上资源而非静态资源，所以需要这样回收，如果是静态资源则和Garbo 一样在程序结束后由系统回收，我们就不需要关系写的这么麻烦
+</span></span></span><span style=display:flex><span>                    Singleton<span style=color:#f92672>::</span>instance <span style=color:#f92672>=</span> <span style=color:#66d9ef>nullptr</span>;
+</span></span><span style=display:flex><span>           }
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    };
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> Garbo garbo; <span style=color:#75715e>//定义一个静态成员，程序结束时，系统会自动调用它的析构函数
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// garbo是静态成员变量，其和instance构造的先后顺序依赖于静态对象的声明顺序，
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 但是析构顺序经过测试一直是garbo(成员变量)先析构，然后在garbo的析构函数中
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//将instance给delete析构了(可以在内嵌类中调用delete 调用Singleton的私有析构函数)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 这样就可以实现garbo是静态资源在程序(进程)结束时由系统回收调用garbo的析构函数，
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 在garbo的析构中实现了回收堆上的instance资源。这样我们就不需要管instance资源是否被释放，
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 只要程序结束了，instance资源自动被回收了。
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 如果单例要被继承 则构造和析构都声明为protected
+</span></span></span><span style=display:flex><span>    <span style=color:#f92672>~</span>Singleton();<span style=color:#75715e>// 禁止外部析构
+</span></span></span><span style=display:flex><span>	 Singleton(){}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>static</span> Singleton<span style=color:#f92672>*</span> getInstance(){
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> instance;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>Singleton<span style=color:#f92672>::</span>Garbo Singleton<span style=color:#f92672>::</span>garbo;  <span style=color:#75715e>// 一定要初始化，不然程序结束时不会析构garbo
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 没有使用全局或静态实现单例，这里的单例是静态成员对象，需要通过类才能访问(还是实现了一层的封装，无法在全局作用域下随便访问到)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//静态成员变量的类外初始化是不受访问控制符的限制！！！！！！！
+</span></span></span><span style=display:flex><span>Singleton<span style=color:#f92672>*</span> Singleton<span style=color:#f92672>::</span>instance <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> Singleton();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 这里经过测试将 构造设为保护或私有都是可以正确运行的
+</span></span></span></code></pre></div><p><a href=https://zhuanlan.zhihu.com/p/83535678>https://zhuanlan.zhihu.com/p/83535678</a></p><p><strong>工厂模式</strong>：**在工厂模式中，我们在创建对象时不会对客户端暴露创建逻辑，并且是通过使用一个共同的接口来指向新创建的对象。定义一个用于创建对象的接口，让子类决定实例化哪一个类，工厂方法使一个类的实例化延迟到其子类。**简单来说，使用了C++多态的特性，将存在继承关系的类，通过一个工厂类创建对应的子类（派生类）对象。在项目复杂的情况下，可以便于子类对象的创建。</p><p>工厂模式的实现方式可分别简单工厂模式、工厂方法模式、抽象工厂模式，每个实现方式都存在优和劣。</p><p>简单工厂</p><p>鞋厂可以指定生产耐克、阿迪达斯和李宁牌子的鞋子，需要哪个就生产哪个</p><p><img alt=1659498046384-20ee03d2-8407-4bbb-8c7f-0750e4b04b94.png loading=lazy src=/images/wWrYkd9pcejqXSAy/1659498046384-20ee03d2-8407-4bbb-8c7f-0750e4b04b94-561806.png></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>// 鞋子抽象类 是具体产品类的继承的父类或实现的接口
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Shoes</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#f92672>~</span>Shoes() {}
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>Show</span>() <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 耐克鞋子 具体产品类：工厂类所创建的对象就是此具体产品实例
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>NiKeShoes</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> Shoes
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> Show()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        std<span style=color:#f92672>::</span>cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34;我是耐克球鞋，我的广告语：Just do it&#34;</span> <span style=color:#f92672>&lt;&lt;</span> std<span style=color:#f92672>::</span>endl;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 阿迪达斯鞋子
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>AdidasShoes</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> Shoes
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> Show()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        std<span style=color:#f92672>::</span>cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34;我是阿迪达斯球鞋，我的广告语:Impossible is nothing&#34;</span> <span style=color:#f92672>&lt;&lt;</span> std<span style=color:#f92672>::</span>endl;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 李宁鞋子
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>LiNingShoes</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> Shoes
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> Show()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        std<span style=color:#f92672>::</span>cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34;我是李宁球鞋，我的广告语：Everything is possible&#34;</span> <span style=color:#f92672>&lt;&lt;</span> std<span style=color:#f92672>::</span>endl;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><p><strong>简单工厂的缺点就在这里，扩展性非常差，新增产品的时候，需要去修改工厂类代码(添加枚举常量，在工厂类中创建对象的函数中添加 创建新产品分支的代码)</strong>。<strong>简单工厂模式，，需要去修改工厂类，这违背了设计模式的开闭法则。</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>enum</span> <span style=color:#a6e22e>SHOES_TYPE</span> <span style=color:#75715e>// 枚举常量代表 鞋品牌
+</span></span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    NIKE,
+</span></span><span style=display:flex><span>    LINING,
+</span></span><span style=display:flex><span>    ADIDAS
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 总鞋厂 工厂类封装了创建具体产品对象的函数。
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>ShoesFactory</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 根据鞋子类型创建对应的鞋子对象
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 返回直接实现up_cast，返回的是基类指针，并且是指向派生类对象的基类指针
+</span></span></span><span style=display:flex><span>    Shoes <span style=color:#f92672>*</span>CreateShoes(SHOES_TYPE type)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>switch</span> (type)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>case</span> NIKE:
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>new</span> NiKeShoes();
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>case</span> LINING:
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>new</span> LiNingShoes();
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>case</span> ADIDAS:
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>new</span> AdidasShoes();
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>default</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> NULL;
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 使用
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 构造工厂对象
+</span></span></span><span style=display:flex><span>    ShoesFactory shoesFactory;
+</span></span><span style=display:flex><span>    Shoes <span style=color:#f92672>*</span>pNikeShoes <span style=color:#f92672>=</span> shoesFactory.CreateShoes(NIKE);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (pNikeShoes <span style=color:#f92672>!=</span> NULL)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// 耐克球鞋广告喊起
+</span></span></span><span style=display:flex><span>        pNikeShoes<span style=color:#f92672>-&gt;</span>Show();<span style=color:#75715e>// 多态调用派生类函数
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// 释放资源
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>delete</span> pNikeShoes;
+</span></span><span style=display:flex><span>        pNikeShoes <span style=color:#f92672>=</span> NULL;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 从鞋工厂对象创建阿迪达斯鞋对象
+</span></span></span><span style=display:flex><span>    Shoes <span style=color:#f92672>*</span>pLiNingShoes <span style=color:#f92672>=</span> shoesFactory.CreateShoes(LINING);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (pLiNingShoes <span style=color:#f92672>!=</span> NULL)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// 李宁球鞋广告喊起
+</span></span></span><span style=display:flex><span>        pLiNingShoes<span style=color:#f92672>-&gt;</span>Show();<span style=color:#75715e>// 多态调用派生类函数
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 释放资源
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>delete</span> pLiNingShoes;
+</span></span><span style=display:flex><span>        pLiNingShoes <span style=color:#f92672>=</span> NULL;
+</span></span><span style=display:flex><span>    }
+</span></span></code></pre></div><p>工厂方法模式</p><p>针对不同品牌的鞋子开设独立的生产线，那么每个生产线就只能生产同类型品牌的鞋</p><p><img alt=1659498073771-7916c98d-9f49-4479-a74d-fe91984a9ef7.png loading=lazy src=/images/wWrYkd9pcejqXSAy/1659498073771-7916c98d-9f49-4479-a74d-fe91984a9ef7-592493.png></p><p><strong>本质上就是生产的产品由同一抽象类(Shoes)得来,生产产品的工厂也由同一抽象类(ShoesFactory )得来。</strong></p><p>// 这里的Shoes(抽象产品类：它是具体产品继承的父类（基类）),NikeShoes,AdidasShoes,LiningShoes(具体产品类：具体工厂所创建的对象，就是此类)和上面简单工厂的代码是一摸一样的这里就不写了。</p><p>// 总鞋厂</p><p><strong>工厂方法模式抽象出了工厂类，提供创建具体产品的接口，交由子类去实现。</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>ShoesFactory</span> <span style=color:#75715e>// 抽象工厂类：工厂方法模式的核心类，提供创建具体产品的接口，由具体工厂类实现。
+</span></span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> Shoes <span style=color:#f92672>*</span>CreateShoes() <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#f92672>~</span>ShoesFactory() {}
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><p><strong>工厂方法模式的应用并不只是为了封装具体产品对象的创建，而是要把具体产品对象的创建放到具体工厂类实现。</strong></p><p><strong>不违反设计模式的开闭法则了，但每新增一个产品，就需要增加一个对应的产品的具体工厂类。相比简单工厂模式而言，工厂方法模式需要更多的类定义。</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>// 耐克生产者/生产链  只生产NiKeShoes类对象 具体工厂类：继承于抽象工厂，实现创建对应具体产品对象的方式
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>NiKeProducer</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> ShoesFactory
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 返回直接实现up_cast，返回的是基类指针，并且是指向派生类对象的基类指针
+</span></span></span><span style=display:flex><span>    Shoes <span style=color:#f92672>*</span>CreateShoes()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>new</span> <span style=color:#a6e22e>NiKeShoes</span>();
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span><span style=color:#75715e>// 阿迪达斯生产者/生产链 只生产AdidasShoes类对象 具体工厂类：继承于抽象工厂，实现创建对应具体产品对象的方式
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>AdidasProducer</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> ShoesFactory
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 返回直接实现up_cast，返回的是基类指针，并且是指向派生类对象的基类指针
+</span></span></span><span style=display:flex><span>    Shoes <span style=color:#f92672>*</span>CreateShoes()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>new</span> <span style=color:#a6e22e>AdidasShoes</span>();
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 李宁生产者/生产链 只生产LiNingShoes类对象 具体工厂类：继承于抽象工厂，实现创建对应具体产品对象的方式
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>LiNingProducer</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> ShoesFactory
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 返回直接实现up_cast，返回的是基类指针，并且是指向派生类对象的基类指针
+</span></span></span><span style=display:flex><span>    Shoes <span style=color:#f92672>*</span>CreateShoes()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>new</span> <span style=color:#a6e22e>LiNingShoes</span>();
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 使用
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// ================ 生产耐克流程 ==================== //
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 鞋厂开设耐克生产线
+</span></span></span><span style=display:flex><span>ShoesFactory <span style=color:#f92672>*</span>niKeProducer <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> NiKeProducer();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 耐克生产线产出球鞋
+</span></span></span><span style=display:flex><span>Shoes <span style=color:#f92672>*</span>nikeShoes <span style=color:#f92672>=</span> niKeProducer<span style=color:#f92672>-&gt;</span>CreateShoes();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 耐克球鞋广告喊起
+</span></span></span><span style=display:flex><span>nikeShoes<span style=color:#f92672>-&gt;</span>Show();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 释放资源
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>delete</span> nikeShoes;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>delete</span> niKeProducer;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// ================ 生产阿迪达斯流程 ==================== //
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 鞋厂开设阿迪达斯生产者
+</span></span></span><span style=display:flex><span>ShoesFactory <span style=color:#f92672>*</span>adidasProducer <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> AdidasProducer();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 阿迪达斯生产线产出球鞋
+</span></span></span><span style=display:flex><span>Shoes <span style=color:#f92672>*</span>adidasShoes <span style=color:#f92672>=</span> adidasProducer<span style=color:#f92672>-&gt;</span>CreateShoes();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 阿迪达斯球鞋广喊起
+</span></span></span><span style=display:flex><span>adidasShoes<span style=color:#f92672>-&gt;</span>Show();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 释放资源
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>delete</span> adidasShoes;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>delete</span> adidasProducer;
+</span></span></code></pre></div><p>抽象工厂模式</p><p>鞋厂为了扩大了业务，不仅只生产鞋子，把运动品牌的衣服也一起生产了(工厂的生产类别增多)。</p><p><img alt=1659498095493-bf21ef9e-0716-4d8c-af3f-ee749e7eadf5.png loading=lazy src=/images/wWrYkd9pcejqXSAy/1659498095493-bf21ef9e-0716-4d8c-af3f-ee749e7eadf5-456331.png></p><p><strong>本质上就是生产的产品由同一抽象类(Shoes，Clothes)得来,生产产品的工厂也由同一抽象类(Factory )得来，并且每个生产工厂抽象类要负责 对不同产品抽象类的生产(Factory 中有</strong>CreateShoes和CreateClothe两个返回不同种类产品抽象类的函数** )。每添加一种基础抽象产品都需要增加一个对应的产品的具体工厂类，这就会增大了代码的编写量。**</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>// 基类 衣服
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Clothe</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>void</span> Show() <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#f92672>~</span>Clothe() {}
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 耐克衣服
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>NiKeClothe</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> Clothe
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> Show()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        std<span style=color:#f92672>::</span>cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34;我是耐克衣服，时尚我最在行！&#34;</span> <span style=color:#f92672>&lt;&lt;</span> std<span style=color:#f92672>::</span>endl;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 基类 鞋子
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Shoes</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>void</span> Show() <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#f92672>~</span>Shoes() {}
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 耐克鞋子
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>NiKeShoes</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> Shoes
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> Show()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        std<span style=color:#f92672>::</span>cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34;我是耐克球鞋，让你酷起来！&#34;</span> <span style=color:#f92672>&lt;&lt;</span> std<span style=color:#f92672>::</span>endl;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span><span style=color:#75715e>// 总厂
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Factory</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> Shoes <span style=color:#f92672>*</span>CreateShoes() <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>	<span style=color:#66d9ef>virtual</span> Clothe <span style=color:#f92672>*</span><span style=color:#a6e22e>CreateClothe</span>() <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#f92672>~</span>Factory() {}
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 耐克生产者/生产链
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>NiKeProducer</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> Factory
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 返回直接实现up_cast，返回的是基类指针，并且是指向派生类对象的基类指针
+</span></span></span><span style=display:flex><span>    Shoes <span style=color:#f92672>*</span>CreateShoes()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>new</span> <span style=color:#a6e22e>NiKeShoes</span>();
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>	Clothe <span style=color:#f92672>*</span><span style=color:#a6e22e>CreateClothe</span>()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>new</span> NiKeClothe();
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 使用
+</span></span></span><span style=display:flex><span> <span style=color:#75715e>// ================ 生产耐克流程 ==================== //
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 鞋厂开设耐克生产线
+</span></span></span><span style=display:flex><span>Factory <span style=color:#f92672>*</span>niKeProducer <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> NiKeProducer();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 耐克生产线产出球鞋
+</span></span></span><span style=display:flex><span>Shoes <span style=color:#f92672>*</span>nikeShoes <span style=color:#f92672>=</span> niKeProducer<span style=color:#f92672>-&gt;</span>CreateShoes();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 耐克生产线产出衣服
+</span></span></span><span style=display:flex><span>Clothe <span style=color:#f92672>*</span>nikeClothe <span style=color:#f92672>=</span> niKeProducer<span style=color:#f92672>-&gt;</span>CreateClothe();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 耐克球鞋广告喊起
+</span></span></span><span style=display:flex><span>nikeShoes<span style=color:#f92672>-&gt;</span>Show();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 耐克衣服广告喊起
+</span></span></span><span style=display:flex><span>nikeClothe<span style=color:#f92672>-&gt;</span>Show();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 释放资源
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>delete</span> nikeShoes;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>delete</span> nikeClothe;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>delete</span> niKeProducer;
+</span></span></code></pre></div><p>以上三种方式，在新增产品时，要么修改工厂类，要么需新增具体的工厂类，说明工厂类的封装性还不够好。</p><p>将工厂类的封装性提高，达到新增产品时，也不需要修改工厂类，不需要新增具体的工厂类。封装性高的工厂类特点是扩展性高、复用性也高。</p><p><strong>模板工厂</strong></p><p>针对工厂方法模式封装成模板工厂类，那么这样在新增产品时，是不需要新增具体的工厂类，减少了代码的编写量。</p><p><img alt=1659498118743-3f8a92c3-8eca-4995-b6dd-582dc33f0121.png loading=lazy src=/images/wWrYkd9pcejqXSAy/1659498118743-3f8a92c3-8eca-4995-b6dd-582dc33f0121-280950.png></p><p><strong>可以解决产品新增时，不需要新增具体工厂类，但是缺少一个可以随时随地获取产品对象的方式</strong>。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>// 基类 鞋子
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Shoes</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>void</span> Show() <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#f92672>~</span>Shoes() {}
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 耐克鞋子
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>NiKeShoes</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> Shoes
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> Show()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        std<span style=color:#f92672>::</span>cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34;我是耐克球鞋，我的广告语：Just do it&#34;</span> <span style=color:#f92672>&lt;&lt;</span> std<span style=color:#f92672>::</span>endl;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 基类 衣服
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Clothe</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>void</span> Show() <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#f92672>~</span>Clothe() {}
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 优衣库衣服
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>UniqloClothe</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> Clothe
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> Show()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        std<span style=color:#f92672>::</span>cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34;我是优衣库衣服，我的广告语：I am Uniqlo&#34;</span> <span style=color:#f92672>&lt;&lt;</span> std<span style=color:#f92672>::</span>endl;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 抽象模板工厂和具体模板工厂(负责创建具体产品)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 抽象模板工厂类
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 模板参数：AbstractProduct_t 产品抽象类
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>AbstractProduct_t</span><span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>AbstractFactory</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> AbstractProduct_t <span style=color:#f92672>*</span>CreateProduct() <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#f92672>~</span>AbstractFactory() {}
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 具体模板工厂类
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 模板参数：AbstractProduct_t 产品抽象类，ConcreteProduct_t 产品具体类
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>AbstractProduct_t</span>, <span style=color:#66d9ef>class</span> <span style=color:#a6e22e>ConcreteProduct_t</span><span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>ConcreteFactory</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> AbstractFactory<span style=color:#f92672>&lt;</span>AbstractProduct_t<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 返回直接实现up_cast，返回的是基类指针，并且是指向派生类对象的基类指针
+</span></span></span><span style=display:flex><span>    AbstractProduct_t <span style=color:#f92672>*</span>CreateProduct()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>new</span> <span style=color:#a6e22e>ConcreteProduct_t</span>();
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 使用
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 构造耐克鞋的工厂对象
+</span></span></span><span style=display:flex><span>ConcreteFactory<span style=color:#f92672>&lt;</span>Shoes, NiKeShoes<span style=color:#f92672>&gt;</span> nikeFactory;<span style=color:#75715e>// &lt;AbstractProduct_t 抽象产品类别, ConcreteProduct_t具体产品&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 创建耐克鞋对象
+</span></span></span><span style=display:flex><span>Shoes <span style=color:#f92672>*</span>pNiKeShoes <span style=color:#f92672>=</span> nikeFactory.CreateProduct();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 打印耐克鞋广告语
+</span></span></span><span style=display:flex><span>pNiKeShoes<span style=color:#f92672>-&gt;</span>Show();
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 构造优衣库衣服的工厂对象
+</span></span></span><span style=display:flex><span>ConcreteFactory<span style=color:#f92672>&lt;</span>Clothe, UniqloClothe<span style=color:#f92672>&gt;</span> uniqloFactory;
+</span></span><span style=display:flex><span><span style=color:#75715e>// 创建优衣库衣服对象
+</span></span></span><span style=display:flex><span>Clothe <span style=color:#f92672>*</span>pUniqloClothe <span style=color:#f92672>=</span> uniqloFactory.CreateProduct();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 打印优衣库广告语
+</span></span></span><span style=display:flex><span>pUniqloClothe<span style=color:#f92672>-&gt;</span>Show();
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 释放资源
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>delete</span> pNiKeShoes;
+</span></span><span style=display:flex><span>pNiKeShoes <span style=color:#f92672>=</span> NULL;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>delete</span> pUniqloClothe;
+</span></span><span style=display:flex><span>pUniqloClothe <span style=color:#f92672>=</span> NULL;
+</span></span></code></pre></div><p><strong>产品注册模板类+单例工厂模板类</strong></p><p>前面的模板工厂虽然在新增产品的时候，不需要新增具体的工厂类，但是缺少一个可以统一随时随地获取指定的产品对象的类。</p><p><img alt=1659498144652-bdd25087-04a1-4226-b4b2-202e019bae5c.png loading=lazy src=/images/wWrYkd9pcejqXSAy/1659498144652-bdd25087-04a1-4226-b4b2-202e019bae5c-034067.png></p><p>把产品注册的功能封装成产品注册模板类(Registrar)。注册的产品对象保存在工厂模板类的std::unordered_map，便于产品对象的获取。</p><p>把获取产品对象的功能封装成工厂模板类。为了能随时随地获取指定产品对象，则把工厂设计成单例模式。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>// 基类，产品注册模板接口类
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 模板参数 ProductType_t 表示的类是产品抽象类
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>ProductType_t</span><span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>IProductRegistrar</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>   <span style=color:#75715e>// 获取产品对象抽象接口
+</span></span></span><span style=display:flex><span>   <span style=color:#66d9ef>virtual</span> ProductType_t <span style=color:#f92672>*</span>CreateProduct() <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>protected</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>   <span style=color:#75715e>// 禁止外部构造和析构, 子类的&#34;内部&#34;的其他函数可以调用
+</span></span></span><span style=display:flex><span>   IProductRegistrar() {}
+</span></span><span style=display:flex><span>   <span style=color:#66d9ef>virtual</span> <span style=color:#f92672>~</span>IProductRegistrar() {}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>   <span style=color:#75715e>// 禁止外部拷贝和赋值操作
+</span></span></span><span style=display:flex><span>   IProductRegistrar(<span style=color:#66d9ef>const</span> IProductRegistrar <span style=color:#f92672>&amp;</span>);
+</span></span><span style=display:flex><span>   <span style=color:#66d9ef>const</span> IProductRegistrar <span style=color:#f92672>&amp;</span><span style=color:#66d9ef>operator</span><span style=color:#f92672>=</span>(<span style=color:#66d9ef>const</span> IProductRegistrar <span style=color:#f92672>&amp;</span>);
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 产品注册模板类，用于创建具体产品和从工厂里注册产品
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 模板参数 ProductType_t 表示的类是产品抽象类（基类 Shoes），ProductImpl_t 表示的类是具体产品（产品种类的子类 NikeShoes）
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>ProductType_t</span>, <span style=color:#66d9ef>class</span> <span style=color:#a6e22e>ProductImpl_t</span><span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>ProductRegistrar</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> IProductRegistrar<span style=color:#f92672>&lt;</span>ProductType_t<span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    string product_name;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>   <span style=color:#75715e>// 构造函数，用于注册产品到工厂，只能显示调用
+</span></span></span><span style=display:flex><span>   <span style=color:#66d9ef>explicit</span> ProductRegistrar(std<span style=color:#f92672>::</span>string name)<span style=color:#f92672>:</span>product_name(name)
+</span></span><span style=display:flex><span>   {
+</span></span><span style=display:flex><span>      <span style=color:#75715e>// 通过工厂单例把产品注册到工厂
+</span></span></span><span style=display:flex><span>      <span style=color:#75715e>// 在第一次创建实际产品 注册器时 会创建静态抽象工厂单例，并将实际产品注册器登录到工厂的哈希表中
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// 重复注册问题，将会导致之前的同具体产品注册器失效
+</span></span></span><span style=display:flex><span>      <span style=color:#66d9ef>if</span>(<span style=color:#f92672>!</span>ProductFactory<span style=color:#f92672>&lt;</span>ProductType_t<span style=color:#f92672>&gt;::</span>Instance().RegisterProduct(<span style=color:#66d9ef>this</span>, name))
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// 后注册的注册器无效，设置其名字为空，防止其析构时误将正在用的注册器从哈希表中删除了
+</span></span></span><span style=display:flex><span>        name <span style=color:#f92672>=</span> <span style=color:#960050;background-color:#1e0010>“”</span>;
+</span></span><span style=display:flex><span>   }
+</span></span><span style=display:flex><span>   <span style=color:#75715e>// 创建具体产品对象指针
+</span></span></span><span style=display:flex><span>   ProductType_t <span style=color:#f92672>*</span><span style=color:#a6e22e>CreateProduct</span>()
+</span></span><span style=display:flex><span>   {
+</span></span><span style=display:flex><span>      <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>new</span> ProductImpl_t();
+</span></span><span style=display:flex><span>   }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//当注册器对象析构后 对应name里记录的就是野指针，还需要在注册器析构的时候将哈希表中对应的键值对给删除了
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 产品登出(删除产品) 需要保证只能在 注册器析构的时候调用这个函数
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#f92672>~</span>ProductRegistrar()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        ProductFactory<span style=color:#f92672>&lt;</span>ProductType_t<span style=color:#f92672>&gt;::</span>Instance().deRegisterProduct(product_name);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 工厂模板类，用于获取和注册产品对象
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 模板参数 ProductType_t 表示的类是产品抽象类
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>template</span> <span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>ProductType_t</span><span style=color:#f92672>&gt;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>ProductFactory</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>   <span style=color:#75715e>// 获取工厂单例，工厂的实例是唯一的
+</span></span></span><span style=display:flex><span>   <span style=color:#66d9ef>static</span> ProductFactory<span style=color:#f92672>&lt;</span>ProductType_t<span style=color:#f92672>&gt;</span> <span style=color:#f92672>&amp;</span>Instance()
+</span></span><span style=display:flex><span>   {
+</span></span><span style=display:flex><span>      <span style=color:#66d9ef>static</span> ProductFactory<span style=color:#f92672>&lt;</span>ProductType_t<span style=color:#f92672>&gt;</span> instance;<span style=color:#75715e>// 静态懒汉 线程安全
+</span></span></span><span style=display:flex><span>      <span style=color:#66d9ef>return</span> instance;
+</span></span><span style=display:flex><span>   }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>   <span style=color:#75715e>// 产品注册
+</span></span></span><span style=display:flex><span>   <span style=color:#66d9ef>bool</span> <span style=color:#a6e22e>RegisterProduct</span>(cosnst IProductRegistrar<span style=color:#f92672>&lt;</span>ProductType_t<span style=color:#f92672>&gt;</span> <span style=color:#f92672>*</span>registrar, cosnst std<span style=color:#f92672>::</span>string<span style=color:#f92672>&amp;</span> name)
+</span></span><span style=display:flex><span>   {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// 有点问题 当注册器对象析构后 对应name里记录的就是野指针，还需要在注册器析构的时候将哈希表中对应的键值对给删除了
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 防止重复登记同名产品，只保留第一次登记的那个注册器指针
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (m_ProductRegistry.find(name) <span style=color:#f92672>!=</span> m_ProductRegistry.end()) {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// 后注册的注册器无效，设置其名字为空，防止其析构时误将正在用的注册器从哈希表中删除了
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>return</span> false;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        m_ProductRegistry[name] <span style=color:#f92672>=</span> registrar;<span style=color:#75715e>// 键 产品名 值 产品注册器指针(产品注册器有CreateProduct可以直接生产产品)
+</span></span></span><span style=display:flex><span>      <span style=color:#66d9ef>return</span> true;
+</span></span><span style=display:flex><span>   }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>   <span style=color:#75715e>// 根据名字name，获取对应具体的产品对象
+</span></span></span><span style=display:flex><span>   ProductType_t <span style=color:#f92672>*</span><span style=color:#a6e22e>GetProduct</span>(std<span style=color:#f92672>::</span>string name)
+</span></span><span style=display:flex><span>   {
+</span></span><span style=display:flex><span>      <span style=color:#75715e>// 从哈希表找到已经注册过的产品(产品注册器)，并返回产品对象
+</span></span></span><span style=display:flex><span>      <span style=color:#66d9ef>if</span> (m_ProductRegistry.find(name) <span style=color:#f92672>!=</span> m_ProductRegistry.end())
+</span></span><span style=display:flex><span>      {
+</span></span><span style=display:flex><span>         <span style=color:#66d9ef>return</span> m_ProductRegistry[name]<span style=color:#f92672>-&gt;</span>CreateProduct();
+</span></span><span style=display:flex><span>      }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>      <span style=color:#75715e>// 未注册的产品，则报错未找到
+</span></span></span><span style=display:flex><span>      std<span style=color:#f92672>::</span>cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34;No product found for &#34;</span> <span style=color:#f92672>&lt;&lt;</span> name <span style=color:#f92672>&lt;&lt;</span> std<span style=color:#f92672>::</span>endl;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>      <span style=color:#66d9ef>return</span> NULL;
+</span></span><span style=display:flex><span>   }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>   <span style=color:#75715e>// 禁止外部构造和析构
+</span></span></span><span style=display:flex><span>   ProductFactory() {}
+</span></span><span style=display:flex><span>   <span style=color:#f92672>~</span>ProductFactory() {}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>   <span style=color:#75715e>// 禁止外部拷贝和赋值操作
+</span></span></span><span style=display:flex><span>   ProductFactory(<span style=color:#66d9ef>const</span> ProductFactory <span style=color:#f92672>&amp;</span>);
+</span></span><span style=display:flex><span>   <span style=color:#66d9ef>const</span> ProductFactory <span style=color:#f92672>&amp;</span><span style=color:#66d9ef>operator</span><span style=color:#f92672>=</span>(<span style=color:#66d9ef>const</span> ProductFactory <span style=color:#f92672>&amp;</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>   <span style=color:#75715e>// 保存注册过的产品，key:产品名字 , value:产品类型
+</span></span></span><span style=display:flex><span>   std<span style=color:#f92672>::</span>unordered_map<span style=color:#f92672>&lt;</span>std<span style=color:#f92672>::</span>string, IProductRegistrar<span style=color:#f92672>&lt;</span>ProductType_t<span style=color:#f92672>&gt;</span> <span style=color:#f92672>*&gt;</span> m_ProductRegistry;
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><p>对于不同的产品种类有专门的单例工厂用于生产这种产品</p><p><strong>ProductFactory::Instance()</strong></p><p><strong>ProductFactory&lt;<strong>抽象产品类别</strong>>::Instance()</strong></p><p><strong>每种抽象产品工厂类单例的ProductFactory&lt;抽象产品类别>::Instance()初次构造是在ProductRegistrar&lt;抽象产品类别,具体产品>的构造函数体中</strong>，创建了静态工厂单例，并将这种产品注册器ProductRegistrar&lt;抽象产品类别,具体产品>的指针登记到 <strong>抽象产品工厂ProductRegistrar&lt;抽象产品类别>工厂的哈希表中[实际产品名字符串]=实际产品注册器 中，通过实际产品注册器可以实现创建实际产品对象</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>// 实际使用
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 产品注册器ProductRegistrar在注册阶段
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// ========================== 生产耐克球鞋过程 ===========================//
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 注册产品种类为Shoes（基类），产品为NiKe（子类）到工厂，产品名为nike
+</span></span></span><span style=display:flex><span>ProductRegistrar<span style=color:#f92672>&lt;</span>Shoes, NiKeShoes<span style=color:#f92672>&gt;</span> nikeShoes(<span style=color:#e6db74>&#34;nike&#34;</span>);<span style=color:#75715e>// 首次创建产品注册器，在其构造函数中会创建抽象产品工厂单例，并将注册器(以指明实际产品)登录到 工厂的哈希表中[实际产品名字符串]=实际产品注册器 中，通过实际产品注册器可以实现创建实际产品对象
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// ========================== 生产优衣库衣服过程 ===========================//
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 注册产品种类为Clothe（基类），产品为UniqloClothe（子类）到工厂，产品名为uniqlo
+</span></span></span><span style=display:flex><span>ProductRegistrar<span style=color:#f92672>&lt;</span>Clothe, UniqloClothe<span style=color:#f92672>&gt;</span> uniqloClothe(<span style=color:#e6db74>&#34;uniqlo&#34;</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 从工厂获取产品种类为Clothe，名称为uniqlo的产品对象
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 从工厂获取产品种类为Shoes，名称为nike的产品对象
+</span></span></span><span style=display:flex><span>Shoes <span style=color:#f92672>*</span>pNiKeShoes <span style=color:#f92672>=</span> ProductFactory<span style=color:#f92672>&lt;</span>Shoes<span style=color:#f92672>&gt;::</span>Instance().GetProduct(<span style=color:#e6db74>&#34;nike&#34;</span>);
+</span></span><span style=display:flex><span>Clothe <span style=color:#f92672>*</span>pUniqloClothe <span style=color:#f92672>=</span> ProductFactory<span style=color:#f92672>&lt;</span>Clothe<span style=color:#f92672>&gt;::</span>Instance().GetProduct(<span style=color:#e6db74>&#34;uniqlo&#34;</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 显示产品的广告语
+</span></span></span><span style=display:flex><span>pNiKeShoes<span style=color:#f92672>-&gt;</span>Show();
+</span></span><span style=display:flex><span><span style=color:#75715e>// 显示产品的广告语
+</span></span></span><span style=display:flex><span>pUniqloClothe<span style=color:#f92672>-&gt;</span>Show();
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// 释放资源
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>if</span> (pNiKeShoes)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>delete</span> pNiKeShoes;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>// 释放资源
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>if</span> (pUniqloClothe)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>delete</span> pUniqloClothe;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><a href=https://www.cnblogs.com/carsonzhu/p/5770253.html>https://www.cnblogs.com/carsonzhu/p/5770253.html</a></p><p>观察者模式</p><p>观察者模式：定义<strong>一种一（被观察类）对多（观察类）的关系，让多个观察对象同时监听一个被观察对象，被观察对象状态发生变化时，会通知所有的观察对象，使他们能够更新自己的状态</strong>。(这种交互也称为发布-订阅(publish-subscribe)。目标是通知的发布者，它发出通知时并不需要知道谁是它的观察者)</p><p>观察者模式中存在两种角色：</p><p>观察者：内部包含被观察者对象，当被观察者对象的状态发生变化时，更新自己的状态。（接收通知更新状态）</p><p>被观察者：内部包含了所有观察者对象，当状态发生变化时通知所有的观察者更新自己的状态。（发送通知）</p><p>应用场景：</p><p>当一个对象的改变需要同时改变其他对象，且不知道具体有多少对象有待改变时，应该考虑使用观察者模式；</p><p>一个抽象模型有两个方面，其中一方面依赖于另一方面，这时可以用观察者模式将这两者封装在独立的对象中使它们各自独立地改变和复用。</p><p><img alt=1659498190739-1563f6dc-a0ea-46c7-a582-c202511f6eb1.png loading=lazy src=/images/wWrYkd9pcejqXSAy/1659498190739-1563f6dc-a0ea-46c7-a582-c202511f6eb1-802347.png></p><p>这里的目标 Subject 提供依赖于它的观察者 Observer 的注册（ Attach） 和注销（ Detach）操作(添加删除对Subject 对象的观察者 Observer)，并且提供了使得依赖于它的所有观察者同步的操作（ Notify）。 观察者 Observer 则提供一个 Update 操作， 注意这里的 Observer 的 Update 操作并不在 Observer 改变了 Subject 目标状态的时候就对自己进行更新， 这个更新操作要延迟到 Subject 对象发出 Notify 通知所有Observer 进行修改（调用 Update）。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Subject</span>;
+</span></span><span style=display:flex><span><span style=color:#75715e>//抽象观察者
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Observer</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>protected</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    string name;<span style=color:#75715e>// 每个观察者特有的名字
+</span></span></span><span style=display:flex><span>    Subject <span style=color:#f92672>*</span>sub;<span style=color:#75715e>// 保存其具体观察的对象 指针
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    Observer(string name, Subject <span style=color:#f92672>*</span>sub)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>name <span style=color:#f92672>=</span> name;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>sub <span style=color:#f92672>=</span> sub;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>update</span>() <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span><span style=color:#75715e>//具体的观察者，看股票的
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>StockObserver</span> <span style=color:#f92672>:</span><span style=color:#66d9ef>public</span> Observer
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    StockObserver(string name, Subject <span style=color:#f92672>*</span>sub) <span style=color:#f92672>:</span>Observer(name, sub)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>update</span>();<span style=color:#75715e>// 在被观察者通知notify后做这个特别的观察者的特殊动作
+</span></span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> StockObserver<span style=color:#f92672>::</span>update()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    cout <span style=color:#f92672>&lt;&lt;</span> name <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34; 收到消息：&#34;</span> <span style=color:#f92672>&lt;&lt;</span> sub<span style=color:#f92672>-&gt;</span>action <span style=color:#f92672>&lt;&lt;</span> endl;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (sub<span style=color:#f92672>-&gt;</span>action <span style=color:#f92672>==</span> <span style=color:#e6db74>&#34;梁所长来了!&#34;</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34;我马上关闭股票，装做很认真工作的样子！&#34;</span> <span style=color:#f92672>&lt;&lt;</span> endl;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//具体的观察者，看NBA的
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>NBAObserver</span> <span style=color:#f92672>:</span><span style=color:#66d9ef>public</span> Observer
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    NBAObserver(string name, Subject <span style=color:#f92672>*</span>sub) <span style=color:#f92672>:</span>Observer(name, sub)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>update</span>();<span style=color:#75715e>// 在被观察者通知notify后做这个特别的观察者的特殊动作
+</span></span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> NBAObserver<span style=color:#f92672>::</span>update()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    cout <span style=color:#f92672>&lt;&lt;</span> name <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34; 收到消息：&#34;</span> <span style=color:#f92672>&lt;&lt;</span> sub<span style=color:#f92672>-&gt;</span>action <span style=color:#f92672>&lt;&lt;</span> endl;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (sub<span style=color:#f92672>-&gt;</span>action <span style=color:#f92672>==</span> <span style=color:#e6db74>&#34;梁所长来了!&#34;</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        cout <span style=color:#f92672>&lt;&lt;</span> <span style=color:#e6db74>&#34;我马上关闭NBA，装做很认真工作的样子！&#34;</span> <span style=color:#f92672>&lt;&lt;</span> endl;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>//抽象通知者
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Subject</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>protected</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>list<span style=color:#f92672>&lt;</span>Observer<span style=color:#f92672>*&gt;</span> observers;<span style=color:#75715e>// 登记观察自己的观察者列表
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 双向链表实现，其实用哈希表更好，观察者本身每个都有一个独一无二的name
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 可以用name做键，观察者地址做值
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    string action;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>attach</span>(Observer<span style=color:#f92672>*</span>) <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;<span style=color:#75715e>// 登记观察自己的观察者
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>detach</span>(Observer<span style=color:#f92672>*</span>) <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;<span style=color:#75715e>// 删除观察自己的观察者
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>notify</span>() <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span><span style=color:#75715e>//具体通知者，秘书
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Secretary</span> <span style=color:#f92672>:</span><span style=color:#66d9ef>public</span> Subject
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span><span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>    string act;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>attach</span>(Observer <span style=color:#f92672>*</span>observer)<span style=color:#75715e>// 登记观察自己的观察者
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        observers.push_back(observer);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>detach</span>(Observer <span style=color:#f92672>*</span>observer)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        list<span style=color:#f92672>&lt;</span>Observer <span style=color:#f92672>*&gt;::</span>iterator iter <span style=color:#f92672>=</span> observers.begin();
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> (iter <span style=color:#f92672>!=</span> observers.end())
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> ((<span style=color:#f92672>*</span>iter) <span style=color:#f92672>==</span> observer)
+</span></span><span style=display:flex><span>            {
+</span></span><span style=display:flex><span>                observers.erase(iter);<span style=color:#75715e>// 删除观察自己的观察者
+</span></span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#f92672>++</span>iter;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>notify</span>()
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        list<span style=color:#f92672>&lt;</span>Observer <span style=color:#f92672>*&gt;::</span>iterator iter <span style=color:#f92672>=</span> observers.begin();
+</span></span><span style=display:flex><span>        action <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;梁所长来了!&#34;</span>;
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// 遍历登记在observers中的所有观察者，并发出自己状态改变(做出action)的通知,使所有观察者自己的状态发生对应的变化
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> (iter <span style=color:#f92672>!=</span> observers.end())
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            (<span style=color:#f92672>*</span>iter)<span style=color:#f92672>-&gt;</span>update();
+</span></span><span style=display:flex><span>            <span style=color:#f92672>++</span>iter;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>};
+</span></span></code></pre></div><p>观察者本质，被观察对象Subject为一对多的关系在Subject中需要用容器保存登记所有正在观察他的观察者，在被观察对象的状态发生改变后，需要被观察对象Subject遍历容器依次调用观察者的update函数，来让观察者的状态根据被观察对象的变化发生对应的改变。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>//使用
+</span></span></span><span style=display:flex><span>Subject <span style=color:#f92672>*</span>dwq <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> Secretary(); <span style=color:#75715e>//被观察的对象
+</span></span></span><span style=display:flex><span>Observer <span style=color:#f92672>*</span>xs <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> NBAObserver(<span style=color:#e6db74>&#34;xiaoshuai&#34;</span>, dwq);
+</span></span><span style=display:flex><span>Observer <span style=color:#f92672>*</span>zy <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> NBAObserver(<span style=color:#e6db74>&#34;zouyue&#34;</span>, dwq);
+</span></span><span style=display:flex><span>Observer <span style=color:#f92672>*</span>lm <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> StockObserver(<span style=color:#e6db74>&#34;limin&#34;</span>, dwq);
+</span></span><span style=display:flex><span><span style=color:#75715e>//加入观察队列
+</span></span></span><span style=display:flex><span>dwq<span style=color:#f92672>-&gt;</span>attach(xs);
+</span></span><span style=display:flex><span>dwq<span style=color:#f92672>-&gt;</span>attach(zy);
+</span></span><span style=display:flex><span>dwq<span style=color:#f92672>-&gt;</span>attach(lm);
+</span></span><span style=display:flex><span>dwq<span style=color:#f92672>-&gt;</span>notify();
+</span></span></code></pre></div><p><strong>48 关于构造和析构的访问权限</strong></p><p>基类的构造和析构在派生类内的访问权限需要是public或protected否则无法在派生类内调用基类的构造或析构函数，会直接报错。</p><p>最后由主函数构造的派生类，其构造或析构必须是要是public的否则在 主函数内无法构造或析构，会直接报错。</p><p>标准模板库的六大组件：</p><p>1、容器</p><p>2、算法</p><p>3、迭代器</p><p>4、分配器</p><p>5、仿函数</p><p>6、适配器</p></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

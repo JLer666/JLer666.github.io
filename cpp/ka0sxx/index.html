@@ -1,0 +1,436 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux多进程开发3 父子进程间匿名管道通信 | CantBlog</title><meta name=keywords content><meta name=description content="10 进程间通信
+进程是资源分配的单元，不同进程(指用户进程 不是内核进程)之间的资源是独立的没有关联的，不能在一个进程中直接访问另一个进程的资源。
+但是进程不是孤立的，不同的进程需要进行信息的交互和状态的传递等，因此需要进程间通信IPC
+进程间通信的目的:
+数据传输：一个进程将它的数据发给另一个进程
+通知时间：一个进程需要向另一个或一组进程发送消息，通知它(它们)发生了某种事件(如进程终止时需要通知父进程)。
+资源共享：多个进程之间共享同样的资源，为了做到这一点，需要内核提供互斥和同步机制
+进程控制：有些进程希望完全控制另一个进程的执行(如DeBug进程 GDB进程 控制被GDB调试的那个进程)，此时控制进程能个拦截另一个进程的所有陷入和异常，并能够及时知道它的状态改变。
+Linux 进程间通信的方式
+|  |
+| &mdash; |
+11匿名管道概述
+匿名管道，它是UNIX系统IPC进程间通信的最古老形式，所有的UNIX系统都支持这种通信机制
+比如 统计一个目录中文件的数目命令 ls | wc -l 为了执行该命令,shell创建了两个进程来分别执行ls和wc
+|  |
+| &mdash; |
+ls获取当前目录的文件列表  |叫管道符   wc文件统计个数
+ls进程将文件列表通过管道发给wc进程
+ls默认是将文件列表显示到终端(即 将信息写到fd=1的文件中 对应的是stdout标准输出 输出到终端屏幕)，管道有写入端和读取端，当加上|管道符后ls写的文件 fd=1 stdout指向的不再终端屏幕而是管道的写入端,wc同理wc读的文件 fd=0 stdin指向的不再终端屏幕而是管道的读入端。
+fd=0 stdin默认指向终端屏幕 fd=1stdout默认指向的也是终端屏幕
+管道的特点
+管道其实是一个在内核内存中维护的缓冲区，这个缓冲区的大小是有限的，不同操作系统的管道大小不一定相同。
+管道拥有文件的特质：读、写 管道的两端对应了两个文件描述符(写入端文件描述符，读取端文件描述符)，匿名管道是没有文件实体的但是有名管道是有文件实体的(但这个文件是不存储数据的)，可以按照造作文件的方式对管道进行操作。
+匿名管道只能用于有公共祖先的进程之间比如父进程和子进程，爷爷进程和孙子进程，兄弟进程之间。
+有名管道用于无关系的进程之间。
+一个管道是一个字节流，使用管道时不存在消息或消息边界的概念(就是没有一个数据帧的头尾内容这些概念 就是单纯的字节)，从管道读取数据的进程可以读取任意大小的数据块，而不管写进程写入的数据块的大小是多大(读写分离 互不影响)。
+通过管道传递的数据是顺序的，管道实际为环形队列实现 先入先出 读取出来的字节的顺序和它们被写入管道的顺序完全一样。
+在管道中的数据的传递方向是单向的，一端用于写入，一端用于读取，管道是半双工(遥控器单向发送 单工  电话通信 双工同时传递消息 可以同时读也可以同时写 也可以一个读一个写    对讲机 半双工 同一时间只能 读或写 不能同时读或同时写 在同一时刻内数据的流动是单向的，但是可以在一个时刻选择数据的流动方向)。
+从管道读数据是一次性操作，数据一旦被读走它就从管道中被抛弃(pop)，释放空间以便写更多的数据，在管道中无法使用lseek()来随机访问数据。
+|  |"><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/ka0sxx/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/ka0sxx/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/ka0sxx/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux多进程开发3 父子进程间匿名管道通信"><meta property="og:description" content="10 进程间通信
+进程是资源分配的单元，不同进程(指用户进程 不是内核进程)之间的资源是独立的没有关联的，不能在一个进程中直接访问另一个进程的资源。
+但是进程不是孤立的，不同的进程需要进行信息的交互和状态的传递等，因此需要进程间通信IPC
+进程间通信的目的:
+数据传输：一个进程将它的数据发给另一个进程
+通知时间：一个进程需要向另一个或一组进程发送消息，通知它(它们)发生了某种事件(如进程终止时需要通知父进程)。
+资源共享：多个进程之间共享同样的资源，为了做到这一点，需要内核提供互斥和同步机制
+进程控制：有些进程希望完全控制另一个进程的执行(如DeBug进程 GDB进程 控制被GDB调试的那个进程)，此时控制进程能个拦截另一个进程的所有陷入和异常，并能够及时知道它的状态改变。
+Linux 进程间通信的方式
+| |
+| — |
+11匿名管道概述
+匿名管道，它是UNIX系统IPC进程间通信的最古老形式，所有的UNIX系统都支持这种通信机制
+比如 统计一个目录中文件的数目命令 ls | wc -l 为了执行该命令,shell创建了两个进程来分别执行ls和wc
+| |
+| — |
+ls获取当前目录的文件列表 |叫管道符 wc文件统计个数
+ls进程将文件列表通过管道发给wc进程
+ls默认是将文件列表显示到终端(即 将信息写到fd=1的文件中 对应的是stdout标准输出 输出到终端屏幕)，管道有写入端和读取端，当加上|管道符后ls写的文件 fd=1 stdout指向的不再终端屏幕而是管道的写入端,wc同理wc读的文件 fd=0 stdin指向的不再终端屏幕而是管道的读入端。
+fd=0 stdin默认指向终端屏幕 fd=1stdout默认指向的也是终端屏幕
+管道的特点
+管道其实是一个在内核内存中维护的缓冲区，这个缓冲区的大小是有限的，不同操作系统的管道大小不一定相同。
+管道拥有文件的特质：读、写 管道的两端对应了两个文件描述符(写入端文件描述符，读取端文件描述符)，匿名管道是没有文件实体的但是有名管道是有文件实体的(但这个文件是不存储数据的)，可以按照造作文件的方式对管道进行操作。
+匿名管道只能用于有公共祖先的进程之间比如父进程和子进程，爷爷进程和孙子进程，兄弟进程之间。
+有名管道用于无关系的进程之间。
+一个管道是一个字节流，使用管道时不存在消息或消息边界的概念(就是没有一个数据帧的头尾内容这些概念 就是单纯的字节)，从管道读取数据的进程可以读取任意大小的数据块，而不管写进程写入的数据块的大小是多大(读写分离 互不影响)。
+通过管道传递的数据是顺序的，管道实际为环形队列实现 先入先出 读取出来的字节的顺序和它们被写入管道的顺序完全一样。
+在管道中的数据的传递方向是单向的，一端用于写入，一端用于读取，管道是半双工(遥控器单向发送 单工 电话通信 双工同时传递消息 可以同时读也可以同时写 也可以一个读一个写 对讲机 半双工 同一时间只能 读或写 不能同时读或同时写 在同一时刻内数据的流动是单向的，但是可以在一个时刻选择数据的流动方向)。
+从管道读数据是一次性操作，数据一旦被读走它就从管道中被抛弃(pop)，释放空间以便写更多的数据，在管道中无法使用lseek()来随机访问数据。
+| |"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-14T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux多进程开发3 父子进程间匿名管道通信"><meta name=twitter:description content="10 进程间通信
+进程是资源分配的单元，不同进程(指用户进程 不是内核进程)之间的资源是独立的没有关联的，不能在一个进程中直接访问另一个进程的资源。
+但是进程不是孤立的，不同的进程需要进行信息的交互和状态的传递等，因此需要进程间通信IPC
+进程间通信的目的:
+数据传输：一个进程将它的数据发给另一个进程
+通知时间：一个进程需要向另一个或一组进程发送消息，通知它(它们)发生了某种事件(如进程终止时需要通知父进程)。
+资源共享：多个进程之间共享同样的资源，为了做到这一点，需要内核提供互斥和同步机制
+进程控制：有些进程希望完全控制另一个进程的执行(如DeBug进程 GDB进程 控制被GDB调试的那个进程)，此时控制进程能个拦截另一个进程的所有陷入和异常，并能够及时知道它的状态改变。
+Linux 进程间通信的方式
+| |
+| — |
+11匿名管道概述
+匿名管道，它是UNIX系统IPC进程间通信的最古老形式，所有的UNIX系统都支持这种通信机制
+比如 统计一个目录中文件的数目命令 ls | wc -l 为了执行该命令,shell创建了两个进程来分别执行ls和wc
+| |
+| — |
+ls获取当前目录的文件列表 |叫管道符 wc文件统计个数
+ls进程将文件列表通过管道发给wc进程
+ls默认是将文件列表显示到终端(即 将信息写到fd=1的文件中 对应的是stdout标准输出 输出到终端屏幕)，管道有写入端和读取端，当加上|管道符后ls写的文件 fd=1 stdout指向的不再终端屏幕而是管道的写入端,wc同理wc读的文件 fd=0 stdin指向的不再终端屏幕而是管道的读入端。
+fd=0 stdin默认指向终端屏幕 fd=1stdout默认指向的也是终端屏幕
+管道的特点
+管道其实是一个在内核内存中维护的缓冲区，这个缓冲区的大小是有限的，不同操作系统的管道大小不一定相同。
+管道拥有文件的特质：读、写 管道的两端对应了两个文件描述符(写入端文件描述符，读取端文件描述符)，匿名管道是没有文件实体的但是有名管道是有文件实体的(但这个文件是不存储数据的)，可以按照造作文件的方式对管道进行操作。
+匿名管道只能用于有公共祖先的进程之间比如父进程和子进程，爷爷进程和孙子进程，兄弟进程之间。
+有名管道用于无关系的进程之间。
+一个管道是一个字节流，使用管道时不存在消息或消息边界的概念(就是没有一个数据帧的头尾内容这些概念 就是单纯的字节)，从管道读取数据的进程可以读取任意大小的数据块，而不管写进程写入的数据块的大小是多大(读写分离 互不影响)。
+通过管道传递的数据是顺序的，管道实际为环形队列实现 先入先出 读取出来的字节的顺序和它们被写入管道的顺序完全一样。
+在管道中的数据的传递方向是单向的，一端用于写入，一端用于读取，管道是半双工(遥控器单向发送 单工 电话通信 双工同时传递消息 可以同时读也可以同时写 也可以一个读一个写 对讲机 半双工 同一时间只能 读或写 不能同时读或同时写 在同一时刻内数据的流动是单向的，但是可以在一个时刻选择数据的流动方向)。
+从管道读数据是一次性操作，数据一旦被读走它就从管道中被抛弃(pop)，释放空间以便写更多的数据，在管道中无法使用lseek()来随机访问数据。
+| |"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux多进程开发3 父子进程间匿名管道通信","item":"https://jler666.github.io/cpp/ka0sxx/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux多进程开发3 父子进程间匿名管道通信","name":"Linux多进程开发3 父子进程间匿名管道通信","description":"10 进程间通信\n进程是资源分配的单元，不同进程(指用户进程 不是内核进程)之间的资源是独立的没有关联的，不能在一个进程中直接访问另一个进程的资源。\n但是进程不是孤立的，不同的进程需要进行信息的交互和状态的传递等，因此需要进程间通信IPC\n进程间通信的目的:\n数据传输：一个进程将它的数据发给另一个进程\n通知时间：一个进程需要向另一个或一组进程发送消息，通知它(它们)发生了某种事件(如进程终止时需要通知父进程)。\n资源共享：多个进程之间共享同样的资源，为了做到这一点，需要内核提供互斥和同步机制\n进程控制：有些进程希望完全控制另一个进程的执行(如DeBug进程 GDB进程 控制被GDB调试的那个进程)，此时控制进程能个拦截另一个进程的所有陷入和异常，并能够及时知道它的状态改变。\nLinux 进程间通信的方式\n| |\n| \u0026mdash; |\n11匿名管道概述\n匿名管道，它是UNIX系统IPC进程间通信的最古老形式，所有的UNIX系统都支持这种通信机制\n比如 统计一个目录中文件的数目命令 ls | wc -l 为了执行该命令,shell创建了两个进程来分别执行ls和wc\n| |\n| \u0026mdash; |\nls获取当前目录的文件列表 |叫管道符 wc文件统计个数\nls进程将文件列表通过管道发给wc进程\nls默认是将文件列表显示到终端(即 将信息写到fd=1的文件中 对应的是stdout标准输出 输出到终端屏幕)，管道有写入端和读取端，当加上|管道符后ls写的文件 fd=1 stdout指向的不再终端屏幕而是管道的写入端,wc同理wc读的文件 fd=0 stdin指向的不再终端屏幕而是管道的读入端。\nfd=0 stdin默认指向终端屏幕 fd=1stdout默认指向的也是终端屏幕\n管道的特点\n管道其实是一个在内核内存中维护的缓冲区，这个缓冲区的大小是有限的，不同操作系统的管道大小不一定相同。\n管道拥有文件的特质：读、写 管道的两端对应了两个文件描述符(写入端文件描述符，读取端文件描述符)，匿名管道是没有文件实体的但是有名管道是有文件实体的(但这个文件是不存储数据的)，可以按照造作文件的方式对管道进行操作。\n匿名管道只能用于有公共祖先的进程之间比如父进程和子进程，爷爷进程和孙子进程，兄弟进程之间。\n有名管道用于无关系的进程之间。\n一个管道是一个字节流，使用管道时不存在消息或消息边界的概念(就是没有一个数据帧的头尾内容这些概念 就是单纯的字节)，从管道读取数据的进程可以读取任意大小的数据块，而不管写进程写入的数据块的大小是多大(读写分离 互不影响)。\n通过管道传递的数据是顺序的，管道实际为环形队列实现 先入先出 读取出来的字节的顺序和它们被写入管道的顺序完全一样。\n在管道中的数据的传递方向是单向的，一端用于写入，一端用于读取，管道是半双工(遥控器单向发送 单工 电话通信 双工同时传递消息 可以同时读也可以同时写 也可以一个读一个写 对讲机 半双工 同一时间只能 读或写 不能同时读或同时写 在同一时刻内数据的流动是单向的，但是可以在一个时刻选择数据的流动方向)。\n从管道读数据是一次性操作，数据一旦被读走它就从管道中被抛弃(pop)，释放空间以便写更多的数据，在管道中无法使用lseek()来随机访问数据。\n| |\n","keywords":[],"articleBody":"10 进程间通信\n进程是资源分配的单元，不同进程(指用户进程 不是内核进程)之间的资源是独立的没有关联的，不能在一个进程中直接访问另一个进程的资源。\n但是进程不是孤立的，不同的进程需要进行信息的交互和状态的传递等，因此需要进程间通信IPC\n进程间通信的目的:\n数据传输：一个进程将它的数据发给另一个进程\n通知时间：一个进程需要向另一个或一组进程发送消息，通知它(它们)发生了某种事件(如进程终止时需要通知父进程)。\n资源共享：多个进程之间共享同样的资源，为了做到这一点，需要内核提供互斥和同步机制\n进程控制：有些进程希望完全控制另一个进程的执行(如DeBug进程 GDB进程 控制被GDB调试的那个进程)，此时控制进程能个拦截另一个进程的所有陷入和异常，并能够及时知道它的状态改变。\nLinux 进程间通信的方式\n| |\n| — |\n11匿名管道概述\n匿名管道，它是UNIX系统IPC进程间通信的最古老形式，所有的UNIX系统都支持这种通信机制\n比如 统计一个目录中文件的数目命令 ls | wc -l 为了执行该命令,shell创建了两个进程来分别执行ls和wc\n| |\n| — |\nls获取当前目录的文件列表 |叫管道符 wc文件统计个数\nls进程将文件列表通过管道发给wc进程\nls默认是将文件列表显示到终端(即 将信息写到fd=1的文件中 对应的是stdout标准输出 输出到终端屏幕)，管道有写入端和读取端，当加上|管道符后ls写的文件 fd=1 stdout指向的不再终端屏幕而是管道的写入端,wc同理wc读的文件 fd=0 stdin指向的不再终端屏幕而是管道的读入端。\nfd=0 stdin默认指向终端屏幕 fd=1stdout默认指向的也是终端屏幕\n管道的特点\n管道其实是一个在内核内存中维护的缓冲区，这个缓冲区的大小是有限的，不同操作系统的管道大小不一定相同。\n管道拥有文件的特质：读、写 管道的两端对应了两个文件描述符(写入端文件描述符，读取端文件描述符)，匿名管道是没有文件实体的但是有名管道是有文件实体的(但这个文件是不存储数据的)，可以按照造作文件的方式对管道进行操作。\n匿名管道只能用于有公共祖先的进程之间比如父进程和子进程，爷爷进程和孙子进程，兄弟进程之间。\n有名管道用于无关系的进程之间。\n一个管道是一个字节流，使用管道时不存在消息或消息边界的概念(就是没有一个数据帧的头尾内容这些概念 就是单纯的字节)，从管道读取数据的进程可以读取任意大小的数据块，而不管写进程写入的数据块的大小是多大(读写分离 互不影响)。\n通过管道传递的数据是顺序的，管道实际为环形队列实现 先入先出 读取出来的字节的顺序和它们被写入管道的顺序完全一样。\n在管道中的数据的传递方向是单向的，一端用于写入，一端用于读取，管道是半双工(遥控器单向发送 单工 电话通信 双工同时传递消息 可以同时读也可以同时写 也可以一个读一个写 对讲机 半双工 同一时间只能 读或写 不能同时读或同时写 在同一时刻内数据的流动是单向的，但是可以在一个时刻选择数据的流动方向)。\n从管道读数据是一次性操作，数据一旦被读走它就从管道中被抛弃(pop)，释放空间以便写更多的数据，在管道中无法使用lseek()来随机访问数据。\n| |\n| — |\n为什么可以使用管道进行通信\n为什么只有拥有公共祖先的进程可以通过匿名管道通信\nfork后的与祖先进程相关的进程的文件描述符表(在PCB中)是相同的。父进程的3号fd是指向A文件的，4号fd是指向B文件的(在fork前就已经将3,4号fd的指向明确了)，fork后的子进程的3号fd也是指向A文件的，4号fd也是指向B文件的。父子进程都可以通过fd操作同一文件，这样其实就可以完成进程间通信了，一个读一个写。匿名管道的原理和操作同一文件实现通信的原理是一样的，比如父进程的5号fd对应管道的写端，子进程的5号fd对应管道的写端，父进程的6号fd对应管道的读端，子进程的6号fd对应管道的读端(fork前的父进程已经将fd5,6的指向明确了)，则fork后父子进程可以通过匿名管道通信。\n| |\n| — |\n(fork后的父子进程文件描述符表是独立的(fork的时候 相当于为子进程初始化一份一摸一样的文件描述符表，但fork后想怎么改都随便)，不需要完全相同，根据需要来让父子fd指向需要的文件)\n1、内核缓冲区2、非文件3、不占用磁盘空间4、两部分：读端和写端5、默认是阻塞的6、操作管道进程结束后，自动释放7、半双工通信8、默认缓冲区是 4k\n1、父进程和子进程可以共享打开的文件描述符。\n2、父子进程共享文件描述符的条件：在fork之前打开文件。(两个进程的文件描述符表其实还是独立的，只不过fork子进程的时候给子进程的文件描述符表初始化为与父进程一摸一样)\n3、对于两个完全不相关的进程，文件描述符不能共享。\n4、父子进程文件描述符是共享的，但是关闭的时候可以分别关闭，也可以同时在公有代码中关闭。\n文件表，也就是vnode数据结构，也可以说是内核对象，它里面有个计数器变量，表示有几个进程打开此文件，所以子进程关闭，父进程仍然可以读数据\n| |\n| — |\n进程A的fd1和fd20这种就是dup类系统调用的结果 进程A的fd2和进程B的fd2就是fork的结果（fork之后指向相同的文件） 进程A的fd0和进程B的fd3最终指向同一个inode，这是这两个进程都调用过open的结果，此时两个文件不共享文件内的偏移 文件偏移是存放在第二个表中的，所以不管是dup还是fork，都是共享同一组偏移，\n左边的是进程级别的，中间的是系统级别的，记录整个系统中打开的文件，inode可以理解成存在硬盘上的文件\n匿名管道的底层实现为环形队列\n| |\n| — |\n写指针可以写空白处(比如E-U)和读指针已经读过的部分(比如ABCD)(读完了以后就会被写指针的写数据覆盖 所以读管道相当于pop读完以后就没有了)\n创建匿名管道\n#include int pipe(int pipefd[2]);\n查看管道缓冲大小\nulimit - a\n查看管道缓冲大小函数\n#include long fpathconf(int fd,int name);\n12父子进程通过匿名管道通信\n/* #include int pipe(int pipefd[2]); 创建一个匿名管道(半双工 同一时间内一段只能写或读) 用于有共同祖先线程的线程间通信 pipefd 传出参数 返回的管道两端 对应的文件描述符号 [0]为读端 [1]为写端 写数据到写端 会先存到内核中的缓冲区 直到读端读数据将这个数据取出(取出了就不在管道中了) 返回 0 成功 -1 失败 匿名管道默认阻塞 如果管道中没有数据 read阻塞(直到管道中有要求被读的那么多个字节 才不会阻塞 管道内数据被读出) 管道满了 write阻塞(直到管道被读出要写的那么多个字节 腾出了那么大的空间才能继续写) \\*/ #include #include #include #include #include //strlen int main() { //父子进程通信 //在fork之前创建匿名管道 创建出来的fd都存在父进程的文件描述符表中 //fork之后 子进程的文件描述符表和父进程一摸一样 包括读写端的fd操作符 //这样对于父子进程来说管道的读写fd指向是一样的 也就可以通过管道进行通信 int pipefd[2]; int ret = pipe(pipefd); if (ret == -1) { perror(\"pipe:\"); exit(-1); } //创建子进程 pid_t pid = fork(); //发送一次 // if (pid \u003e 0) //父进程 // { // // 父进程从读取端读取数据 // char buf[1024] = {0}; // int recvlen = read(pipefd[0], buf, sizeof(buf)); //从管道读端读数据 // //read是阻塞的 假如管道中没有数据会一直阻塞在read这句 直到管道中有数据被read读出来 // printf(\"parent recv :%s,pid : %d \\n\", buf, getpid()); // } // else if (pid == 0) //子进程 // { // //子进程向管道发数据 // char *str = \"im child\"; // write(pipefd[1], str, strlen(str)); // //如果管道满了 无法再写write是阻塞的 直到read读出的字节数大于要写的字节数 write才能继续写 // // 成功返回str中被写入fd文件的字节数，返回0表示没有数据被写入fd文件中, 出现错误返回 - 1并设置errorno // } //循环发送和读 一端只发 一端只收 // if (pid \u003e 0) //父进程 // { // // 父进程从读取端读取数据 // char buf[1024] = {0}; // while (1) // { // int recvlen = read(pipefd[0], buf, sizeof(buf)); //从管道读端读数据 // //read是阻塞的 假如管道中没有数据会一直阻塞在read这句 直到管道中有数据被read读出来 // printf(\"parent recv :%s,pid : %d \\n\", buf, getpid()); // } // } // else if (pid == 0) //子进程 // { // //子进程向管道发数据 // while (1) // { // //每1秒向管道写入一次 // char *str = \"im child\"; // write(pipefd[1], str, strlen(str)); // sleep(1); // } // //如果管道满了 无法再写write是阻塞的 直到read读出的字节数大于要写的字节数 write才能继续写 // // 成功返回str中被写入fd文件的字节数，返回0表示没有数据被写入fd文件中, 出现错误返回 - 1并设置errorno // } //一端又发又收 但同一时间内只收或只发 if (pid \u003e 0) //父进程 { // 父进程从读取端读取数据 char buf[1024] = {0}; while (1) { int recvlen = read(pipefd[0], buf, sizeof(buf)); //从管道读端读数据 //read是阻塞的 假如管道中没有数据会一直阻塞在read这句 直到管道中有数据被read读出来 printf(\"parent recv :%s,pid : %d \\n\", buf, getpid()); memset(buf, 0, sizeof(buf)); //读后记得清除读的buf 否则会有上次的数据残留导致下次读的数据有问题 //每1秒向管道写入一次 char *str = \"im parent\"; write(pipefd[1], str, strlen(str)); sleep(1); } } else if (pid == 0) //子进程 { //子进程向管道发数据 char buf[1024] = {0}; while (1) { //每1秒向管道写入一次 char *str = \"im child\"; write(pipefd[1], str, strlen(str)); sleep(1); int recvlen = read(pipefd[0], buf, sizeof(buf)); //从管道读端读数据 //read是阻塞的 假如管道中没有数据会一直阻塞在read这句 直到管道中有数据被read读出来 printf(\"child recv :%s,pid : %d \\n\", buf, getpid()); memset(buf, 0, sizeof(buf)); //读后记得清除读的buf 否则会有上次的数据残留导致下次读的数据有问题 } } //如果父子进程都是既要读又要写 就需要把读写的顺序错开 一个读一个写 //不能出现同时读的情况 这样程序就阻塞了跑不起来 //如果将两个线程中的sleep去掉 会出现parent recv:im parent 和 child recv:im child //出现这种情况的原因是 //父进程写的 被父进程读了(父进程比子进程先读) 子进程写的 被子进程读了(子进程比父进程先读) //在实际开发中不可能通过sleep来阻止这种现象 //在实际开发中匿名管道的数据流向是单向的(一个线程只读 一个线程只写 关闭另一个fd close(pipefd[0]/[1]))！！！！！！！！ return 0; } //ulimit -a 中有pipe isze 512bytes 8 表示共8块一块512字节 总共4k字节 管道最大4k字节 //ulimit -p 修改管道大小 // 查看管道缓冲大小函数 // #include // long fpathconf(int fd, int name); // fd 传入管道一端对应的文件描述符 name:_PC_PIPE_BUF // 返回fd对应的大小 13匿名管道通信案例\n/* 实现ps aux | grep root 只显示root进程相关的信息 | 管道符 利用父子进程通信实现 子进程执行ps aux(execlp 默认将内容输出到标准输出中) 因为子进程的标准输出初始为屏幕 所以要将 标准输出重定向到父进程(即管道写端)，这样父进程才能得到execlp的返回值 父进程 获取到数据 将数据打印 \\*/ #include #include #include #include #include //strlen int main() { //创建一个匿名管道 int fd[2]; int ret = pipe(fd); if (ret == -1) { perror(\"pipe:\"); exit(-1); } //一定要在fork子进程前 创建管道 这样才能使父子进程拥有相同的管道描述符 pid_t pid = fork(); if (pid \u003e 0) { //父进程 从管道中读取数据 再直接输出 //父进程只读 关闭管道写端 close(fd[1]); char buf[1024] = {0}; int len = read(fd[0], buf, sizeof(buf) - 1); //buf中只读sizeof(buf) - 1个字节 因为最后一个字节必须是字符串结束符\\0(十进制就是0) while (len \u003e 0) { printf(\"%s\", buf); memset(buf, 0, sizeof(buf)); len = read(fd[0], buf, sizeof(buf) - 1); //返回值len为读到的字符数 } wait(NULL); //回收子进程资源 } else if (pid == 0) { //子进程 // 子进程执行ps aux(execlp 默认将内容输出到标准输出中) 因为子进程的标准输出初始为屏幕 // 所以要将 标准输出重定向到父进程(即管道写端) ，这样父进程才能得到execlp的返回值 //子进程只写 关闭管道读端 close(fd[0]); //首先重定向子进程的标准输出到管道的写端 stdout_fileno-\u003efd[1] //int dup2(int oldfd, int newfd); //功能和dup类似 //用于重定向文件描述符 //oldfd指向a.txt newfd指向b.txt 在调用函数成功后将newfd-\u003eb.txt关闭并且再让newfd指向a.txt dup2(fd[1], STDOUT_FILENO); //newfd指向a.txt 这样STDOUT_FILENO就指向之前管道写端对应的那个虚拟文件 // int execlp(const char *file, const char *arg, ... / (char *) NULL /); // 会到环境变量中的路径中查找指定的同名文件 找到了就执行 找不到返回 - 1 // 参数： // file 可执行文件的文件名 a.out ps 可以不用写绝对路径 直接写文件名 // arg(同execl) // 这个arg其实就是exec可执行文件的main的传入参数列表 // 第一个arg一般没有作用 一般写的是执行的可执行文件的名称 // 从第二个参数往后才是可执行文件main的真正参数列表 // 这个参数列表一定要以NULL为结尾，这样才知道参数列表读入完毕 // 返回值 execlp(\"ps\", \"ps\", \"aux\", NULL); //exec函数族的函数执行成功后不会返回，因为调用进程的实体， // 包括代码段数据段堆栈等(所有用户区内容)都被新的可执行文件的内容取代 //但是文件描述符表在内核中并不会被替换 } else { perror(\"fork:\"); exit(-1); } // 管道默认大小 4k字节 // 子进程写管道，写满了就会被阻塞(这里的写是指调用write)，然后轮到父进程读管道， // 所以子进程不需要while循环也可以把所有的超过4k的数据写完 // execlp(\"ps\", \"ps\", NULL)不是write ，它不可能管道写满了还阻塞着 // 超过4096的数据是会分包，还是可以发送的。TLPI书上也说了，”写入不超过4096字节” 的操作保证是原子的 // Linux 2.6.11后，管道的容量是65536，不同的操作系统实现可能不同。所以最后我试了一下，一次write() 确实最多只能写65536字节。记得将管道设置为非阻塞，才能看到无一次法写入大于65536字节的数据。 // 不然，write是阻塞的，发一部分，阻塞一下，发一部分。。。多大都会发送完。 return 0; } // #include // #include // #include // #include // #include // #include // #include // #include // #include // #define BUF_SIZE 65544 // int main() // { // int pipeFd[2]; // if (pipe(pipeFd) == -1) // { // perror(\"pipe\"); // exit(-1); // } // // 设置管道为非阻塞 // for (int i = 0; i \u003c 2; ++i) // { // int flags = fcntl(pipeFd[i], F_GETFL); // if (fcntl(pipeFd[i], F_SETFL, flags | O_NONBLOCK) == -1) // perror(\"fcntl\"); // } // int pid = fork(); // if (pid \u003e 0) // { // sleep(1); // 确保子进程先写。管道才有数据能读 // // 父进程读 // close(pipeFd[1]); // char buf[BUF_SIZE + 1] = {0}; // printf(\"父进程读到了：%ld字节\\n\", read(pipeFd[0], buf, BUF_SIZE)); // } // else if (pid == 0) // { // // 子进程 // close(pipeFd[0]); // // in.txt有65544字节的数据 // int fd = open(\"in.txt\", O_RDONLY); // char buf[BUF_SIZE + 1] = {0}; // printf(\"从文件中读到: %ld字节\\n\", read(fd, buf, BUF_SIZE)); // printf(\"子进程写入了：%ld字节\\n\", write(pipeFd[1], buf, BUF_SIZE)); // } // else // { // perror(\"fork\"); // exit(-1); // } // return 0; // } 管道的读写特点以及将管道设置为非阻塞\n使用管道时需要注意以下几种特殊情况(管道为阻塞 在执行阻塞IO的操作时)，\n1 所有的指向管道写端的文件描述符 都关闭了(管道写端的引用计数为0)\n父进程创建管道，其内核区中的文件描述符表中新增两个fd一个指向管道读端一个指向管道写端，此时管道写端的引用计数为1。父进程fork出子进程，fork拷贝文件描述符表给子进程，所以子进程的文件描述符表中也有两个fd一个指向读端一个指向写端，此时管道写端的引用计数为2。\n当指向管道写端的fd都close了,此时有进程从管道读端读数据，若此时管道中有剩余数据则读取剩余数据，直到剩余数据被读完后，再次read返回0(读到文件末尾read是返回0的 读出现异常是返回-1的)。\n2 有指向管道写端的文件描述符没有关闭(管道写端的引用计数大于0)并且没有进程向管道写端写数据，此时将管道内数据读空后再继续读是出现read阻塞，直到有进程写了一些数据，read读到返回读到的字节数。\n3 所有的指向管道读端的文件描述符 都关闭了(管道读端的引用计数为0)，此时有进程向管道中写数据，那么该进程会收到一个信号SIGPIPE，通常这个信号会导致进程异常终止。\n4 有指向管道读端的文件描述符没有关闭(管道读端的引用计数大于0)并且没有进程从管道读端读数据，此时有进程向管道中写数据，在管道写满后，再次调用写write会导致写进程阻塞，直到管道中有空位write才不会阻塞并返回写入的字节数。\n设置管道非阻塞(设置文件描述符非阻塞)\n设置管道读端非阻塞，在管道内无数据再读 read返回值为-1\n/* 设置管道非阻塞(设置文件描述符fd 非阻塞) flags = fcntl(fd[],F_GETFL) 获取原来的flag flags |= O_NONBLOCK; fcntl(fd[],F_SETFL,flags);//设置新的文件描述符属性 \\*/ #include #include #include #include #include #include //strlen int main() { //父子进程通信 //在fork之前创建匿名管道 创建出来的fd都存在父进程的文件描述符表中 //fork之后 子进程的文件描述符表和父进程一摸一样 包括读写端的fd操作符 //这样对于父子进程来说管道的读写fd指向是一样的 也就可以通过管道进行通信 int pipefd[2]; int ret = pipe(pipefd); if (ret == -1) { perror(\"pipe:\"); exit(-1); } //创建子进程 pid_t pid = fork(); //一端又发又收 但同一时间内只收或只发 if (pid \u003e 0) //父进程 { // 父进程从读取端读取数据 char buf[1024] = {0}; //父进程只读 关闭管道写端 close(pipefd[1]); // 设置管道非阻塞(设置文件描述符fd 非阻塞) // 读常规文件是不会阻塞的，不管读多少字节，read一定会在有限的时间内返回。从终端设备或网络读则不一定 //设置非阻塞读 当管道中没有要求的那么多的数据时 不会阻塞在read而是继续向下执行 int flags = fcntl(pipefd[0], F_GETFL); // 获取原来的flag flags |= O_NONBLOCK; //设置文件(管道读端)为非阻塞 fcntl(pipefd[0], F_SETFL, flags); //设置新的文件描述符属性 while (1) { int recvlen = read(pipefd[0], buf, sizeof(buf)); //从管道读端读数据 //read是阻塞的 假如管道中没有数据会一直阻塞在read这句 直到管道中有数据被read读出来 printf(\"parent recv :%s,pid : %d \\n\", buf, getpid()); memset(buf, 0, sizeof(buf)); //读后记得清除读的buf 否则会有上次的数据残留导致下次读的数据有问题 // //每1秒向管道写入一次 // char *str = \"im parent\"; // write(pipefd[1], str, strlen(str)); // sleep(1); } } else if (pid == 0) //子进程 { //子进程向管道发数据 char buf[1024] = {0}; //子进程只写 关闭管道读端 close(pipefd[0]); while (1) { //每1秒向管道写入一次 char *str = \"im child\"; write(pipefd[1], str, strlen(str)); sleep(1); // int recvlen = read(pipefd[0], buf, sizeof(buf)); //从管道读端读数据 // //read是阻塞的 假如管道中没有数据会一直阻塞在read这句 直到管道中有数据被read读出来 // printf(\"child recv :%s,pid : %d \\n\", buf, getpid()); // memset(buf, 0, sizeof(buf)); //读后记得清除读的buf 否则会有上次的数据残留导致下次读的数据有问题 } } //如果父子进程都是既要读又要写 就需要把读写的顺序错开 一个读一个写 //不能出现同时读的情况 这样程序就阻塞了跑不起来 //如果将两个线程中的sleep去掉 会出现parent recv:im parent 和 child recv:im child //出现这种情况的原因是 //父进程写的 被父进程读了(父进程比子进程先读) 子进程写的 被子进程读了(子进程比父进程先读) //在实际开发中不可能通过sleep来阻止这种现象 //在实际开发中匿名管道的数据流向是单向的(一个线程只读 一个线程只写 关闭另一个fd close(pipefd[0]/[1]))！！！！！！！！ return 0; } ","wordCount":"1167","inLanguage":"en","datePublished":"2022-03-14T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/ka0sxx/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux多进程开发3 父子进程间匿名管道通信</h1><div class=post-meta><span title=2022-03-14T00:00:00+00:00>创建于 2022-03-14</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>10 进程间通信</strong></p><p>进程是资源分配的单元，不同进程(指用户进程 不是内核进程)之间的资源是独立的没有关联的，不能在一个进程中直接访问另一个进程的资源。</p><p>但是进程不是孤立的，不同的进程需要进行信息的交互和状态的传递等，因此需要进程间通信IPC</p><p>进程间通信的目的:</p><p>数据传输：一个进程将它的数据发给另一个进程</p><p>通知时间：一个进程需要向另一个或一组进程发送消息，通知它(它们)发生了某种事件(如进程终止时需要通知父进程)。</p><p>资源共享：多个进程之间共享同样的资源，为了做到这一点，需要内核提供互斥和同步机制</p><p>进程控制：有些进程希望完全控制另一个进程的执行(如DeBug进程 GDB进程 控制被GDB调试的那个进程)，此时控制进程能个拦截另一个进程的所有陷入和异常，并能够及时知道它的状态改变。</p><p>Linux 进程间通信的方式</p><p>| <img alt=1647226859164-ac837394-8d0f-43ea-bcfa-29591744f07d.png loading=lazy src=/images/adJJpgmRODWsXpPd/1647226859164-ac837394-8d0f-43ea-bcfa-29591744f07d-670467.png> |</p><p>| &mdash; |</p><p><strong>11匿名管道概述</strong></p><p>匿名管道，它是UNIX系统IPC进程间通信的最古老形式，所有的UNIX系统都支持这种通信机制</p><p>比如 统计一个目录中文件的数目命令 ls | wc -l 为了执行该命令,shell创建了两个进程来分别执行ls和wc</p><p>| <img alt=1647226859692-e0051b9e-71c2-43ac-a9a3-11b372953f90.png loading=lazy src=/images/adJJpgmRODWsXpPd/1647226859692-e0051b9e-71c2-43ac-a9a3-11b372953f90-887994.png> |</p><p>| &mdash; |</p><p>ls获取当前目录的文件列表 |叫管道符 wc文件统计个数</p><p>ls进程将文件列表通过管道发给wc进程</p><p>ls默认是将文件列表显示到终端(即 将信息写到fd=1的文件中 对应的是stdout标准输出 输出到终端屏幕)，管道有写入端和读取端，当<strong>加上|管道符后ls写的文件 fd=1 stdout指向的不再终端屏幕而是管道的写入端,wc同理wc读的文件 fd=0 stdin指向的不再终端屏幕而是管道的读入端。</strong></p><p>fd=0 stdin默认指向终端屏幕 fd=1stdout默认指向的也是终端屏幕</p><p>管道的特点</p><p>管道其实是一个<strong>在内核内存</strong>中维护的缓冲区，这个缓冲区的大小是有限的，不同操作系统的管道大小不一定相同。</p><p>管道拥有文件的特质：读、写 管道的两端对应了两个文件描述符(写入端文件描述符，读取端文件描述符)，<strong>匿名管道是没有文件实体的但是有名管道是有文件实体的(但这个文件是不存储数据的)</strong>，可以按照造作文件的方式对管道进行操作。</p><p><strong>匿名管道只能用于有公共祖先的进程之间比如父进程和子进程，爷爷进程和孙子进程，兄弟进程之间。</strong></p><p>有名管道用于无关系的进程之间。</p><p>一个管道是一个字节流，使用管道时不存在消息或消息边界的概念(就是没有一个数据帧的头尾内容这些概念 就是单纯的字节)，从管道读取数据的进程可以读取任意大小的数据块，而不管写进程写入的数据块的大小是多大(读写分离 互不影响)。</p><p><strong>通过管道传递的数据是顺序的，管道实际为环形队列实现 先入先出 读取出来的字节的顺序和它们被写入管道的顺序完全一样。</strong></p><p>在管道中的数据的传递方向是单向的，一端用于写入，一端用于读取，管道是半双工(遥控器单向发送 单工 电话通信 双工同时传递消息 可以同时读也可以同时写 也可以一个读一个写 对讲机 半双工 同一时间只能 读或写 不能同时读或同时写 在同一时刻内数据的流动是单向的，但是可以在一个时刻选择数据的流动方向)。</p><p><strong>从管道读数据是一次性操作，数据一旦被读走它就从管道中被抛弃(pop)，释放空间以便写更多的数据</strong>，在管道中无法使用lseek()来随机访问数据。</p><p>| <img alt=1647226860124-af6da9b9-03fa-483d-b1fc-8a5569d2e142.png loading=lazy src=/images/adJJpgmRODWsXpPd/1647226860124-af6da9b9-03fa-483d-b1fc-8a5569d2e142-289760.png> |</p><p>| &mdash; |</p><p>为什么可以使用管道进行通信</p><p>为什么只有拥有公共祖先的进程可以通过匿名管道通信</p><p>fork后的与祖先进程相关的进程的文件描述符表(在PCB中)是相同的。父进程的3号fd是指向A文件的，4号fd是指向B文件的(<strong>在fork前就已经将3,4号fd的指向明确了)</strong>，fork后的子进程的3号fd也是指向A文件的，4号fd也是指向B文件的。父子进程都可以通过fd操作同一文件，这样其实就可以完成进程间通信了，一个读一个写。匿名管道的原理和操作同一文件实现通信的原理是一样的，比如父进程的5号fd对应管道的写端，子进程的5号fd对应管道的写端，父进程的6号fd对应管道的读端，子进程的6号fd对应管道的读端(f<strong>ork前的父进程已经将fd5,6的指向明确了</strong>)，则fork后父子进程可以通过匿名管道通信。</p><p>| <img alt=1647226860723-bdf380fe-af2b-4cec-8830-e108098c0dc3.png loading=lazy src=/images/adJJpgmRODWsXpPd/1647226860723-bdf380fe-af2b-4cec-8830-e108098c0dc3-265282.png> |</p><p>| &mdash; |</p><p>(<strong>fork后的父子进程文件描述符表是独立的(fork的时候 相当于为子进程初始化一份一摸一样的文件描述符表，但fork后想怎么改都随便)，不需要完全相同，根据需要来让父子fd指向需要的文件</strong>)</p><p>1、内核缓冲区2、非文件3、不占用磁盘空间4、两部分：读端和写端5、默认是阻塞的6、操作管道进程结束后，自动释放7、半双工通信8、默认缓冲区是 4k</p><p>1、父进程和子进程可以共享打开的文件描述符。</p><p><strong>2、父子进程共享文件描述符的条件：在fork之前打开文件</strong>。(两个进程的文件描述符表其实还是独立的，只不过fork子进程的时候给子进程的文件描述符表初始化为与父进程一摸一样)</p><p>3、对于两个完全不相关的进程，文件描述符不能共享。</p><p>4、父子进程文件描述符是共享的，但是关闭的时候可以分别关闭，也可以同时在公有代码中关闭。</p><p>文件表，也就是vnode数据结构，也可以说是内核对象，它里面有个计数器变量，表示有几个进程打开此文件，所以子进程关闭，父进程仍然可以读数据</p><p>| <img alt=1647226861251-ae3f3a7e-291e-4d9a-b2b0-f93b909c8e5d.png loading=lazy src=/images/adJJpgmRODWsXpPd/1647226861251-ae3f3a7e-291e-4d9a-b2b0-f93b909c8e5d-682032.png> |</p><p>| &mdash; |</p><p>进程A的fd1和fd20这种就是dup类系统调用的结果
+进程A的fd2和进程B的fd2就是fork的结果（fork之后指向相同的文件）
+进程A的fd0和进程B的fd3最终指向同一个inode，这是这两个进程都调用过open的结果，此时两个文件不共享文件内的偏移
+文件偏移是存放在第二个表中的，所以不管是dup还是fork，都是共享同一组偏移，</p><p>左边的是进程级别的，中间的是系统级别的，记录整个系统中打开的文件，inode可以理解成存在硬盘上的文件</p><p>匿名管道的底层实现为环形队列</p><p>| <img alt=1647226861867-feac9d5c-e665-4ca5-9026-f7ffa707f95d.png loading=lazy src=/images/adJJpgmRODWsXpPd/1647226861867-feac9d5c-e665-4ca5-9026-f7ffa707f95d-997076.png> |</p><p>| &mdash; |</p><p>写指针可以写空白处(比如E-U)和读指针已经读过的部分(比如ABCD)(读完了以后就会被写指针的写数据覆盖 所以读管道相当于pop读完以后就没有了)</p><p>创建匿名管道</p><p>#include &lt;unistd.h></p><p>int pipe(int pipefd[2]);</p><p>查看管道缓冲大小</p><p>ulimit - a</p><p>查看管道缓冲大小函数</p><p>#include &lt;unistd.h></p><p>long fpathconf(int fd,int name);</p><p><strong>12父子进程通过匿名管道通信</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int pipe(int pipefd[2]);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       创建一个匿名管道(半双工 同一时间内一段只能写或读)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       用于有共同祖先线程的线程间通信
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       pipefd 传出参数 返回的管道两端 对应的文件描述符号
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       [0]为读端 [1]为写端
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       写数据到写端 会先存到内核中的缓冲区 直到读端读数据将这个数据取出(取出了就不在管道中了)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回 0 成功 -1 失败
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       匿名管道默认阻塞 如果管道中没有数据 read阻塞(直到管道中有要求被读的那么多个字节 才不会阻塞 管道内数据被读出)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       管道满了 write阻塞(直到管道被读出要写的那么多个字节 腾出了那么大的空间才能继续写)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//strlen
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//父子进程通信
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//在fork之前创建匿名管道 创建出来的fd都存在父进程的文件描述符表中
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//fork之后 子进程的文件描述符表和父进程一摸一样 包括读写端的fd操作符
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//这样对于父子进程来说管道的读写fd指向是一样的 也就可以通过管道进行通信
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> pipefd[<span style=color:#ae81ff>2</span>];
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pipe(pipefd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;pipe:&#34;</span>);
+</span></span><span style=display:flex><span>        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建子进程
+</span></span></span><span style=display:flex><span>    pid_t pid <span style=color:#f92672>=</span> fork();
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//发送一次
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// if (pid &gt; 0) //父进程
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// {
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     // 父进程从读取端读取数据
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     char buf[1024] = {0};
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     int recvlen = read(pipefd[0], buf, sizeof(buf)); //从管道读端读数据
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     //read是阻塞的 假如管道中没有数据会一直阻塞在read这句 直到管道中有数据被read读出来
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     printf(&#34;parent recv :%s,pid : %d \n&#34;, buf, getpid());
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// }
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// else if (pid == 0) //子进程
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// {
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     //子进程向管道发数据
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     char *str = &#34;im child&#34;;
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     write(pipefd[1], str, strlen(str));
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     //如果管道满了 无法再写write是阻塞的 直到read读出的字节数大于要写的字节数 write才能继续写
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     // 成功返回str中被写入fd文件的字节数，返回0表示没有数据被写入fd文件中, 出现错误返回 - 1并设置errorno
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// }
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//循环发送和读 一端只发 一端只收
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// if (pid &gt; 0) //父进程
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// {
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     // 父进程从读取端读取数据
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     char buf[1024] = {0};
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     while (1)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     {
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//         int recvlen = read(pipefd[0], buf, sizeof(buf)); //从管道读端读数据
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//         //read是阻塞的 假如管道中没有数据会一直阻塞在read这句 直到管道中有数据被read读出来
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//         printf(&#34;parent recv :%s,pid : %d \n&#34;, buf, getpid());
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     }
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// }
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// else if (pid == 0) //子进程
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// {
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     //子进程向管道发数据
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     while (1)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     {
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//         //每1秒向管道写入一次
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//         char *str = &#34;im child&#34;;
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//         write(pipefd[1], str, strlen(str));
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//         sleep(1);
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     }
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     //如果管道满了 无法再写write是阻塞的 直到read读出的字节数大于要写的字节数 write才能继续写
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//     // 成功返回str中被写入fd文件的字节数，返回0表示没有数据被写入fd文件中, 出现错误返回 - 1并设置errorno
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// }
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//一端又发又收 但同一时间内只收或只发
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//父进程
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// 父进程从读取端读取数据
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>1024</span>] <span style=color:#f92672>=</span> {<span style=color:#ae81ff>0</span>};
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>int</span> recvlen <span style=color:#f92672>=</span> read(pipefd[<span style=color:#ae81ff>0</span>], buf, <span style=color:#66d9ef>sizeof</span>(buf)); <span style=color:#75715e>//从管道读端读数据
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//read是阻塞的 假如管道中没有数据会一直阻塞在read这句 直到管道中有数据被read读出来
+</span></span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;parent recv :%s,pid : %d </span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buf, getpid());
+</span></span><span style=display:flex><span>            memset(buf, <span style=color:#ae81ff>0</span>, <span style=color:#66d9ef>sizeof</span>(buf)); <span style=color:#75715e>//读后记得清除读的buf 否则会有上次的数据残留导致下次读的数据有问题
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//每1秒向管道写入一次
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>str <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;im parent&#34;</span>;
+</span></span><span style=display:flex><span>            write(pipefd[<span style=color:#ae81ff>1</span>], str, strlen(str));
+</span></span><span style=display:flex><span>            sleep(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//子进程
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//子进程向管道发数据
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>1024</span>] <span style=color:#f92672>=</span> {<span style=color:#ae81ff>0</span>};
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//每1秒向管道写入一次
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>str <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;im child&#34;</span>;
+</span></span><span style=display:flex><span>            write(pipefd[<span style=color:#ae81ff>1</span>], str, strlen(str));
+</span></span><span style=display:flex><span>            sleep(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>int</span> recvlen <span style=color:#f92672>=</span> read(pipefd[<span style=color:#ae81ff>0</span>], buf, <span style=color:#66d9ef>sizeof</span>(buf)); <span style=color:#75715e>//从管道读端读数据
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//read是阻塞的 假如管道中没有数据会一直阻塞在read这句 直到管道中有数据被read读出来
+</span></span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;child recv :%s,pid : %d </span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buf, getpid());
+</span></span><span style=display:flex><span>            memset(buf, <span style=color:#ae81ff>0</span>, <span style=color:#66d9ef>sizeof</span>(buf)); <span style=color:#75715e>//读后记得清除读的buf 否则会有上次的数据残留导致下次读的数据有问题
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//如果父子进程都是既要读又要写 就需要把读写的顺序错开 一个读一个写
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//不能出现同时读的情况 这样程序就阻塞了跑不起来
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//如果将两个线程中的sleep去掉 会出现parent recv:im parent 和 child recv:im child
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//出现这种情况的原因是
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//父进程写的 被父进程读了(父进程比子进程先读)  子进程写的 被子进程读了(子进程比父进程先读)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//在实际开发中不可能通过sleep来阻止这种现象
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//在实际开发中匿名管道的数据流向是单向的(一个线程只读 一个线程只写 关闭另一个fd close(pipefd[0]/[1]))！！！！！！！！
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//ulimit -a 中有pipe isze 512bytes 8 表示共8块一块512字节 总共4k字节 管道最大4k字节
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//ulimit -p 修改管道大小
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 查看管道缓冲大小函数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// long fpathconf(int fd, int name);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// fd 传入管道一端对应的文件描述符  name:_PC_PIPE_BUF
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// 返回fd对应的大小
+</span></span></span></code></pre></div><p><strong>13匿名管道通信案例</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    实现ps aux | grep root 只显示root进程相关的信息
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    | 管道符 利用父子进程通信实现
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    子进程执行ps aux(execlp 默认将内容输出到标准输出中)  因为子进程的标准输出初始为屏幕
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    所以要将 标准输出重定向到父进程(即管道写端)，这样父进程才能得到execlp的返回值
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    父进程 获取到数据  将数据打印
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//strlen
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建一个匿名管道
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fd[<span style=color:#ae81ff>2</span>];
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pipe(fd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;pipe:&#34;</span>);
+</span></span><span style=display:flex><span>        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//一定要在fork子进程前 创建管道 这样才能使父子进程拥有相同的管道描述符
+</span></span></span><span style=display:flex><span>    pid_t pid <span style=color:#f92672>=</span> fork();
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//父进程 从管道中读取数据 再直接输出
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//父进程只读 关闭管道写端
+</span></span></span><span style=display:flex><span>        close(fd[<span style=color:#ae81ff>1</span>]);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>1024</span>] <span style=color:#f92672>=</span> {<span style=color:#ae81ff>0</span>};
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> len <span style=color:#f92672>=</span> read(fd[<span style=color:#ae81ff>0</span>], buf, <span style=color:#66d9ef>sizeof</span>(buf) <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>); <span style=color:#75715e>//buf中只读sizeof(buf) - 1个字节 因为最后一个字节必须是字符串结束符\0(十进制就是0)
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> (len <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;%s&#34;</span>, buf);
+</span></span><span style=display:flex><span>            memset(buf, <span style=color:#ae81ff>0</span>, <span style=color:#66d9ef>sizeof</span>(buf));
+</span></span><span style=display:flex><span>            len <span style=color:#f92672>=</span> read(fd[<span style=color:#ae81ff>0</span>], buf, <span style=color:#66d9ef>sizeof</span>(buf) <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>); <span style=color:#75715e>//返回值len为读到的字符数
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        wait(NULL); <span style=color:#75715e>//回收子进程资源
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//子进程
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 子进程执行ps aux(execlp 默认将内容输出到标准输出中) 因为子进程的标准输出初始为屏幕
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//     所以要将 标准输出重定向到父进程(即管道写端) ，这样父进程才能得到execlp的返回值
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//子进程只写 关闭管道读端
+</span></span></span><span style=display:flex><span>        close(fd[<span style=color:#ae81ff>0</span>]);
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//首先重定向子进程的标准输出到管道的写端  stdout_fileno-&gt;fd[1]
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//int dup2(int oldfd, int newfd); //功能和dup类似
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//用于重定向文件描述符
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//oldfd指向a.txt newfd指向b.txt 在调用函数成功后将newfd-&gt;b.txt关闭并且再让newfd指向a.txt
+</span></span></span><span style=display:flex><span>        dup2(fd[<span style=color:#ae81ff>1</span>], STDOUT_FILENO); <span style=color:#75715e>//newfd指向a.txt 这样STDOUT_FILENO就指向之前管道写端对应的那个虚拟文件
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// int execlp(const char *file, const char *arg, ... / (char  *) NULL /);
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 会到环境变量中的路径中查找指定的同名文件 找到了就执行 找不到返回 - 1
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//        参数：
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//        file 可执行文件的文件名 a.out ps 可以不用写绝对路径 直接写文件名
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//        arg(同execl)
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//        这个arg其实就是exec可执行文件的main的传入参数列表
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//        第一个arg一般没有作用 一般写的是执行的可执行文件的名称
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//        从第二个参数往后才是可执行文件main的真正参数列表
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//        这个参数列表一定要以NULL为结尾，这样才知道参数列表读入完毕
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//        返回值
+</span></span></span><span style=display:flex><span>        execlp(<span style=color:#e6db74>&#34;ps&#34;</span>, <span style=color:#e6db74>&#34;ps&#34;</span>, <span style=color:#e6db74>&#34;aux&#34;</span>, NULL);
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//exec函数族的函数执行成功后不会返回，因为调用进程的实体，
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 包括代码段数据段堆栈等(所有用户区内容)都被新的可执行文件的内容取代
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//但是文件描述符表在内核中并不会被替换
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;fork:&#34;</span>);
+</span></span><span style=display:flex><span>        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 管道默认大小 4k字节
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 子进程写管道，写满了就会被阻塞(这里的写是指调用write)，然后轮到父进程读管道，
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 所以子进程不需要while循环也可以把所有的超过4k的数据写完
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// execlp(&#34;ps&#34;, &#34;ps&#34;, NULL)不是write ，它不可能管道写满了还阻塞着
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 超过4096的数据是会分包，还是可以发送的。TLPI书上也说了，”写入不超过4096字节” 的操作保证是原子的
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// Linux 2.6.11后，管道的容量是65536，不同的操作系统实现可能不同。所以最后我试了一下，一次write() 确实最多只能写65536字节。记得将管道设置为非阻塞，才能看到无一次法写入大于65536字节的数据。
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// 不然，write是阻塞的，发一部分，阻塞一下，发一部分。。。多大都会发送完。
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>// #include &lt;stdio.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// #include &lt;sys/types.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// #include &lt;sys/stat.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// #include &lt;fcntl.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// #include &lt;cstring&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// #include &lt;string&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// #include &lt;stdlib.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// #include &lt;limits.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// #define BUF_SIZE 65544
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// int main()
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// {
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     int pipeFd[2];
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     if (pipe(pipeFd) == -1)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     {
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         perror(&#34;pipe&#34;);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         exit(-1);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     }
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     // 设置管道为非阻塞
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     for (int i = 0; i &lt; 2; ++i)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     {
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         int flags = fcntl(pipeFd[i], F_GETFL);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         if (fcntl(pipeFd[i], F_SETFL, flags | O_NONBLOCK) == -1)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//             perror(&#34;fcntl&#34;);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     }
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     int pid = fork();
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     if (pid &gt; 0)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     {
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         sleep(1); // 确保子进程先写。管道才有数据能读
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         // 父进程读
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         close(pipeFd[1]);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         char buf[BUF_SIZE + 1] = {0};
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         printf(&#34;父进程读到了：%ld字节\n&#34;, read(pipeFd[0], buf, BUF_SIZE));
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     }
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     else if (pid == 0)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     {
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         // 子进程
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         close(pipeFd[0]);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         // in.txt有65544字节的数据
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         int fd = open(&#34;in.txt&#34;, O_RDONLY);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         char buf[BUF_SIZE + 1] = {0};
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         printf(&#34;从文件中读到: %ld字节\n&#34;, read(fd, buf, BUF_SIZE));
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         printf(&#34;子进程写入了：%ld字节\n&#34;, write(pipeFd[1], buf, BUF_SIZE));
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     }
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     else
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     {
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         perror(&#34;fork&#34;);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//         exit(-1);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     }
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//     return 0;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// }
+</span></span></span></code></pre></div><p><strong>管道的读写特点以及将管道设置为非阻塞</strong></p><p>使用管道时需要注意以下几种特殊情况(管道为阻塞 在执行阻塞IO的操作时)，</p><p>1 所有的指向管道写端的文件描述符 都关闭了(管道写端的引用计数为0)</p><p>父进程创建管道，其内核区中的文件描述符表中新增两个fd一个指向管道读端一个指向管道写端，此时管道写端的引用计数为1。父进程fork出子进程，fork拷贝文件描述符表给子进程，所以子进程的文件描述符表中也有两个fd一个指向读端一个指向写端，此时管道写端的引用计数为2。</p><p>当指向管道写端的fd都close了,此时有进程从管道读端读数据，若此时管道中有剩余数据则读取剩余数据，直到<strong>剩余数据被读完后，再次read返回0</strong>(读到文件末尾read是返回0的 读出现异常是返回-1的)。</p><p>2 有指向管道写端的文件描述符没有关闭(管道写端的引用计数大于0)并且没有进程向管道写端写数据，此时将<strong>管道内数据读空后再继续读是出现read阻塞</strong>，直到有进程写了一些数据，read读到返回读到的字节数。</p><p>3 所有的指向管道读端的文件描述符 都关闭了(管道读端的引用计数为0)，此时有进程向管道中写数据，那么该进程会收到一个信号SIGPIPE，通常这个信号会导致进程异常终止。</p><p>4 有指向管道读端的文件描述符没有关闭(管道读端的引用计数大于0)并且没有进程从管道读端读数据，此时<strong>有进程向管道中写数据</strong>，在管道写满后，再次调用写write会导致写进程阻塞，直到管道中有空位write才不会阻塞并返回写入的字节数。</p><p>设置管道非阻塞(设置文件描述符非阻塞)</p><p>设置管道读端非阻塞，在管道内无数据再读 read返回值为-1</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>设置管道非阻塞(设置文件描述符fd 非阻塞)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>flags = fcntl(fd[],F_GETFL) 获取原来的flag
+</span></span></span><span style=display:flex><span><span style=color:#75715e>flags |= O_NONBLOCK;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>fcntl(fd[],F_SETFL,flags);//设置新的文件描述符属性
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//strlen
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//父子进程通信
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//在fork之前创建匿名管道 创建出来的fd都存在父进程的文件描述符表中
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//fork之后 子进程的文件描述符表和父进程一摸一样 包括读写端的fd操作符
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//这样对于父子进程来说管道的读写fd指向是一样的 也就可以通过管道进行通信
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> pipefd[<span style=color:#ae81ff>2</span>];
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> pipe(pipefd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;pipe:&#34;</span>);
+</span></span><span style=display:flex><span>        exit(<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建子进程
+</span></span></span><span style=display:flex><span>    pid_t pid <span style=color:#f92672>=</span> fork();
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//一端又发又收 但同一时间内只收或只发
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//父进程
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// 父进程从读取端读取数据
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>1024</span>] <span style=color:#f92672>=</span> {<span style=color:#ae81ff>0</span>};
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//父进程只读 关闭管道写端
+</span></span></span><span style=display:flex><span>        close(pipefd[<span style=color:#ae81ff>1</span>]);
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// 设置管道非阻塞(设置文件描述符fd 非阻塞)
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>// 读常规文件是不会阻塞的，不管读多少字节，read一定会在有限的时间内返回。从终端设备或网络读则不一定
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//设置非阻塞读 当管道中没有要求的那么多的数据时 不会阻塞在read而是继续向下执行
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>int</span> flags <span style=color:#f92672>=</span> fcntl(pipefd[<span style=color:#ae81ff>0</span>], F_GETFL); <span style=color:#75715e>// 获取原来的flag
+</span></span></span><span style=display:flex><span>        flags <span style=color:#f92672>|=</span> O_NONBLOCK;                   <span style=color:#75715e>//设置文件(管道读端)为非阻塞
+</span></span></span><span style=display:flex><span>        fcntl(pipefd[<span style=color:#ae81ff>0</span>], F_SETFL, flags);      <span style=color:#75715e>//设置新的文件描述符属性
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>int</span> recvlen <span style=color:#f92672>=</span> read(pipefd[<span style=color:#ae81ff>0</span>], buf, <span style=color:#66d9ef>sizeof</span>(buf)); <span style=color:#75715e>//从管道读端读数据
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>//read是阻塞的 假如管道中没有数据会一直阻塞在read这句 直到管道中有数据被read读出来
+</span></span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;parent recv :%s,pid : %d </span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buf, getpid());
+</span></span><span style=display:flex><span>            memset(buf, <span style=color:#ae81ff>0</span>, <span style=color:#66d9ef>sizeof</span>(buf)); <span style=color:#75715e>//读后记得清除读的buf 否则会有上次的数据残留导致下次读的数据有问题
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// //每1秒向管道写入一次
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// char *str = &#34;im parent&#34;;
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// write(pipefd[1], str, strlen(str));
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// sleep(1);
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (pid <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//子进程
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//子进程向管道发数据
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>1024</span>] <span style=color:#f92672>=</span> {<span style=color:#ae81ff>0</span>};
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//子进程只写 关闭管道读端
+</span></span></span><span style=display:flex><span>        close(pipefd[<span style=color:#ae81ff>0</span>]);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//每1秒向管道写入一次
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>str <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;im child&#34;</span>;
+</span></span><span style=display:flex><span>            write(pipefd[<span style=color:#ae81ff>1</span>], str, strlen(str));
+</span></span><span style=display:flex><span>            sleep(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>            <span style=color:#75715e>// int recvlen = read(pipefd[0], buf, sizeof(buf)); //从管道读端读数据
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// //read是阻塞的 假如管道中没有数据会一直阻塞在read这句 直到管道中有数据被read读出来
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// printf(&#34;child recv :%s,pid : %d \n&#34;, buf, getpid());
+</span></span></span><span style=display:flex><span>            <span style=color:#75715e>// memset(buf, 0, sizeof(buf)); //读后记得清除读的buf 否则会有上次的数据残留导致下次读的数据有问题
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//如果父子进程都是既要读又要写 就需要把读写的顺序错开 一个读一个写
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//不能出现同时读的情况 这样程序就阻塞了跑不起来
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//如果将两个线程中的sleep去掉 会出现parent recv:im parent 和 child recv:im child
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//出现这种情况的原因是
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//父进程写的 被父进程读了(父进程比子进程先读)  子进程写的 被子进程读了(子进程比父进程先读)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//在实际开发中不可能通过sleep来阻止这种现象
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//在实际开发中匿名管道的数据流向是单向的(一个线程只读 一个线程只写 关闭另一个fd close(pipefd[0]/[1]))！！！！！！！！
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

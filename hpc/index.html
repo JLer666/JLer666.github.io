@@ -1,0 +1,115 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>高性能计算 | CantBlog</title><meta name=keywords content><meta name=description content="CUDA 与高性能计算笔记"><meta name=author content><link rel=canonical href=https://jler666.github.io/hpc/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate type=application/rss+xml href=https://jler666.github.io/hpc/index.xml title=rss><link rel=alternate hreflang=en href=https://jler666.github.io/hpc/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/hpc/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="高性能计算"><meta property="og:description" content="CUDA 与高性能计算笔记"><meta property="og:locale" content="zh_cn"><meta property="og:type" content="website"><meta name=twitter:card content="summary"><meta name=twitter:title content="高性能计算"><meta name=twitter:description content="CUDA 与高性能计算笔记"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"高性能计算","item":"https://jler666.github.io/hpc/"}]}</script></head><body class=list id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><header class=page-header><h1>高性能计算</h1><div class=post-description>CUDA 与高性能计算笔记</div></header><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>CUDA4 全局内存</h2></header><div class=entry-content><p>核函数性能不只是和wrap的执行有关，全局内存访问模式、内存带宽，速度，也是影响了吞吐量的重要因素。
+内存模型概述 内存管理对高性能计算有很大的影响，很多计算工作都被加载和存储数据的速度限制，我们期望获得低延迟、高带宽的内存性能，但是大容量高性能内存价贵，所以需要在现有的硬件存储系统下依靠内存模型获得最佳的延迟和带宽。
+应用程序不会再某一时间点访问任意数据或运行任意代码(c语言的goto行为不太好)，应用程序往往遵循局部性原则，这表明它们可能在任意时间点访问相对较小的局部地址空间，有时间局部性和空间局部性两种
+时间局部性:一个数据位置被引用，那么该数据在短周期内可能被再次引用随着时间流逝其被引用的概率逐渐降低(频率最低缓存(LFU))
+空间局部性:一个内存位置被引用，则其附近的内存地址可能在后续也被引用
+程序天然均有上述特点，基于此特点设计满足此特征硬件结构，现代计算机内存结构一般如下:
+这个内存模型在局部性原则成立的时候有效。学习过串行编程的人也应该知道内存模型，速度最快的是寄存器，他能和cpu同步的配合，接着是缓存，在CPU片上，然后是主存储器，现在常见的就是内存条，显卡上也有内存芯片，然后是硬盘，这些内存设备的速度和容量相反，越快的越小，越慢的越大。
+GPU的主存和CPU都采用DRAM(动态随机存取器)，低延迟内存使用SRAM(CPU一级cache,静态随机存取器)。在使用这种内存层次结构时，当数据被处理器频繁处理时，该数据保存在低延迟、低容量的存储器中，当数据需要存储起来备用时，数据存储在高延迟、大容量的存储器中。组合二者功能，使得程序在运行时获得大内存低延迟的能力。
+GPU和CPU的内存设计有相似的准则和模型。但他们的区别是：CUDA编程模型将内存层次结构更好的呈献给开发者，让我们显示的控制其行为
+CUDA内存模型 程序运行时存在两种类型的存储器，可编程:程序员需要显示控制哪些数据放在此可编程内存中，不可编程:你不能决定数据的存放位置，程序自动分配对应空间来获得更好的性能。
+CPU的一级和二级cache都是不可编程存储器。
+CUDA内存模型提出多种可编程内存类型：按大小/访问速度从小/快到大/慢从上往下排列
+寄存器(Register) 共享内存(shared memory),同block可见,生命周期为block周期 本地内存(local memory),单线程可见(线程私有),生命周期为线程周期 常量内存(constant memory),线程只读空间,生命周期为整个程序周期 纹理内存(texture memory),线程只读空间,生命周期为整个程序周期,为不同数据布局提供不同的寻址模式和滤波模式 全局内存(global memory),生命周期为整个程序周期 这些内存的层次结构如下图，每种都有不同的作用域、生命周期和缓存行为。</p></div><footer class=entry-footer><span title=2025-11-24T00:00:00+00:00>创建于 2025-11-24</span>&nbsp;·&nbsp;<span title=2025-11-24T00:00:00+00:00>最后修改于 2025-11-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to CUDA4 全局内存" href=https://jler666.github.io/hpc/rbh1u9yuer4k1631/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>CUDA3 执行模型</h2></header><div class=entry-content><p>执行模型是CUDA对硬件再高一层的抽象。执行模型提供一个操作视图，说明如何在特定的计算架构上执行指令。GPU架构是围绕流式多处理器(SM–CUDA1中有提到)的可扩展阵列搭建的，可以复制这种架构的构建块来实现GPU的硬件并行。
+上图为Fermi SM图，组件包含core(CUDA核心)，Shared Memory/L1 Cache共享内存/一级缓存,Register File寄存器文件,加载/存储单元 LD/ST,特殊功能单元SFU,线程束调度器Warp Scheduler
+GPU含多SM(GPU硬件的计算单元的单位是SM数量)，每个SM都能支持数百个线程并发执行。所以在同个GPU上并发数千线程是可能的，当启动一个grid时，block被分布在可用的SM上执行。
+注意: 当一个blcok被分配给一个SM后，他就只能在这个SM上执行了，不可能重新分配到其他SM上了，多个block可以被分配到同一个SM上 。
+同一线程内，指令利用指令级并行将单个线程处理成流水线。CUDA采用单指令多线程(SIMT)架构管理和执行线程，每32个线程(这里强调一下不同设备的warp线程数是不同的，但到目前基本上所有warp线程数量都是32)为一组被称为线程束(warp)，线程束中的所有线程同时执行相同的指令 ，每个线程都有自己的指令地址计数器和寄存器状态，利用自身数据来执行对应的指令。每个SM都将为属于它的block上的线程划分到不同的warp，同个warp中的线程一定来源于同个block，然后在硬件上调度执行，在某时刻T，SM上只执行一个warp，一旦warp被调度到片上那么其在结束之前不会离开SM 。所以block的不同线程可能会以不同的速度前进**，block内的不同线程进度都不一样，但是同个warp的线程有相同的进度**。
+SIMT与SIMD(单指令多数据)机构类似。都是将相同指令广播给多个执行单元来实现并行，关键的区别是SIMD要求同个向量中的所有元素要在一个统一的同步组中执行，而SIMT允许属于同一warp的多个线程独立执行。尽管warp中的所有线程在相同的程序地址上同时开始执行，但是因为判断分支的存在(不同的线程执行不同的逻辑分支)不同的线程的行为可能不同。由于SIMT允许warp中的多个线程独立执行，这将为并行编程带来更多变化，同个核函数内可为线程分配不同行为，并行处理线程、标量线程、协调线程的代码可写在同一个核函数内。
+SIMT模型包含SIMD所不具备的特征：
+每个线程都有自己的指令地址计数器
+每个线程都有自己的寄存器状态
+每个线程都可以有一个独立的代码执行路径
+在很多的cuda c代码中，会出现很多与32相关的数字16、64、128…，从概念上说32是SM用SIMD方式执行并行任务的工作粒度，优化工作负载(数据划分)以适应线程束的边界，这样能更有效地利用GPU计算资源。
+在SM中共享内存和寄存器是非常重要的资源，共享内存被分配在SM上的常驻block中，寄存器在线程中被分配，block中的线程通过这些资源进行合作和通信，CUDA将这些资源分配到SM上的所有常驻线程，所以这些资源也限制了SM上活跃的warp数量，活跃的warp数量对应于SM上的并行量。block中的warp会以任意顺序被调度，但活跃的warp数量会由SM的资源限制，当warp由于一些原因限制时(等待同步，或等待读取设备内存值，SM会从同一SM上的常驻block中调度其他可用的warp，在并发(属于同个block执行同个核函数)的warp间切换没有开销，因为硬件资源已经被分配给SM上的所有线程和block中，所以那个新被调度的warp状态已经被存储在SM上。
+软件编程模型和硬件执行模型的对应关系如下图
+并行线程中共享数据可能会引起竞争，多个线程以未定义顺序访问同个数据(共享内存内)，从而导致程序出现不可预测行为。CUDA提供了一种用来同步block内线程的方法__syncthreads，从而保证正所有线程在进一步动作前都到执行过程中的一个特定点。但是没有提供不同块间线程的同步原语！
+Fermi架构 fermi是第一个完整的GPU架构，采用512个CUDA core，每个core都有一个全流水线的整数算术逻辑单元(ALU)和一个浮点运算单元(FPU)，在每个时钟周期执行一个整数或浮点指令。core被分配到16个SM中，每个SM有32个core。Fermi架构有6个384为的GDDR5 DRAM存储器结构支持6GB的全局内存(global memory)，通过PCIe总线与CPU相连，GigaThread引擎是一个全局调度器，用来将block分配到SM的warp调度器上。16个SM共享一个耦合的768kb的L2 cache。
+每个SM有16个加载/存储单元 LD/ST，允许每个时钟周期内有16个线程(warp内线程数量的一般)计算src和target地址，特殊单元SFU执行固有指令如正弦、余弦、平方根和插值，每个SFU在每个时钟周期内的每个线程上执行一个固有指令。
+每个SM有2个warp调度器和2个指令调度单元。当一个block被指定给一个SM时，block中的所有线程被分成warp，两个warp调度器选择其中两个warp，再用两个指令调度器存储两个warp要执行的指令，将一个指令发送到一个组上并行执行(调度执行顺序如下图)，组里有16个core、16个加载/存储单元 LD/ST或4个SFU特殊功能单元。Fermi架构计算性能2.x，可以在每个SM上同时处理48个warp,即一个SM上同时常驻1536个线程。
+Fermi架构的关键特征是有一个64kb的片内可配置存储器，被分配给共享内存或l1 cache。共享内存对性能影响非常关键，共享内存允许一个block上的线程相互合作，高效通信。当CUDA执行API时，可通过配置此存储器来调整共享内存和l1 cache大小，通过配置内核函数的片内存储器配置来提高性能。
+Fermi架构也支持多内核函数并发，同时启动多个内核，并发执行内核允许执行一些小的内核程序来充分利用GPU，如下图右侧所示
+Kepler架构 下图为Kepler K20X芯片框图，含15个SM和6个64位内存控制器。
+K20X的关键创新是SM结构的创新，新的SMX单元包含,192个单精度core,64个双进度core，32个SFU以及32个LD/ST如下图所示。每个SMX包含4个warp调度器和8个指令调度器，在单一SMX上同时发送和执行4个warp。K20X(计算能力3.5)可以同时在每个SMX上调度64个warp，即在一个SMX上可同时常驻2048个线程。K20X中的寄存器文件容量达64kb是Fermi的两倍。同时K20X还允许片内存储器在共享内存和L1 cache间有更多分区。K20X可提供超1TFlop的峰值双精度计算能力，相较于Fermi功效提高80%，每瓦性能提升3倍。
+动态并行也是K20X的新特性，它允许GPU动态启动新的grid，有了这个新特性后任一内核都能启动其他内核，这将更容易创建和优化设备端递归。因为这个新特性的存在，GPU能够嵌套启动内核，消除了与CPU通信的开销大大提升了设备端运行效率如下图左侧所示。
+Hyper-Q增加了更多的CPU与GPU间的同步硬件连接，确保CPU能在GPU执行的同时运行更多任务，使用K20X是既能增加GPU利用率也能减少CPU闲置时间。Fermi依赖单一硬件队列来实现从CPU到GPU间传送任务，这将导致一个单独任务就能阻塞该任务后的所有其他任务。Hyper-Q消除这个限制，K20X在主机与GPU间提供了32个硬件工作对了，提高GPU的利用率。
+下图是一些比较老的计算能力对应的特性参数
+Profile-Driven Optimization 在测试中我们需要监控程序并进行性能分析，包含 程序的时间/空间复杂度，特殊指令的使用，函数调用的频率和耗时。CUDA会将SM的计算资源在改SM中的多个常驻block之间进行分配，这种分配导致一些资源称为性能限制，性能分析工具能帮助我们理解计算资源是如何利用的。
+CUDA提供两个性能分析工具nvvp独立的可视化分析器显示CPU与GPU上的程序活动时间表，nvvp可作为一个独立的应用启动也可作为Nsight Eclipse Edition的一部分 和nvprof命令行分析器 获取CPU与GPU上CUDA关联活动时间表，包括内核执行、内存传输和CUDA API调用，也可以获取硬件计数器和CUDA内核的性能指标。
+在CUDA性能分析中，事件是可被计算的 它对应于一个内核的执行期间的总的硬件计数器(hardware
+counter)。 指标是内核的特征，它由一个或多个事件计算得到。 大多数计数器的来源是流式多处理器而非整个GPU。 单次运行只能获得几个计数器，有些计数器互相排斥，多个性能指标分析往往需要所有相关的计数器。
+...</p></div><footer class=entry-footer><span title=2025-05-30T00:00:00+00:00>创建于 2025-05-30</span>&nbsp;·&nbsp;<span title=2025-11-24T00:00:00+00:00>最后修改于 2025-11-24</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to CUDA3 执行模型" href=https://jler666.github.io/hpc/uli0pfayto99bdd6/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>CUDA1.5 HPC基本概念</h2></header><div class=entry-content><p>延迟：从发送内存请求到实际完成数据移动所需的时间$ \alpha $
+带宽：单位是按移动数据量$ \frac{1}{\beta} $，移动长度为1数据需要$ \beta $时间
+两个概念定义与CUDA书中的不一致
+移动N个长度为1的数据需要$ N(\alpha+\beta) $
+移动1个长度为N的数据需要$ \alpha+\beta N $
+冯诺依曼架构的特点:计算和存储分离，对IO设备的访问远远慢于CPU的计算速度是主要瓶颈，整体的运行时间受访存限制
+采用多级存储来尽可能提高访存效率，现代计算机一般包含L2或L3 Cahe
+缓存命中率$ r_N $数据再$ L_N $Cache中成功访问的概率，如果访问失败需要在下级存储中寻找。假设从全局访问(非CPU Cache的访问时间)数据的时间是$ T_0 $，从$ L_N $中访问数据的时间是$ T_N $
+只存在一级缓存，若在一级缓存中命中时间为$ T_1 $否则时间为$ T_0 $，如果只有一级缓存，一级缓存平均访问时间为:$ A_1=r_1T_1+(1-r_1)T_0 $
+如果存在二级缓存，如果在一级缓存中命中则时间为$ T_1 $否则时间为(在L2和Mem的平均访问时间)$ a_2=r_2T_2+(1-r_2)T_0 $，二级缓存平均访问时间为：$ A_2=r_1T_1+(1-r_1)a_2 $
+可以看到继续增加缓存层数，访问时间的降低并不明显,时间计算是递归的(因为必须在上层没找到的前提下访问下层，这个效率低是主要瓶颈)，但是对应成本快速提高
+并行计算三大定律
+任务：并行计算的处理对象
+工作量(workload)：完成任务的全部开销总和
+执行率(execution rate)：单个处理器单位时间处理的工作量
+加速比(scalability)：固定工作量下 单机处理时间/多机处理时间
+理想加速比(ideal scalability)：处理器增多 的比例
+并行效率(parallel effiency)：加速比/理想加速比
+阿姆达尔定律(Amdahl law)：
+假设$ \alpha\in[0,1] $是任务中无法并行部分占用的比例，假设工作量固定，对于任意N个处理器相比于1个处理而言，加速比$ S(N)=\frac{T(1)}{T(N)}\lt \frac{1}{\alpha} $
+假设执行率为R 工作量为W
+$ T(1)=\frac{W}{R},T(N)=\frac{\alpha W}{R}+\frac{(1-\alpha)W}{NR} $
+$ S(N)=\frac{1}{\alpha+\frac{1-\alpha}{N}}\lt \frac{1}{\alpha} $
+并行效率$ E(N)=S(N)/N\lt \frac{1}{N\alpha} $
+...</p></div><footer class=entry-footer><span title=2025-05-16T00:00:00+00:00>创建于 2025-05-16</span>&nbsp;·&nbsp;<span title=2025-05-16T00:00:00+00:00>最后修改于 2025-05-16</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to CUDA1.5 HPC基本概念" href=https://jler666.github.io/hpc/udnycm73k86k6ulg/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>CUDA2 编程模型</h2></header><div class=entry-content><p>CUDA编程模型为应用和硬件设备之间的桥梁，所以CUDA C是编译型语言，不是解释型语言，OpenCL就有点类似于解释型语言，通过编译器和链接，给操作系统执行（操作系统包括GPU在内的系统）
+程序和编程模型实现之间的抽象结构：
+CUDA编程模型利用GPU架构的计算能力提供了两个特有功能：
+通过层次结构在GPU中组织线程的方法
+通过层次结构在GPU中访问内存的方法
+设计解析数据和处理数据的函数，组织并发线程
+多CPU和GPU环境，每个GPU和CPU的内存都由一条PCIe总线隔开。强调 主机为CPU及其内存(主机内存)和设备为GPU及其内存(设备内存)。代码中主机内存中的变量以h_为前缀，设备内存中的变量以d_为前缀(感觉改为后缀更好)。
+注意这两个内存从硬件到软件都是隔离的，从CUDA 6.0开始NVIDIA提出了统一寻址(Unified Memory)的编程模型改进，链接主机内存和设备内存空间，可以使用单个指针访问CPU和GPU内存无需彼此之间手动拷贝数据。
+内核(kernel)是CUDA编程模型的重要部分，其代码在GPU上运行，在GPU线程上编写核函数。
+大多数情况下，主机可以独立对设备进行操作，内核启动后管理权立刻返回给主机，释放CPU来执行设备上运行的并行代码。可以将C和CUDA C代码放在同一个源文件中。nvcc会分别为主机和设备生成可执行代码。
+从host的串行到调用核函数（核函数被调用后控制马上归还主机线程，也就是在第一个并行代码执行时，很有可能第二段host代码已经开始同步执行了），可以理解为主机和设备完全异步，如果主机不等待设备结果可以直接跑完整个主机程序不受阻塞。
+内存管理 核函数在设备上运行，CUDA运行时负责分配与释放设备内存以及主机与设备间的通信。内存管理在传统串行程序是非常常见的，寄存器空间，栈空间内的内存由机器自己管理，堆空间由用户控制分配和释放，CUDA程序同样，只是CUDA提供的API可以分配管理设备上的内存，当然也可以用CDUA管理主机上的内存，主机上的传统标准库也能完成主机内存管理。
+| 标准C函数 | CUDA C 函数 | 说明 |
+| :—: | :—: | :—: |
+| malloc | cudaMalloc | 内存分配 |
+| memcpy | cudaMemcpy | 内存复制 |
+| memset | cudaMemset | 内存设置 |
+| free | cudaFree | 释放内存 |
+我们先研究最关键的一步，这一步要走总线的。cudaMemcpy负责主机和设备间的数据传输。
+cudaError_t cudaMemcpy(void * dst,const void * src,size_t count, cudaMemcpyKind kind) kind负责指定内存的拷贝方向，kind有以下几种：
+cudaMemcpyHostToHost
+cudaMemcpyHostToDevice
+...</p></div><footer class=entry-footer><span title=2025-05-15T00:00:00+00:00>创建于 2025-05-15</span>&nbsp;·&nbsp;<span title=2025-11-09T00:00:00+00:00>最后修改于 2025-11-09</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to CUDA2 编程模型" href=https://jler666.github.io/hpc/nwluawrwlqtnsx9b/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>CUDA1 异构并行计算平台</h2></header><div class=entry-content><p>把程序看成指令和数据的组合。当一个计算问题被分成许多小的计算单元后，每个计算单元都是一个任务。在一个任务中，一个指令负责处理输入和调用一个函数并产生输出。
+当一个指令处理前一个指令产生的数据时，就有了数据相关性的概念，因此可以区分两个任务之间的依赖关系，如果一个任务处理的时另一个任务的输出，那么它们时相关的否则时独立的。
+相关性是限制并行性的主要因素，具依赖关系的任务之间的独立的关系链才能进行并行化。
+并行可分为任务并行和数据并行。任务并行的重点在多核系统的任务调度分配。对于目前大多数图像处理计算而言更关注数据并行。CUDA编程非常适合解决数据并行计算问题！
+数据并行第一步将数据依据线程进行划分，为每个线程都分配一定的数据。
+通常用两种方法进行数据划分: 块划分(block partitioning)和周期划分(cyclic partitioning)。
+块划分中 一组连续的数据被分到一个块内，数据块被随机分配给一个空闲线程(块的执行顺序随机)，一个线程在一定时间内只处理一个数据块。
+| thread | 1 | 2 | 3 | 4 | 5 |
+| :—: | :—: | :—: | :—: | :—: | :— |
+| block | 1 2 3 | 4 5 6 | 7 8 9 | 10 11 12 | 13 14 15 |
+周期划分中 线程按顺序处理相邻的数据块，每个线程处理多个数据块
+| thread | 1 | 2 | 3 | 4 | 5 | 1 | 2 | 3 | 4 | 5 | 1 | 2 | 3 | 4 | 5 |
+...</p></div><footer class=entry-footer><span title=2025-05-15T00:00:00+00:00>创建于 2025-05-15</span>&nbsp;·&nbsp;<span title=2025-05-16T00:00:00+00:00>最后修改于 2025-05-16</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to CUDA1 异构并行计算平台" href=https://jler666.github.io/hpc/dlrt32o3lntl0iaz/></a></article><article class=post-entry><header class=entry-header><h2 class=entry-hint-parent>CUDA0 资料</h2></header><div class=entry-content><p>官方guide文档：
+https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/ https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html
+https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#programming-model
+谭升的博客 https://face2ai.com/program-blog/#GPU%E7%BC%96%E7%A8%8B%EF%BC%88CUDA%EF%BC%89
+谭升的仓库
+https://github.com/Tony-Tan/CUDA_Freshman
+Professional CUDA C Programming
+CUDA by Example
+Programming Massively Parallel Processors
+高性能计算视频
+https://www.bilibili.com/video/BV1bb421E7sK/?spm_id_from=333.1387.upload.video_card.click&amp;vd_source=47006f1a4047c07dff5bdbf813a046e1</p></div><footer class=entry-footer><span title=2025-05-15T00:00:00+00:00>创建于 2025-05-15</span>&nbsp;·&nbsp;<span title=2025-07-07T00:00:00+00:00>最后修改于 2025-07-07</span>&nbsp;·&nbsp;<span>cant</span></footer><a class=entry-link aria-label="post link to CUDA0 资料" href=https://jler666.github.io/hpc/tg79ef033qop3pgr/></a></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script></body></html>

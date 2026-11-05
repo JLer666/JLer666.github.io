@@ -1,0 +1,586 @@
+<!doctype html><html lang=en dir=auto data-theme=dark><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Linux系统编程入门3 IO函数续 | CantBlog</title><meta name=keywords content><meta name=description content='二、与文件属性相关的操作函数
+acess判断文件的权限(或文件是否存在) chmod修改文件的权限 chown修改文件的所有者或所在组 truncate用于缩减或扩展某个文件的大小
+/*
+       #include <unistd.h>
+       int access(const char *pathname, int mode);
+       作用:判断某个文件是否有某个权限(通过当前进程是否能访问某个文件来判断)
+        或者判断文件是否存在
+       参数：
+        文件名
+        mode：待判断的当前进程对这个文件权限
+        F_OK(用于检查文件是否存在)
+        R_OK(是否可读) W_OK(是否可写) X_OK(是否可执行)
+
+       返回值:
+          成功返回0 失败返回-1
+\*/
+#include <unistd.h>
+#include <stdio.h> //perror
+int main()
+{
+    int ret = access("a.txt", F_OK); //判断 a.txt是否存在
+    if (ret == -1)
+    {
+        perror("file not exist");
+    }
+    return 0;
+}
+// gcc access.c -o access
+
+/*
+       #include <sys/stat.h>
+       int chmod(const char *pathname, mode_t mode);
+
+       用于修改当前进程对pathname文件的权限
+       参数:
+        文件名
+        mode_t mode 需要修改的权限 给定相应的宏 让这个进程拥有对文件的处理的相应权限
+        也可以像例子中那样直接给个八进制数0775
+            S_ISUID  (04000 八进制)  set-user-ID (set process effective user ID on execve(2))
+            S_ISGID  (02000)  set-group-ID (set process effective group  ID  on  execve(2);
+                                mandatory  locking,  as  described  in  fcntl(2);  take a new
+                                file&#39;s group from parent directory, as described in  chown(2)
+                                and mkdir(2))
+            S_ISVTX  (01000)  sticky   bit  (restricted  deletion  flag,  as  described  in
+                                unlink(2))
+            S_IRUSR  (00400)  read by owner
+            S_IWUSR  (00200)  write by owner
+            S_IXUSR  (00100)  execute/search by owner ("search"  applies  for  directories,
+                                and means that entries within the directory can be accessed)
+            S_IRGRP  (00040)  read by group
+            S_IWGRP  (00020)  write by group
+            S_IXGRP  (00010)  execute/search by group
+            S_IROTH  (00004)  read by others
+
+        返回值:
+         成功返回0 失败返回-1
+\*/
+#include <sys/stat.h>
+int main()
+{
+    //-rw-rw-r-- 664 原a.txt权限--->-rwxrwxr-x 775
+    int ret = chmod("a.txt", 0775);
+    if (ret == -1)
+    {
+        return -1; //fail
+    }
+    return 0;
+}
+
+/*
+    #include <unistd.h>
+    int chown(const char *pathname, uid_t owner, gid_t group);
+    uid_t owner 待改为哪个用户id所有这个文件
+    gid_t group 待改为哪个组id所有这个文件
+
+    vim /etc/passwd 当中写了所有的用户
+    wen:x:1000(用户id):1000(组id):wen,,,:/home/wen:/bin/bash
+    vim /etc/group 当中写了所有的组
+    wen:x:1000(组id):
+    sudo useradd 用户名 来添加用户
+    id 用户名  来查看用户的uid与gid uid=1000(wen) gid=1000(wen) 组=1000(wen 组名)
+    要想通过chown修改文件的所有者和所有组 在编译完后
+    需要 sudo ./可执行文件  才有权限去修改!!!!!!!!!
+\*/
+#include <sys/stat.h>
+int main()
+{
+    int ret = chown("a.txt", 1000, 1000);
+    if (ret == -1)
+    {
+        return -1; //fail
+    }
+    return 0;
+}
+/*
+       #include <unistd.h>
+       #include <sys/types.h>
+
+       int truncate(const char *path, off_t length);
+       用于缩减或拓展文件的大小
+       参数：
+        文件路径
+        length 文件最终的大小(文件经过这个函数后就直接变这么大了) 如需清空文件，length设置为0
+        这个大小大于当前大小 则在文件尾添加一系列空字节 小于则将超出部分删掉
+       返回值：
+        成功返回0 失败返回-1并设置errno
+        1 EACCESS 参数path所指定的文件无法存取
+        2 EROFS 欲写入的文件存在于只读文件系统内
+        3 EFAULT 参数path指针超出可存取空间
+        4 EINVAL 参数path包含不合法字符
+        5 ENAMETOOLONG 参数path太长
+        6 ENOTDIR 参数path路径并非一目录
+        7 EISDIR 参数path指向一目录
+        8 ETXTBUSY 参数path所指的文件为共享程序，而且正被执行中
+        9 ELOOP 参数path 有过多符号连接问题。
+        10 EIO I/O存取错误
+\*/
+#include <unistd.h>
+#include <sys/types.h>
+int main()
+{
+    int ret = truncate("a.txt", 20); //将a.txt变为20个字节
+    if (ret == -1)
+    {
+        return -1; //fail
+    }
+    return 0;
+}
+三、目录操作函数'><meta name=author content="cant"><link rel=canonical href=https://jler666.github.io/cpp/fyr7ci/><link crossorigin=anonymous href=/assets/css/stylesheet.04804d0f146d7579aa1819480d31899d3a37b67d5f36a318cd02399b5d97ff95.css integrity="sha256-BIBNDxRtdXmqGBlIDTGJnTo3tn1fNqMYzQI5m12X/5U=" rel="preload stylesheet" as=style><link rel=icon href=https://jler666.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://jler666.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://jler666.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://jler666.github.io/apple-touch-icon.png><link rel=mask-icon href=https://jler666.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://jler666.github.io/cpp/fyr7ci/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><script>localStorage.getItem("pref-theme")==="light"&&(document.querySelector("html").dataset.theme="light")</script><script>window.MathJax={tex:{inlineMath:[["$","$"],["\\(","\\)"]],displayMath:[["$$","$$"],["\\[","\\]"]]},svg:{fontCache:"global"}}</script><script defer src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js></script><meta property="og:url" content="https://jler666.github.io/cpp/fyr7ci/"><meta property="og:site_name" content="CantBlog"><meta property="og:title" content="Linux系统编程入门3 IO函数续"><meta property="og:description" content='二、与文件属性相关的操作函数
+acess判断文件的权限(或文件是否存在) chmod修改文件的权限 chown修改文件的所有者或所在组 truncate用于缩减或扩展某个文件的大小
+/* #include <unistd.h> int access(const char *pathname, int mode); 作用:判断某个文件是否有某个权限(通过当前进程是否能访问某个文件来判断) 或者判断文件是否存在 参数： 文件名 mode：待判断的当前进程对这个文件权限 F_OK(用于检查文件是否存在) R_OK(是否可读) W_OK(是否可写) X_OK(是否可执行) 返回值: 成功返回0 失败返回-1 \*/ #include <unistd.h> #include <stdio.h> //perror int main() { int ret = access("a.txt", F_OK); //判断 a.txt是否存在 if (ret == -1) { perror("file not exist"); } return 0; } // gcc access.c -o access /* #include <sys/stat.h> int chmod(const char *pathname, mode_t mode); 用于修改当前进程对pathname文件的权限 参数: 文件名 mode_t mode 需要修改的权限 给定相应的宏 让这个进程拥有对文件的处理的相应权限 也可以像例子中那样直接给个八进制数0775 S_ISUID (04000 八进制) set-user-ID (set process effective user ID on execve(2)) S_ISGID (02000) set-group-ID (set process effective group ID on execve(2); mandatory locking, as described in fcntl(2); take a new file&#39;s group from parent directory, as described in chown(2) and mkdir(2)) S_ISVTX (01000) sticky bit (restricted deletion flag, as described in unlink(2)) S_IRUSR (00400) read by owner S_IWUSR (00200) write by owner S_IXUSR (00100) execute/search by owner ("search" applies for directories, and means that entries within the directory can be accessed) S_IRGRP (00040) read by group S_IWGRP (00020) write by group S_IXGRP (00010) execute/search by group S_IROTH (00004) read by others 返回值: 成功返回0 失败返回-1 \*/ #include <sys/stat.h> int main() { //-rw-rw-r-- 664 原a.txt权限--->-rwxrwxr-x 775 int ret = chmod("a.txt", 0775); if (ret == -1) { return -1; //fail } return 0; } /* #include <unistd.h> int chown(const char *pathname, uid_t owner, gid_t group); uid_t owner 待改为哪个用户id所有这个文件 gid_t group 待改为哪个组id所有这个文件 vim /etc/passwd 当中写了所有的用户 wen:x:1000(用户id):1000(组id):wen,,,:/home/wen:/bin/bash vim /etc/group 当中写了所有的组 wen:x:1000(组id): sudo useradd 用户名 来添加用户 id 用户名 来查看用户的uid与gid uid=1000(wen) gid=1000(wen) 组=1000(wen 组名) 要想通过chown修改文件的所有者和所有组 在编译完后 需要 sudo ./可执行文件 才有权限去修改!!!!!!!!! \*/ #include <sys/stat.h> int main() { int ret = chown("a.txt", 1000, 1000); if (ret == -1) { return -1; //fail } return 0; } /* #include <unistd.h> #include <sys/types.h> int truncate(const char *path, off_t length); 用于缩减或拓展文件的大小 参数： 文件路径 length 文件最终的大小(文件经过这个函数后就直接变这么大了) 如需清空文件，length设置为0 这个大小大于当前大小 则在文件尾添加一系列空字节 小于则将超出部分删掉 返回值： 成功返回0 失败返回-1并设置errno 1 EACCESS 参数path所指定的文件无法存取 2 EROFS 欲写入的文件存在于只读文件系统内 3 EFAULT 参数path指针超出可存取空间 4 EINVAL 参数path包含不合法字符 5 ENAMETOOLONG 参数path太长 6 ENOTDIR 参数path路径并非一目录 7 EISDIR 参数path指向一目录 8 ETXTBUSY 参数path所指的文件为共享程序，而且正被执行中 9 ELOOP 参数path 有过多符号连接问题。 10 EIO I/O存取错误 \*/ #include <unistd.h> #include <sys/types.h> int main() { int ret = truncate("a.txt", 20); //将a.txt变为20个字节 if (ret == -1) { return -1; //fail } return 0; } 三、目录操作函数'><meta property="og:locale" content="zh_cn"><meta property="og:type" content="article"><meta property="article:section" content="cpp"><meta property="article:published_time" content="2022-03-13T00:00:00+00:00"><meta property="article:modified_time" content="2025-06-24T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Linux系统编程入门3 IO函数续"><meta name=twitter:description content='二、与文件属性相关的操作函数
+acess判断文件的权限(或文件是否存在) chmod修改文件的权限 chown修改文件的所有者或所在组 truncate用于缩减或扩展某个文件的大小
+/* #include <unistd.h> int access(const char *pathname, int mode); 作用:判断某个文件是否有某个权限(通过当前进程是否能访问某个文件来判断) 或者判断文件是否存在 参数： 文件名 mode：待判断的当前进程对这个文件权限 F_OK(用于检查文件是否存在) R_OK(是否可读) W_OK(是否可写) X_OK(是否可执行) 返回值: 成功返回0 失败返回-1 \*/ #include <unistd.h> #include <stdio.h> //perror int main() { int ret = access("a.txt", F_OK); //判断 a.txt是否存在 if (ret == -1) { perror("file not exist"); } return 0; } // gcc access.c -o access /* #include <sys/stat.h> int chmod(const char *pathname, mode_t mode); 用于修改当前进程对pathname文件的权限 参数: 文件名 mode_t mode 需要修改的权限 给定相应的宏 让这个进程拥有对文件的处理的相应权限 也可以像例子中那样直接给个八进制数0775 S_ISUID (04000 八进制) set-user-ID (set process effective user ID on execve(2)) S_ISGID (02000) set-group-ID (set process effective group ID on execve(2); mandatory locking, as described in fcntl(2); take a new file&#39;s group from parent directory, as described in chown(2) and mkdir(2)) S_ISVTX (01000) sticky bit (restricted deletion flag, as described in unlink(2)) S_IRUSR (00400) read by owner S_IWUSR (00200) write by owner S_IXUSR (00100) execute/search by owner ("search" applies for directories, and means that entries within the directory can be accessed) S_IRGRP (00040) read by group S_IWGRP (00020) write by group S_IXGRP (00010) execute/search by group S_IROTH (00004) read by others 返回值: 成功返回0 失败返回-1 \*/ #include <sys/stat.h> int main() { //-rw-rw-r-- 664 原a.txt权限--->-rwxrwxr-x 775 int ret = chmod("a.txt", 0775); if (ret == -1) { return -1; //fail } return 0; } /* #include <unistd.h> int chown(const char *pathname, uid_t owner, gid_t group); uid_t owner 待改为哪个用户id所有这个文件 gid_t group 待改为哪个组id所有这个文件 vim /etc/passwd 当中写了所有的用户 wen:x:1000(用户id):1000(组id):wen,,,:/home/wen:/bin/bash vim /etc/group 当中写了所有的组 wen:x:1000(组id): sudo useradd 用户名 来添加用户 id 用户名 来查看用户的uid与gid uid=1000(wen) gid=1000(wen) 组=1000(wen 组名) 要想通过chown修改文件的所有者和所有组 在编译完后 需要 sudo ./可执行文件 才有权限去修改!!!!!!!!! \*/ #include <sys/stat.h> int main() { int ret = chown("a.txt", 1000, 1000); if (ret == -1) { return -1; //fail } return 0; } /* #include <unistd.h> #include <sys/types.h> int truncate(const char *path, off_t length); 用于缩减或拓展文件的大小 参数： 文件路径 length 文件最终的大小(文件经过这个函数后就直接变这么大了) 如需清空文件，length设置为0 这个大小大于当前大小 则在文件尾添加一系列空字节 小于则将超出部分删掉 返回值： 成功返回0 失败返回-1并设置errno 1 EACCESS 参数path所指定的文件无法存取 2 EROFS 欲写入的文件存在于只读文件系统内 3 EFAULT 参数path指针超出可存取空间 4 EINVAL 参数path包含不合法字符 5 ENAMETOOLONG 参数path太长 6 ENOTDIR 参数path路径并非一目录 7 EISDIR 参数path指向一目录 8 ETXTBUSY 参数path所指的文件为共享程序，而且正被执行中 9 ELOOP 参数path 有过多符号连接问题。 10 EIO I/O存取错误 \*/ #include <unistd.h> #include <sys/types.h> int main() { int ret = truncate("a.txt", 20); //将a.txt变为20个字节 if (ret == -1) { return -1; //fail } return 0; } 三、目录操作函数'><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"C++","item":"https://jler666.github.io/cpp/"},{"@type":"ListItem","position":2,"name":"Linux系统编程入门3 IO函数续","item":"https://jler666.github.io/cpp/fyr7ci/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"Linux系统编程入门3 IO函数续","name":"Linux系统编程入门3 IO函数续","description":"二、与文件属性相关的操作函数\nacess判断文件的权限(或文件是否存在) chmod修改文件的权限 chown修改文件的所有者或所在组 truncate用于缩减或扩展某个文件的大小\n/* #include \u0026lt;unistd.h\u0026gt; int access(const char *pathname, int mode); 作用:判断某个文件是否有某个权限(通过当前进程是否能访问某个文件来判断) 或者判断文件是否存在 参数： 文件名 mode：待判断的当前进程对这个文件权限 F_OK(用于检查文件是否存在) R_OK(是否可读) W_OK(是否可写) X_OK(是否可执行) 返回值: 成功返回0 失败返回-1 \\*/ #include \u0026lt;unistd.h\u0026gt; #include \u0026lt;stdio.h\u0026gt; //perror int main() { int ret = access(\u0026#34;a.txt\u0026#34;, F_OK); //判断 a.txt是否存在 if (ret == -1) { perror(\u0026#34;file not exist\u0026#34;); } return 0; } // gcc access.c -o access /* #include \u0026lt;sys/stat.h\u0026gt; int chmod(const char *pathname, mode_t mode); 用于修改当前进程对pathname文件的权限 参数: 文件名 mode_t mode 需要修改的权限 给定相应的宏 让这个进程拥有对文件的处理的相应权限 也可以像例子中那样直接给个八进制数0775 S_ISUID (04000 八进制) set-user-ID (set process effective user ID on execve(2)) S_ISGID (02000) set-group-ID (set process effective group ID on execve(2); mandatory locking, as described in fcntl(2); take a new file\u0026#39;s group from parent directory, as described in chown(2) and mkdir(2)) S_ISVTX (01000) sticky bit (restricted deletion flag, as described in unlink(2)) S_IRUSR (00400) read by owner S_IWUSR (00200) write by owner S_IXUSR (00100) execute/search by owner (\u0026#34;search\u0026#34; applies for directories, and means that entries within the directory can be accessed) S_IRGRP (00040) read by group S_IWGRP (00020) write by group S_IXGRP (00010) execute/search by group S_IROTH (00004) read by others 返回值: 成功返回0 失败返回-1 \\*/ #include \u0026lt;sys/stat.h\u0026gt; int main() { //-rw-rw-r-- 664 原a.txt权限---\u0026gt;-rwxrwxr-x 775 int ret = chmod(\u0026#34;a.txt\u0026#34;, 0775); if (ret == -1) { return -1; //fail } return 0; } /* #include \u0026lt;unistd.h\u0026gt; int chown(const char *pathname, uid_t owner, gid_t group); uid_t owner 待改为哪个用户id所有这个文件 gid_t group 待改为哪个组id所有这个文件 vim /etc/passwd 当中写了所有的用户 wen:x:1000(用户id):1000(组id):wen,,,:/home/wen:/bin/bash vim /etc/group 当中写了所有的组 wen:x:1000(组id): sudo useradd 用户名 来添加用户 id 用户名 来查看用户的uid与gid uid=1000(wen) gid=1000(wen) 组=1000(wen 组名) 要想通过chown修改文件的所有者和所有组 在编译完后 需要 sudo ./可执行文件 才有权限去修改!!!!!!!!! \\*/ #include \u0026lt;sys/stat.h\u0026gt; int main() { int ret = chown(\u0026#34;a.txt\u0026#34;, 1000, 1000); if (ret == -1) { return -1; //fail } return 0; } /* #include \u0026lt;unistd.h\u0026gt; #include \u0026lt;sys/types.h\u0026gt; int truncate(const char *path, off_t length); 用于缩减或拓展文件的大小 参数： 文件路径 length 文件最终的大小(文件经过这个函数后就直接变这么大了) 如需清空文件，length设置为0 这个大小大于当前大小 则在文件尾添加一系列空字节 小于则将超出部分删掉 返回值： 成功返回0 失败返回-1并设置errno 1 EACCESS 参数path所指定的文件无法存取 2 EROFS 欲写入的文件存在于只读文件系统内 3 EFAULT 参数path指针超出可存取空间 4 EINVAL 参数path包含不合法字符 5 ENAMETOOLONG 参数path太长 6 ENOTDIR 参数path路径并非一目录 7 EISDIR 参数path指向一目录 8 ETXTBUSY 参数path所指的文件为共享程序，而且正被执行中 9 ELOOP 参数path 有过多符号连接问题。 10 EIO I/O存取错误 \\*/ #include \u0026lt;unistd.h\u0026gt; #include \u0026lt;sys/types.h\u0026gt; int main() { int ret = truncate(\u0026#34;a.txt\u0026#34;, 20); //将a.txt变为20个字节 if (ret == -1) { return -1; //fail } return 0; } 三、目录操作函数\n","keywords":[],"articleBody":"二、与文件属性相关的操作函数\nacess判断文件的权限(或文件是否存在) chmod修改文件的权限 chown修改文件的所有者或所在组 truncate用于缩减或扩展某个文件的大小\n/* #include int access(const char *pathname, int mode); 作用:判断某个文件是否有某个权限(通过当前进程是否能访问某个文件来判断) 或者判断文件是否存在 参数： 文件名 mode：待判断的当前进程对这个文件权限 F_OK(用于检查文件是否存在) R_OK(是否可读) W_OK(是否可写) X_OK(是否可执行) 返回值: 成功返回0 失败返回-1 \\*/ #include #include //perror int main() { int ret = access(\"a.txt\", F_OK); //判断 a.txt是否存在 if (ret == -1) { perror(\"file not exist\"); } return 0; } // gcc access.c -o access /* #include int chmod(const char *pathname, mode_t mode); 用于修改当前进程对pathname文件的权限 参数: 文件名 mode_t mode 需要修改的权限 给定相应的宏 让这个进程拥有对文件的处理的相应权限 也可以像例子中那样直接给个八进制数0775 S_ISUID (04000 八进制) set-user-ID (set process effective user ID on execve(2)) S_ISGID (02000) set-group-ID (set process effective group ID on execve(2); mandatory locking, as described in fcntl(2); take a new file's group from parent directory, as described in chown(2) and mkdir(2)) S_ISVTX (01000) sticky bit (restricted deletion flag, as described in unlink(2)) S_IRUSR (00400) read by owner S_IWUSR (00200) write by owner S_IXUSR (00100) execute/search by owner (\"search\" applies for directories, and means that entries within the directory can be accessed) S_IRGRP (00040) read by group S_IWGRP (00020) write by group S_IXGRP (00010) execute/search by group S_IROTH (00004) read by others 返回值: 成功返回0 失败返回-1 \\*/ #include int main() { //-rw-rw-r-- 664 原a.txt权限---\u003e-rwxrwxr-x 775 int ret = chmod(\"a.txt\", 0775); if (ret == -1) { return -1; //fail } return 0; } /* #include int chown(const char *pathname, uid_t owner, gid_t group); uid_t owner 待改为哪个用户id所有这个文件 gid_t group 待改为哪个组id所有这个文件 vim /etc/passwd 当中写了所有的用户 wen:x:1000(用户id):1000(组id):wen,,,:/home/wen:/bin/bash vim /etc/group 当中写了所有的组 wen:x:1000(组id): sudo useradd 用户名 来添加用户 id 用户名 来查看用户的uid与gid uid=1000(wen) gid=1000(wen) 组=1000(wen 组名) 要想通过chown修改文件的所有者和所有组 在编译完后 需要 sudo ./可执行文件 才有权限去修改!!!!!!!!! \\*/ #include int main() { int ret = chown(\"a.txt\", 1000, 1000); if (ret == -1) { return -1; //fail } return 0; } /* #include #include int truncate(const char *path, off_t length); 用于缩减或拓展文件的大小 参数： 文件路径 length 文件最终的大小(文件经过这个函数后就直接变这么大了) 如需清空文件，length设置为0 这个大小大于当前大小 则在文件尾添加一系列空字节 小于则将超出部分删掉 返回值： 成功返回0 失败返回-1并设置errno 1 EACCESS 参数path所指定的文件无法存取 2 EROFS 欲写入的文件存在于只读文件系统内 3 EFAULT 参数path指针超出可存取空间 4 EINVAL 参数path包含不合法字符 5 ENAMETOOLONG 参数path太长 6 ENOTDIR 参数path路径并非一目录 7 EISDIR 参数path指向一目录 8 ETXTBUSY 参数path所指的文件为共享程序，而且正被执行中 9 ELOOP 参数path 有过多符号连接问题。 10 EIO I/O存取错误 \\*/ #include #include int main() { int ret = truncate(\"a.txt\", 20); //将a.txt变为20个字节 if (ret == -1) { return -1; //fail } return 0; } 三、目录操作函数\n/* #include #include int mkdir(const char *pathname, mode_t mode); man 2 mkdir man 1 mkdir为linux系统命令说明 创建一个目录 参数: pathname 想要创建的目录的路径 mode mode_t 8进制数代表这个目录的权限 具体可看use_chmod.c中对mode的详细解释 这里跟那边是一样的 返回值： 成功返回0 失败返回-1 \\*/ #include #include int main() { int ret = mkdir(\"aaa\", 0777); //在当前路径下再生成 /aaa 相当于生成./aaa的路径 //虽然指定777但实际生成的为775(因为与umask掩码相关 具体可看use_open.c的说明) //注意目录只有拥有可执行权限 我们才能进入这个目录中 比如用户对这个文件(目录)拥有可执行文件 用户才能进入到这个路径下 if (ret == -1) { return -1; //fail } return 0; } #include int rmdir(const char *pathname);//用于删除空目录 目录内有内容就删不掉了 #include int rename(const char *oldpath, const char *newpath);//将oldpath用newpath字符串替换 rename(“aaa”,”bbb”);//将aaa用bbb替代 /* #include int chdir(const char *path);//cd 改变(当前进程所处)当前的工作目录为path(绝对路径) 成功返回0，失败返回-1 进程的初始工作目录为 你在哪个路径下将它启动 它的初始工作路径就在那 #include char *getcwd(char *buf, size_t size);//pwd 获得当前的工作的绝对路径(当前进程所处) 用buf传出路径字符串 返回的是buf的首地址，为了方便直接输出buf字符串 \\*/ #include #include //flags宏在这个头文件 #include //flags宏在这个头文件里也有 #include //函数声明在这个头文件中 #include //perror #include //close //gcc use_cd_pwd.c -o cd int main() { //获取当前工作目录 char buf[128]; printf(\"当前的工作路径是：%s\\n\", getcwd(buf, sizeof(buf))); // /home/wen/lesson11 //修改工作目录 int ret = chdir(\"/home/wen/lesson10\"); if (ret == -1) { perror(\"cd fail\"); return -1; //fail } //创建新的文件 int fd = open(\"chdir210.txt\", O_CREAT | O_RDWR, 0664); //生成了/home/wen/lesson10/chdir210.txt if (ret == -1) { perror(\"create fail\"); return -1; //fail } close(fd); char buf2[128]; printf(\"当前的工作路径是：%s\\n\", getcwd(buf2, sizeof(buf2))); // /home/wen/lesson10 return 0; } 四、目录遍历\n/* 读取目录下普通文件的个数 man 3 标准c #include #include DIR *opendir(const char *name); 获取path子目录下的所由文件和目录的列表，如果path是个文件(或其他失败场景) 则返回值为NULL 正常返回目录流的第一个进入点 typedef struct __dirstream DIR; __dirstream为目录流类型 其内容对用户不开放看不到其中内容 #include struct dirent *readdir(DIR *dirp); dirp 为 opendir返回的结果 读取目录中的数据 每调用一次DIR内部指针就自动指向drip中的下个实体 返回参数dirp 目录流的下个目录进入点 信息保存在结构体struct dirent *中 struct dirent { ino_t d_ino; 此目录进入点的inode节点编号 Inode number off_t d_off; 目录文件开头到此目录进入节点的偏移 Not an offset; see below unsigned short d_reclen; d_name文件名的实际长度(占了[256]中的几个 到底文件名为多少个字符) 不包含NULL字符 Length of this record unsigned char d_type; d_name文件的类型 Type of file; not supported by all filesystem types char d_name[256]; 文件名 Null-terminated filename }; 其中d_name文件的类型d_type有如下几种 DT_BLK 块设备 DT_CHR 字符设备 DT_DIR 目录 DT_LNK 软连接 DT_FIFO 管道 DT_REG 普通文件 DT_SOCK 套接字 DT_UNKNOWN 未知 当读取到末尾(不会设置errno或失败(会设置errno) 返回NULL #include #include int closedir(DIR *dirp); 关闭目录 \\*/ #include #include #include #include //读取某个目录下(嵌套直到最深)所有普通文件的个数 // ./count.out 目录路径 void getFileNum(const char *path, int *res); int main(int argc, char *argv[]) { if (argc \u003c 2) { //一般一定会有一个参数 是可执行文件的路径 //再加上跟上的文件名 一共至少为两个参数 模拟才会生效 //所以这里判断一下参数个数小于2个就return printf(\"%s filename\\n\", argv[0]); //argv[0]为执行文件的路径 return -1; } int ret = 0; //普通文件的个数 getFileNum(argv[1], \u0026ret); printf(\"共有普通文件%d个\\n\", ret); return 0; } //递归 遍历所有子目录(含子目录的子目录...) 统计其中普通文件的个数 void getFileNum(const char *path, int *res) { // 打开目录 DIR *dir = opendir(path); if (dir == NULL) { perror(\"dir is null\"); return; } struct dirent *ptr; //循环读取子目录 while ((ptr = readdir(dir)) != NULL) //只要没读到末尾(不为NULL) 或出错 就一直循环下去 每调用一次DIR内部指针就自动指向drip中的下个实体 { /* code */ //获取名称 不能将./ ../算入子目录中 char *dname = ptr-\u003ed_name; if (strcmp(dname, \".\") == 0 || strcmp(dname, \"..\") == 0) //过滤. .. strcmp==0说明两个字符串相同 { continue; } //判断是否是普通文件res++ 还是目录(递归调用) if (ptr-\u003ed_type == DT_DIR) //是目录 注意dname仅仅是目录的名字而非完整的路径 { //opendir的path要求是完整路径所以递归调用时传的path也要是完整路径 char newpath[256]; sprintf(newpath, \"%s/%s\", path, dname); //拼接得到dname对应文件的完整路径 要s/s getFileNum(newpath, res); //递归调用 遍历子目录内的文件 } else if (ptr-\u003ed_type == DT_REG) //是普通文件 { (*res)++; //要括号*优先级不高 } } closedir(dir); return; } 五、文件描述符重定向\n/* #include int dup(int oldfd); 系统调用 传入被拷贝的描述符 用未被使用的数值最小的文件描述符作为新的描述符 注意拷贝的是文件描述符指向的FILE结构体的内容 而非真的拷贝文件！！！！ 新的描述符和老的描述符指向的是同一个文件！！！ 如果拷贝成功返回这个新的的描述符 失败返回-1并设置errno \\*/ #include #include #include #include #include #include int main() { int fd = open(\"a.txt\", O_RDWR | O_CREAT, 0664); //创造新的文件a.txt 因为fd 1,2为流的fd已占用 这个新的fd因该是3 int newfd = dup(fd); if (newfd == -1) { perror(\"dup fail\"); return -1; } print(\"fd:%d newfd:%d \\n\", fd, newfd); //fd:3 newfd:4 //关闭fd 用newfd向写a.txt写内容 成功 证明dup后 newfd和fd指向的是同一个文件 close(fd); char *str = \"hello\"; int ret = write(newfd, str, strlen(str)); if (ret == -1) { perror(\"write fail\"); return -1; } close(newfd); return 0; } /* #include int dup2(int oldfd, int newfd);//功能和dup类似 用于重定向文件描述符 oldfd指向a.txt newfd指向b.txt 在调用函数成功后将newfd-\u003eb.txt关闭并且再让newfd指向a.txt oldfd必须是一个有效的 真实指向文件的描述符 如果是个无效的文件描述符 并不会做关闭newfd操作 并且返回-1设置errno 如果oldfd和newfd值相同 相当于什么都没做 直接返回newfd并且不会做关闭newfd操作 正常返回的就是newfd \\*/ #include #include #include #include #include #include int main() { int oldfd = open(\"a.txt\", O_RDWR | O_CREAT, 0664); //创造新的文件a.txt 因为fd 1,2为流的fd已占用 这个新的fd因该是3 if (oldfd == -1) { perror(\"open fail\"); return -1; } int newfd = open(\"b.txt\", O_RDWR | O_CREAT, 0664); //创造新的文件a.txt 因为fd 1,2为流的fd已占用 这个新的fd因该是3 if (newfd == -1) { perror(\"open fail\"); return -1; } print(\"oldfd:%d newfd:%d \\n\", oldfd, newfd); int retfd = dup2(oldfd, newfd); print(\"oldfd:%d newfd:%d \\n\", oldfd, newfd); if (retfd == -1) { perror(\"dup2 fail\"); return -1; } //oldfd与newfd在dup2后指向的都是a.txt 下面用newfd来验证一下 close(oldfd); char *str = \"I'm newfd\"; int ret = write(newfd, str, strlen(str)); if (ret == -1) { perror(\"write fail\"); return -1; } close(newfd); return 0; } 六、fcntl复制文件描述符 设置/获取文件的状态标志\n/* fcntl复制文件描述符 设置/获取文件的状态标志 #include #include int fcntl(int fd, int cmd, ... arg );//...表示可变参数 可写也可不写 fd 被操作的文件描述符 cmd 对文件描述符做什么操作 对fd文件做cmd操作 cmd: F_DUPFD 复制文件描述符 F_GETFL 获取指定文件描述符的文件状态flag 文件状态flag在学习open的时候有提到 flags:对文件的操作权限设置 以及其他的一些设置 O_RDONLY,O_WRONLY,O_RDWR 三个宏分别对应只读,只写,读写。 这三个设置是互斥的，1次open只能选1个必选项。 O_APPEND 不覆盖在尾部继续追加 O_CREAT 如果文件不存在则创建新文件 等的可选项 在有多个选项时通过|按位或连接如O_RDWR | O_CREAT flags是int型占4个字节 为32位其中每一位就是一个标志位每一位代表一种情况(1种标记 可读 可写 可读写 创建新文件) F_SETFL 设置指定文件描述符的文件状态flag(O_DSYNC and O_SYNC文件状态无法通过setfl改变) O_RDONLY,O_WRONLY,O_RDWR 三个宏分别对应只读,只写,读写。 这三个设置是互斥的，1次open只能选1个必选项， 这三个必选项是无法修改的即无法通过F_SETFL设置！！！ 并且与文件创建有关的状态 O_CREAT O_EXCL O_NOCTTY O_TRUNC都是无法设置的！！！ 可选项 O_APPEND 不覆盖在尾部继续追加 O_NONBLOCK 非阻塞 等是可设置的 这里的阻塞与非阻塞描述的是函数调用的行为， 所谓阻塞方式block，就是进程或是线程执行到这些函数时必须等待某个事件的发生，如果事件没有发生，进程或线程就被阻塞，函数不能立即返回。 所谓非阻塞方式non-block，就是进程或线程执行此函数时不必非要等待事件的发生，一旦执行肯定返回，以返回值的不同来反映函数的执行情况， 如果事件发生则与阻塞方式相同，若事件没有发生则返回一个代码来告知事件未发生，而进程或线程继续执行，所以效率较高 复制传入的fd,并用未被使用的数值最小的文件描述符作为新的描述符 新描述符和fd指向的是同一文件 如果复制成功 返回值就是新的描述符 \\*/ #include #include #include int main() { //1复制文件描述符 //int fd = open(\"1.txt\", O_RDONLY); // int ret = fcntl(fd, F_DUPFD); //返回复制的那个新的描述符 这个新的描述符和fd都是指向1.txt的 //2修改和获取文件状态flag int fd = open(\"1.txt\", O_RDWR); if (fd == -1) { perror(\"open fail\"); return -1; } //当前是不能写文件的 下面先修改文件状态给flag加入O_APPEND 之后就能在文件尾添加 int flag = fcntl(fd, F_GETFL); //先获取当前文件描述符的状态 //如果直接给fcntl(fd, F_SETFL,O_APPEND); 那么之前的状态O_RDWR会被直接覆盖 当前线程对此文件不再可读写 //flag | O_APPEND 在原基础上追加O_APPEND int ret = fcntl(fd, F_SETFL, flag | O_APPEND); //F_SETFL 失败返回-1 成功返回0 close(fd); return 0; } ","wordCount":"1183","inLanguage":"en","datePublished":"2022-03-13T00:00:00Z","dateModified":"2025-06-24T00:00:00Z","author":{"@type":"Person","name":"cant"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://jler666.github.io/cpp/fyr7ci/"},"publisher":{"@type":"Organization","name":"CantBlog","logo":{"@type":"ImageObject","url":"https://jler666.github.io/favicon.ico"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=https://jler666.github.io/ accesskey=h title="CantBlog (Alt + H)">CantBlog</a></div><div class=nav-right><ul id=menu class=menu><li><a href=https://jler666.github.io/ title=首页>首页</a></li><li><a href=https://jler666.github.io/archives/ title=归档>归档</a></li><li><a href=https://jler666.github.io/search/ title=搜索>搜索</a></li></ul><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">Linux系统编程入门3 IO函数续</h1><div class=post-meta><span title=2022-03-13T00:00:00+00:00>创建于 2022-03-13</span>&nbsp;·&nbsp;<span title=2025-06-24T00:00:00+00:00>最后修改于 2025-06-24</span>&nbsp;·&nbsp;<span>cant</span></div></header><div class="post-content md-content"><p><strong>二、与文件属性相关的操作函数</strong></p><p>acess判断文件的权限(或文件是否存在) chmod修改文件的权限 chown修改文件的所有者或所在组 truncate用于缩减或扩展某个文件的大小</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int access(const char *pathname, int mode);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       作用:判断某个文件是否有某个权限(通过当前进程是否能访问某个文件来判断)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        或者判断文件是否存在
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       参数：
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        文件名
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        mode：待判断的当前进程对这个文件权限
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        F_OK(用于检查文件是否存在)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        R_OK(是否可读) W_OK(是否可写) X_OK(是否可执行)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回值:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>          成功返回0 失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//perror
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> access(<span style=color:#e6db74>&#34;a.txt&#34;</span>, F_OK); <span style=color:#75715e>//判断 a.txt是否存在
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;file not exist&#34;</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>// gcc access.c -o access
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/stat.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int chmod(const char *pathname, mode_t mode);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       用于修改当前进程对pathname文件的权限
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       参数:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        文件名
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        mode_t mode 需要修改的权限 给定相应的宏 让这个进程拥有对文件的处理的相应权限
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        也可以像例子中那样直接给个八进制数0775
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            S_ISUID  (04000 八进制)  set-user-ID (set process effective user ID on execve(2))
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            S_ISGID  (02000)  set-group-ID (set process effective group  ID  on  execve(2);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                                mandatory  locking,  as  described  in  fcntl(2);  take a new
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                                file&#39;s group from parent directory, as described in  chown(2)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                                and mkdir(2))
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            S_ISVTX  (01000)  sticky   bit  (restricted  deletion  flag,  as  described  in
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                                unlink(2))
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            S_IRUSR  (00400)  read by owner
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            S_IWUSR  (00200)  write by owner
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            S_IXUSR  (00100)  execute/search by owner (&#34;search&#34;  applies  for  directories,
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                                and means that entries within the directory can be accessed)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            S_IRGRP  (00040)  read by group
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            S_IWGRP  (00020)  write by group
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            S_IXGRP  (00010)  execute/search by group
+</span></span></span><span style=display:flex><span><span style=color:#75715e>            S_IROTH  (00004)  read by others
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        返回值:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         成功返回0 失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//-rw-rw-r-- 664 原a.txt权限---&gt;-rwxrwxr-x 775
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> chmod(<span style=color:#e6db74>&#34;a.txt&#34;</span>, <span style=color:#ae81ff>0775</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>; <span style=color:#75715e>//fail
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    int chown(const char *pathname, uid_t owner, gid_t group);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    uid_t owner 待改为哪个用户id所有这个文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    gid_t group 待改为哪个组id所有这个文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    vim /etc/passwd 当中写了所有的用户
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    wen:x:1000(用户id):1000(组id):wen,,,:/home/wen:/bin/bash
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    vim /etc/group 当中写了所有的组
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    wen:x:1000(组id):
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    sudo useradd 用户名 来添加用户
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    id 用户名  来查看用户的uid与gid uid=1000(wen) gid=1000(wen) 组=1000(wen 组名)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    要想通过chown修改文件的所有者和所有组 在编译完后
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    需要 sudo ./可执行文件  才有权限去修改!!!!!!!!!
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> chown(<span style=color:#e6db74>&#34;a.txt&#34;</span>, <span style=color:#ae81ff>1000</span>, <span style=color:#ae81ff>1000</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>; <span style=color:#75715e>//fail
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/types.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int truncate(const char *path, off_t length);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       用于缩减或拓展文件的大小
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       参数：
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        文件路径
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        length 文件最终的大小(文件经过这个函数后就直接变这么大了) 如需清空文件，length设置为0
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        这个大小大于当前大小 则在文件尾添加一系列空字节 小于则将超出部分删掉
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回值：
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        成功返回0 失败返回-1并设置errno
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        1 EACCESS 参数path所指定的文件无法存取
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        2 EROFS 欲写入的文件存在于只读文件系统内
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        3 EFAULT 参数path指针超出可存取空间
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        4 EINVAL 参数path包含不合法字符
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        5 ENAMETOOLONG 参数path太长
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        6 ENOTDIR 参数path路径并非一目录
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        7 EISDIR 参数path指向一目录
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        8 ETXTBUSY 参数path所指的文件为共享程序，而且正被执行中
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        9 ELOOP 参数path 有过多符号连接问题。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        10 EIO I/O存取错误
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> truncate(<span style=color:#e6db74>&#34;a.txt&#34;</span>, <span style=color:#ae81ff>20</span>); <span style=color:#75715e>//将a.txt变为20个字节
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>; <span style=color:#75715e>//fail
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>三、目录操作函数</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/stat.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/types.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int mkdir(const char *pathname, mode_t mode);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       man 2 mkdir   man 1 mkdir为linux系统命令说明
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       创建一个目录
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       参数:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         pathname 想要创建的目录的路径
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         mode mode_t 8进制数代表这个目录的权限 具体可看use_chmod.c中对mode的详细解释 这里跟那边是一样的
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回值：
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         成功返回0 失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> mkdir(<span style=color:#e6db74>&#34;aaa&#34;</span>, <span style=color:#ae81ff>0777</span>); <span style=color:#75715e>//在当前路径下再生成 /aaa 相当于生成./aaa的路径
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//虽然指定777但实际生成的为775(因为与umask掩码相关  具体可看use_open.c的说明)
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//注意目录只有拥有可执行权限 我们才能进入这个目录中 比如用户对这个文件(目录)拥有可执行文件 用户才能进入到这个路径下
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>; <span style=color:#75715e>//fail
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span> 	<span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>rmdir</span>(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>pathname);<span style=color:#75715e>//用于删除空目录 目录内有内容就删不掉了
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>rename</span>(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>oldpath, <span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>newpath);<span style=color:#75715e>//将oldpath用newpath字符串替换
+</span></span></span><span style=display:flex><span>    rename(<span style=color:#960050;background-color:#1e0010>“</span>aaa<span style=color:#960050;background-color:#1e0010>”</span>,<span style=color:#960050;background-color:#1e0010>”</span>bbb<span style=color:#960050;background-color:#1e0010>”</span>);<span style=color:#75715e>//将aaa用bbb替代
+</span></span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int chdir(const char *path);//cd
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       改变(当前进程所处)当前的工作目录为path(绝对路径)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       成功返回0，失败返回-1
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       进程的初始工作目录为 你在哪个路径下将它启动 它的初始工作路径就在那
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       char *getcwd(char *buf, size_t size);//pwd
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       获得当前的工作的绝对路径(当前进程所处) 用buf传出路径字符串
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回的是buf的首地址，为了方便直接输出buf字符串
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e> </span><span style=color:#75715e>//flags宏在这个头文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>  </span><span style=color:#75715e>//flags宏在这个头文件里也有
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>     </span><span style=color:#75715e>//函数声明在这个头文件中
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>     </span><span style=color:#75715e>//perror
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>    </span><span style=color:#75715e>//close
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//gcc use_cd_pwd.c -o cd
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//获取当前工作目录
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> buf[<span style=color:#ae81ff>128</span>];
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;当前的工作路径是：%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, getcwd(buf, <span style=color:#66d9ef>sizeof</span>(buf))); <span style=color:#75715e>// /home/wen/lesson11
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//修改工作目录
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> chdir(<span style=color:#e6db74>&#34;/home/wen/lesson10&#34;</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;cd fail&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>; <span style=color:#75715e>//fail
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//创建新的文件
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;chdir210.txt&#34;</span>, O_CREAT <span style=color:#f92672>|</span> O_RDWR, <span style=color:#ae81ff>0664</span>); <span style=color:#75715e>//生成了/home/wen/lesson10/chdir210.txt
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;create fail&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>; <span style=color:#75715e>//fail
+</span></span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    close(fd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> buf2[<span style=color:#ae81ff>128</span>];
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;当前的工作路径是：%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, getcwd(buf2, <span style=color:#66d9ef>sizeof</span>(buf2))); <span style=color:#75715e>// /home/wen/lesson10
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>四、目录遍历</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>读取目录下普通文件的个数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>man 3 标准c
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/types.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;dirent.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       DIR *opendir(const char *name);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       获取path子目录下的所由文件和目录的列表，如果path是个文件(或其他失败场景)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       则返回值为NULL
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       正常返回目录流的第一个进入点
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       typedef struct __dirstream DIR;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       __dirstream为目录流类型 其内容对用户不开放看不到其中内容
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;dirent.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       struct dirent *readdir(DIR *dirp);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       dirp 为 opendir返回的结果
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       读取目录中的数据 每调用一次DIR内部指针就自动指向drip中的下个实体
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       返回参数dirp 目录流的下个目录进入点 信息保存在结构体struct dirent *中
+</span></span></span><span style=display:flex><span><span style=color:#75715e>           struct dirent {
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               ino_t          d_ino;    此目录进入点的inode节点编号 Inode number
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               off_t          d_off;    目录文件开头到此目录进入节点的偏移 Not an offset; see below
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               unsigned short d_reclen; d_name文件名的实际长度(占了[256]中的几个 到底文件名为多少个字符) 不包含NULL字符 Length of this record
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               unsigned char  d_type;   d_name文件的类型 Type of file; not supported
+</span></span></span><span style=display:flex><span><span style=color:#75715e>                                        by all filesystem types
+</span></span></span><span style=display:flex><span><span style=color:#75715e>               char           d_name[256];  文件名 Null-terminated filename
+</span></span></span><span style=display:flex><span><span style=color:#75715e>           };
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        其中d_name文件的类型d_type有如下几种
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        DT_BLK 块设备
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        DT_CHR 字符设备
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        DT_DIR 目录
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        DT_LNK 软连接
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        DT_FIFO 管道
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        DT_REG 普通文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        DT_SOCK 套接字
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        DT_UNKNOWN 未知
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        当读取到末尾(不会设置errno或失败(会设置errno) 返回NULL
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;sys/types.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;dirent.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int closedir(DIR *dirp);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       关闭目录
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;dirent.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>//读取某个目录下(嵌套直到最深)所有普通文件的个数
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// ./count.out 目录路径
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>getFileNum</span>(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>path, <span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>res);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>(<span style=color:#66d9ef>int</span> argc, <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>argv[])
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (argc <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>2</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//一般一定会有一个参数 是可执行文件的路径
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//再加上跟上的文件名 一共至少为两个参数 模拟才会生效
+</span></span></span><span style=display:flex><span>        <span style=color:#75715e>//所以这里判断一下参数个数小于2个就return
+</span></span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%s filename</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, argv[<span style=color:#ae81ff>0</span>]); <span style=color:#75715e>//argv[0]为执行文件的路径
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>//普通文件的个数
+</span></span></span><span style=display:flex><span>    getFileNum(argv[<span style=color:#ae81ff>1</span>], <span style=color:#f92672>&amp;</span>ret);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;共有普通文件%d个</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, ret);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#75715e>//递归 遍历所有子目录(含子目录的子目录...) 统计其中普通文件的个数
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>getFileNum</span>(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>path, <span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>res)
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// 打开目录
+</span></span></span><span style=display:flex><span>    DIR <span style=color:#f92672>*</span>dir <span style=color:#f92672>=</span> opendir(path);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (dir <span style=color:#f92672>==</span> NULL)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;dir is null&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>dirent</span> <span style=color:#f92672>*</span>ptr;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//循环读取子目录
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> ((ptr <span style=color:#f92672>=</span> readdir(dir)) <span style=color:#f92672>!=</span> NULL) <span style=color:#75715e>//只要没读到末尾(不为NULL) 或出错 就一直循环下去 每调用一次DIR内部指针就自动指向drip中的下个实体
+</span></span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>/* code */</span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//获取名称 不能将./ ../算入子目录中
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>dname <span style=color:#f92672>=</span> ptr<span style=color:#f92672>-&gt;</span>d_name;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (strcmp(dname, <span style=color:#e6db74>&#34;.&#34;</span>) <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span> <span style=color:#f92672>||</span> strcmp(dname, <span style=color:#e6db74>&#34;..&#34;</span>) <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#75715e>//过滤. .. strcmp==0说明两个字符串相同
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>continue</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#75715e>//判断是否是普通文件res++ 还是目录(递归调用)
+</span></span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (ptr<span style=color:#f92672>-&gt;</span>d_type <span style=color:#f92672>==</span> DT_DIR) <span style=color:#75715e>//是目录 注意dname仅仅是目录的名字而非完整的路径
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            <span style=color:#75715e>//opendir的path要求是完整路径所以递归调用时传的path也要是完整路径
+</span></span></span><span style=display:flex><span>            <span style=color:#66d9ef>char</span> newpath[<span style=color:#ae81ff>256</span>];
+</span></span><span style=display:flex><span>            sprintf(newpath, <span style=color:#e6db74>&#34;%s/%s&#34;</span>, path, dname); <span style=color:#75715e>//拼接得到dname对应文件的完整路径 要s/s
+</span></span></span><span style=display:flex><span>            getFileNum(newpath, res);               <span style=color:#75715e>//递归调用 遍历子目录内的文件
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (ptr<span style=color:#f92672>-&gt;</span>d_type <span style=color:#f92672>==</span> DT_REG) <span style=color:#75715e>//是普通文件
+</span></span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>            (<span style=color:#f92672>*</span>res)<span style=color:#f92672>++</span>; <span style=color:#75715e>//要括号*优先级不高
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    closedir(dir);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>五、文件描述符重定向</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int dup(int oldfd);
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       系统调用 传入被拷贝的描述符 用未被使用的数值最小的文件描述符作为新的描述符
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       注意拷贝的是文件描述符指向的FILE结构体的内容 而非真的拷贝文件！！！！ 新的描述符和老的描述符指向的是同一个文件！！！
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       如果拷贝成功返回这个新的的描述符 失败返回-1并设置errno
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;a.txt&#34;</span>, O_RDWR <span style=color:#f92672>|</span> O_CREAT, <span style=color:#ae81ff>0664</span>); <span style=color:#75715e>//创造新的文件a.txt 因为fd 1,2为流的fd已占用 这个新的fd因该是3
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> newfd <span style=color:#f92672>=</span> dup(fd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (newfd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;dup fail&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    print(<span style=color:#e6db74>&#34;fd:%d  newfd:%d </span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, fd, newfd); <span style=color:#75715e>//fd:3 newfd:4
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//关闭fd 用newfd向写a.txt写内容 成功 证明dup后 newfd和fd指向的是同一个文件
+</span></span></span><span style=display:flex><span>    close(fd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>str <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;hello&#34;</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> write(newfd, str, strlen(str));
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;write fail&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    close(newfd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        int dup2(int oldfd, int newfd);//功能和dup类似
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        用于重定向文件描述符
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        oldfd指向a.txt newfd指向b.txt 在调用函数成功后将newfd-&gt;b.txt关闭并且再让newfd指向a.txt
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        oldfd必须是一个有效的 真实指向文件的描述符 如果是个无效的文件描述符 并不会做关闭newfd操作 并且返回-1设置errno
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        如果oldfd和newfd值相同 相当于什么都没做 直接返回newfd并且不会做关闭newfd操作
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        正常返回的就是newfd
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/types.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/stat.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> oldfd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;a.txt&#34;</span>, O_RDWR <span style=color:#f92672>|</span> O_CREAT, <span style=color:#ae81ff>0664</span>); <span style=color:#75715e>//创造新的文件a.txt 因为fd 1,2为流的fd已占用 这个新的fd因该是3
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (oldfd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;open fail&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> newfd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;b.txt&#34;</span>, O_RDWR <span style=color:#f92672>|</span> O_CREAT, <span style=color:#ae81ff>0664</span>); <span style=color:#75715e>//创造新的文件a.txt 因为fd 1,2为流的fd已占用 这个新的fd因该是3
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (newfd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;open fail&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    print(<span style=color:#e6db74>&#34;oldfd:%d  newfd:%d </span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, oldfd, newfd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> retfd <span style=color:#f92672>=</span> dup2(oldfd, newfd);
+</span></span><span style=display:flex><span>    print(<span style=color:#e6db74>&#34;oldfd:%d  newfd:%d </span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, oldfd, newfd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (retfd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;dup2 fail&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//oldfd与newfd在dup2后指向的都是a.txt 下面用newfd来验证一下
+</span></span></span><span style=display:flex><span>    close(oldfd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>str <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;I&#39;m newfd&#34;</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> write(newfd, str, strlen(str));
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;write fail&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    close(newfd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><strong>六、fcntl复制文件描述符 设置/获取文件的状态标志</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>/*
+</span></span></span><span style=display:flex><span><span style=color:#75715e>    fcntl复制文件描述符 设置/获取文件的状态标志
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;unistd.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       #include &lt;fcntl.h&gt;
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       int fcntl(int fd, int cmd, ... arg  );//...表示可变参数 可写也可不写
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       fd 被操作的文件描述符
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       cmd 对文件描述符做什么操作
+</span></span></span><span style=display:flex><span><span style=color:#75715e>       对fd文件做cmd操作
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        cmd:
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        F_DUPFD 复制文件描述符
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        F_GETFL 获取指定文件描述符的文件状态flag
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        文件状态flag在学习open的时候有提到
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        flags:对文件的操作权限设置 以及其他的一些设置
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         O_RDONLY,O_WRONLY,O_RDWR  三个宏分别对应只读,只写,读写。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         这三个设置是互斥的，1次open只能选1个必选项。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         O_APPEND 不覆盖在尾部继续追加
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         O_CREAT 如果文件不存在则创建新文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         等的可选项
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         在有多个选项时通过|按位或连接如O_RDWR | O_CREAT
+</span></span></span><span style=display:flex><span><span style=color:#75715e>         flags是int型占4个字节 为32位其中每一位就是一个标志位每一位代表一种情况(1种标记 可读 可写 可读写 创建新文件)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        F_SETFL 设置指定文件描述符的文件状态flag(O_DSYNC and O_SYNC文件状态无法通过setfl改变)
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        O_RDONLY,O_WRONLY,O_RDWR  三个宏分别对应只读,只写,读写。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        这三个设置是互斥的，1次open只能选1个必选项，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        这三个必选项是无法修改的即无法通过F_SETFL设置！！！
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        并且与文件创建有关的状态 O_CREAT O_EXCL O_NOCTTY O_TRUNC都是无法设置的！！！
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        可选项 O_APPEND 不覆盖在尾部继续追加 O_NONBLOCK 非阻塞 等是可设置的
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        这里的阻塞与非阻塞描述的是函数调用的行为，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        所谓阻塞方式block，就是进程或是线程执行到这些函数时必须等待某个事件的发生，如果事件没有发生，进程或线程就被阻塞，函数不能立即返回。
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        所谓非阻塞方式non-block，就是进程或线程执行此函数时不必非要等待事件的发生，一旦执行肯定返回，以返回值的不同来反映函数的执行情况，
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        如果事件发生则与阻塞方式相同，若事件没有发生则返回一个代码来告知事件未发生，而进程或线程继续执行，所以效率较高
+</span></span></span><span style=display:flex><span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        复制传入的fd,并用未被使用的数值最小的文件描述符作为新的描述符 新描述符和fd指向的是同一文件
+</span></span></span><span style=display:flex><span><span style=color:#75715e>        如果复制成功 返回值就是新的描述符
+</span></span></span><span style=display:flex><span><span style=color:#75715e>\*/</span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fcntl.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>()
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//1复制文件描述符
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//int fd = open(&#34;1.txt&#34;, O_RDONLY);
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>// int ret = fcntl(fd, F_DUPFD);     //返回复制的那个新的描述符 这个新的描述符和fd都是指向1.txt的
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//2修改和获取文件状态flag
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> fd <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;1.txt&#34;</span>, O_RDWR);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (fd <span style=color:#f92672>==</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;open fail&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//当前是不能写文件的 下面先修改文件状态给flag加入O_APPEND 之后就能在文件尾添加
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> flag <span style=color:#f92672>=</span> fcntl(fd, F_GETFL); <span style=color:#75715e>//先获取当前文件描述符的状态
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//如果直接给fcntl(fd, F_SETFL,O_APPEND); 那么之前的状态O_RDWR会被直接覆盖 当前线程对此文件不再可读写
+</span></span></span><span style=display:flex><span>    <span style=color:#75715e>//flag | O_APPEND 在原基础上追加O_APPEND
+</span></span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> fcntl(fd, F_SETFL, flag <span style=color:#f92672>|</span> O_APPEND);
+</span></span><span style=display:flex><span>    <span style=color:#75715e>//F_SETFL 失败返回-1 成功返回0
+</span></span></span><span style=display:flex><span>    close(fd);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul></footer></article></main><footer class=footer><span>&copy; 2026 <a href=https://jler666.github.io/>CantBlog</a></span> ·
+<span>Powered by
+<a href="https://gohugo.io/?utm_source=papermod" rel=noopener target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script>(function(){function e(){var e,t,n,s,o,i=document.querySelector("details.toc");if(!i)return;if(o=i.querySelector(".inner"),!o)return;if(n=document.createElement("aside"),n.id="article-toc",n.innerHTML='<div class="article-toc-inner">'+o.innerHTML+"</div>",document.body.appendChild(n),e=Array.prototype.slice.call(n.querySelectorAll('a[href^="#"]')),!e.length)return;if(t=e.map(function(e){return document.getElementById(decodeURIComponent(e.getAttribute("href").slice(1)))}).filter(Boolean),!t.length)return;s=!1;function a(){s=!1;for(var n,a,i=t[0],o=0;o<t.length;o++)t[o].getBoundingClientRect().top<=120&&(i=t[o]);for(n=0;n<e.length;n++)a=decodeURIComponent(e[n].getAttribute("href").slice(1)),e[n].classList.toggle("active",a===i.id)}window.addEventListener("scroll",function(){s||(s=!0,requestAnimationFrame(a))},{passive:!0}),a(),e.forEach(function(e){e.addEventListener("click",function(t){var s=decodeURIComponent(e.getAttribute("href").slice(1)),n=document.getElementById(s);n&&(t.preventDefault(),n.scrollIntoView({behavior:"smooth",block:"start"}),history.replaceState(null,"",e.getAttribute("href")))})})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})()</script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10));let t;menu.addEventListener("scroll",function(){clearTimeout(t),t=setTimeout(function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)},150)},{passive:!0})}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var n=this.getAttribute("href").substr(1);const t=document.querySelector(`[id='${decodeURIComponent(n)}']`);window.matchMedia("(prefers-reduced-motion: reduce)").matches?t.scrollIntoView():t.scrollIntoView({behavior:"smooth"}),t.tabIndex<0&&!t.hasAttribute("tabindex")&&t.setAttribute("tabindex","-1"),t.focus({preventScroll:!0}),n==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${n}`)})})</script><script>var toplink=document.getElementById("top-link"),scrollTicking=!1;window.addEventListener("scroll",function(){if(scrollTicking)return;scrollTicking=!0,requestAnimationFrame(function(){const e=window.innerHeight,t=document.body.scrollTop>e||document.documentElement.scrollTop>e;toplink.classList.toggle("hidden",!t),scrollTicking=!1})},{passive:!0})</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>
